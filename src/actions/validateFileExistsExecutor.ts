@@ -40,7 +40,7 @@ export class ValidateFileExistsExecutor extends BaseActionExecutor implements Ac
 
       const resolvedPath = path.isAbsolute(filePath)
         ? filePath
-        : path.join(context.workspaceRoot, filePath);
+        : path.join(context.basePath, filePath);
 
       const exists = fs.existsSync(resolvedPath);
       const durationMs = Date.now() - startTime;

@@ -13,6 +13,7 @@ import { StateStack } from './stateStack';
 import { SnapshotFactory } from './snapshotFactory';
 import { NavigationHistory } from './navigationHistory';
 import { SceneStore } from './sceneStore';
+import { RecordingState } from './recordingState';
 import { WebviewProvider, WebviewCallbacks } from '../webview/webviewProvider';
 import { PresenterViewProvider } from '../webview/presenterViewProvider';
 import { getActionRegistry } from '../actions/registry';
@@ -24,6 +25,18 @@ import { PreflightValidator } from '../validation/preflightValidator';
 import { ValidationReport, ValidationIssue } from '../validation/types';
 import { EnvFileLoader, EnvResolver, SecretScrubber } from '../env';
 import { OnboardingStepState, StepStatus, ValidationResult } from '../models/onboarding';
+import { RecordingSession } from '../models/recording';
+import {
+  createSlideEnteredEvent,
+  createSlideExitedEvent,
+  createFragmentRevealedEvent,
+  createActionTriggeredEvent,
+  createActionCompletedEvent,
+  createSceneRestoredEvent,
+} from '../recording/recordingEventFactory';
+import { parseCues } from '../recording/cueParser';
+import { buildSegments } from '../recording/segmentBuilder';
+import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
 
 /**
  * Actions that require workspace trust
@@ -54,6 +67,8 @@ export class Conductor implements vscode.Disposable {
   private envFileWatcher: vscode.Disposable | undefined;
   private envDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   private onboardingSteps: OnboardingStepState[] = [];
+  private recordingState: RecordingState;
+  private recorderOrchestrator: RecorderOrchestrator | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.stateStack = new StateStack();
@@ -72,6 +87,7 @@ export class Conductor implements vscode.Disposable {
     this.envFileLoader = new EnvFileLoader();
     this.envResolver = new EnvResolver();
     this.secretScrubber = new SecretScrubber();
+    this.recordingState = new RecordingState();
 
     // Listen for workspace trust changes
     this.disposables.push(
@@ -179,6 +195,12 @@ export class Conductor implements vscode.Disposable {
           await this.goToSlide(payload.stepIndex);
         }
       },
+      onFragmentRevealed: (payload) => {
+        this.onFragmentRevealed(payload.slideIndex, payload.fragmentIndex, payload.fragmentCount);
+      },
+      onRecordingMarker: (payload) => {
+        this.onRecordingMarker(payload.markerType, payload.note);
+      },
     };
 
     // Show presentation
@@ -201,12 +223,33 @@ export class Conductor implements vscode.Disposable {
     const snapshot = this.snapshotFactory.capture(this.currentSlideIndex, `Before slide ${targetIndex + 1}`);
     this.stateStack.push(snapshot);
 
+    // Record slide exit/enter if recording is active
+    const previousSlideIndex = this.currentSlideIndex;
+
     // Update current index
     this.currentSlideIndex = targetIndex;
     this.deck.currentSlideIndex = targetIndex;
 
     // Get current slide
     const slide = this.deck.slides[targetIndex];
+
+    // Emit recording events after index update
+    if (this.recordingState.isRecording()) {
+      if (previousSlideIndex !== targetIndex) {
+        this.recordingState.recordEvent(
+          createSlideExitedEvent(previousSlideIndex),
+        );
+      }
+      this.recordingState.recordEvent(
+        createSlideEnteredEvent(
+          targetIndex,
+          previousSlideIndex,
+          'sequential',
+          slide.fragmentCount,
+          slide.frontmatter?.title,
+        ),
+      );
+    }
 
     // Resolve render directives in slide content
     const resolvedHtml = this.resolveSlideRenderDirectives(slide);
@@ -595,11 +638,162 @@ export class Conductor implements vscode.Disposable {
     return this.webviewProvider.isOpen();
   }
 
+  // ============================================================================
+  // Recording control (Feature: Recording Mode — Phase 1)
+  // ============================================================================
+
+  /**
+   * Start recording the current presentation session.
+   * Optionally launches an external screen recorder if configured.
+   * No-op if already recording or no deck is open.
+   */
+  async startRecording(): Promise<void> {
+    if (!this.deck) {
+      return;
+    }
+    this.recordingState.startRecording(
+      this.deck.filePath,
+      this.deck.title,
+      this.currentSlideIndex,
+    );
+
+    // Launch external recorder if configured
+    const recorderConfig = getRecorderConfig();
+    this.outputChannel.appendLine(
+      `[Recording] Recorder config — start: "${recorderConfig.startCommand}", stop: "${recorderConfig.stopCommand}", dir: "${recorderConfig.outputDir}"`,
+    );
+    this.recorderOrchestrator = new RecorderOrchestrator(recorderConfig, this.outputChannel);
+    if (this.recorderOrchestrator.isConfigured()) {
+      const session = this.recordingState.getSession();
+      const sessionId = session?.sessionId ?? 'unknown';
+      this.outputChannel.appendLine(`[Recording] Launching recorder for session ${sessionId}`);
+      const started = await this.recorderOrchestrator.start(sessionId, this.deck.filePath);
+      if (!started) {
+        void vscode.window.showWarningMessage(
+          'External recorder failed to start. Timeline logging continues.',
+        );
+      }
+    } else {
+      this.outputChannel.appendLine('[Recording] No external recorder configured');
+    }
+
+    this.outputChannel.appendLine('[Recording] Session started');
+  }
+
+  /**
+   * Stop the active recording and return the session artifact.
+   * Also stops the external recorder if one was launched.
+   * Returns undefined if not recording.
+   */
+  async stopRecording(): Promise<RecordingSession | undefined> {
+    const session = this.recordingState.stopRecording(this.currentSlideIndex);
+    if (session && this.deck) {
+      // Build segments from timeline + deck cues
+      const cues = parseCues(this.deck.slides);
+      session.segments = buildSegments(
+        session.events,
+        cues,
+        this.deck.slides,
+        session.ignoredIntervals,
+      );
+      this.outputChannel.appendLine(
+        `[Recording] Session stopped — ${session.events.length} events, ` +
+        `${session.segments.length} segments, ${session.durationMs ?? 0}ms`,
+      );
+
+      // Stop external recorder and attach metadata
+      if (this.recorderOrchestrator) {
+        await this.recorderOrchestrator.stop(session.sessionId);
+        session.recorder = this.recorderOrchestrator.getMetadata();
+        this.recorderOrchestrator.dispose();
+        this.recorderOrchestrator = undefined;
+      }
+    }
+    return session;
+  }
+
+  /**
+   * Whether a recording session is currently active.
+   */
+  isRecording(): boolean {
+    return this.recordingState.isRecording();
+  }
+
+  /**
+   * Handle a fragment.revealed callback from the webview.
+   * Emits a recording event when recording is active.
+   */
+  onFragmentRevealed(slideIndex: number, fragmentIndex: number, fragmentCount: number): void {
+    if (this.recordingState.isRecording()) {
+      this.recordingState.recordEvent(
+        createFragmentRevealedEvent(slideIndex, fragmentIndex, fragmentCount),
+      );
+    }
+  }
+
+  /**
+   * Handle a recording marker from the webview or command.
+   */
+  onRecordingMarker(markerType: 'narration' | 'pause' | 'resume' | 'retake', note?: string): void {
+    if (!this.recordingState.isRecording()) {
+      return;
+    }
+    if (markerType === 'pause') {
+      this.pauseRecordingTiming(note);
+    } else if (markerType === 'resume') {
+      this.resumeRecordingTiming(note);
+    } else if (markerType === 'retake') {
+      this.markRetake(note);
+    } else {
+      this.recordingState.insertMarker(this.currentSlideIndex, markerType, note);
+    }
+  }
+
+  /**
+   * Pause narration timing during recording.
+   */
+  pauseRecordingTiming(note?: string): void {
+    this.recordingState.pauseTiming(this.currentSlideIndex, note);
+    this.outputChannel.appendLine('[Recording] Timing paused');
+  }
+
+  /**
+   * Resume narration timing during recording.
+   */
+  resumeRecordingTiming(note?: string): void {
+    this.recordingState.resumeTiming(this.currentSlideIndex, note);
+    this.outputChannel.appendLine('[Recording] Timing resumed');
+  }
+
+  /**
+   * Whether recording timing is currently paused.
+   */
+  isRecordingPaused(): boolean {
+    return this.recordingState.isPaused();
+  }
+
+  /**
+   * Mark a retake point during recording.
+   */
+  markRetake(note?: string): void {
+    this.recordingState.markRetake(this.currentSlideIndex, note);
+    this.outputChannel.appendLine('[Recording] Retake marked');
+  }
+
+  /**
+   * Insert a narration marker during recording.
+   */
+  insertNarrationMarker(note?: string): void {
+    this.recordingState.insertMarker(this.currentSlideIndex, 'narration', note);
+    this.outputChannel.appendLine('[Recording] Narration marker inserted');
+  }
+
   /**
    * Dispose of the conductor
    */
   dispose(): void {
     this.disposeEnvFileWatcher();
+    this.recorderOrchestrator?.dispose();
     this.webviewProvider.dispose();
     this.presenterViewProvider.dispose();
     this.snapshotFactory.disposeDecorations();
@@ -610,6 +804,21 @@ export class Conductor implements vscode.Disposable {
   // ============================================================================
   // Private methods
   // ============================================================================
+
+  /**
+   * Resolve the effective base path for relative file resolution.
+   * If deck frontmatter declares basePath, resolve it relative to the deck file's directory.
+   * Otherwise fall back to workspace root.
+   */
+  private resolvedBasePath(): string {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+    const deckBasePath = this.deck?.metadata?.basePath;
+    if (deckBasePath && this.deck) {
+      const deckDir = path.dirname(this.deck.filePath);
+      return path.resolve(deckDir, deckBasePath);
+    }
+    return workspaceRoot;
+  }
 
   private handleNavigate(direction: 'next' | 'previous' | 'first' | 'last' | 'goto', slideIndex?: number, showAllFragments?: boolean): void {
     switch (direction) {
@@ -747,6 +956,14 @@ export class Conductor implements vscode.Disposable {
       'scene-restore',
       this.deck.slides[this.currentSlideIndex]?.frontmatter?.title
     );
+
+    // Record scene.restored if recording
+    if (this.recordingState.isRecording()) {
+      this.recordingState.recordEvent(
+        createSceneRestoredEvent(entry.slideIndex, sceneName),
+      );
+    }
+
     await this.goToSlide(entry.slideIndex);
 
     // Notify Webview
@@ -961,6 +1178,21 @@ export class Conductor implements vscode.Disposable {
     // Execute action
     this.webviewProvider.sendActionStatusChanged(statusId, 'running');
 
+    // Record action.triggered if recording (scrub sensitive params)
+    if (this.recordingState.isRecording()) {
+      let scrubbedTarget = typeof action.params?.path === 'string'
+        ? action.params.path
+        : typeof action.params?.command === 'string'
+          ? action.params.command
+          : undefined;
+      if (scrubbedTarget && this.resolvedEnv) {
+        scrubbedTarget = this.secretScrubber.scrub(scrubbedTarget, this.resolvedEnv);
+      }
+      this.recordingState.recordEvent(
+        createActionTriggeredEvent(this.currentSlideIndex, action.id, action.type, scrubbedTarget),
+      );
+    }
+
     // Create cancellation token for this action
     this.cancellationTokenSource?.dispose();
     this.cancellationTokenSource = new vscode.CancellationTokenSource();
@@ -982,6 +1214,7 @@ export class Conductor implements vscode.Disposable {
 
       const context: import('../actions/types').ExecutionContext = {
         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
+        basePath: this.resolvedBasePath(),
         deckFilePath: this.deck?.filePath ?? '',
         currentSlideIndex: this.currentSlideIndex,
         isWorkspaceTrusted: isTrusted(),
@@ -1052,6 +1285,23 @@ export class Conductor implements vscode.Disposable {
             }
           }
         }
+      }
+
+      // Record action.completed if recording
+      if (this.recordingState.isRecording()) {
+        const scrubbedErr = !result.success && result.error && this.resolvedEnv
+          ? this.secretScrubber.scrub(result.error, this.resolvedEnv)
+          : result.error;
+        this.recordingState.recordEvent(
+          createActionCompletedEvent(
+            this.currentSlideIndex,
+            action.id,
+            action.type,
+            result.success,
+            result.durationMs,
+            scrubbedErr,
+          ),
+        );
       }
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1389,14 +1639,15 @@ export class Conductor implements vscode.Disposable {
    * Resolve directives asynchronously and send updates to webview
    */
   private async resolveDirectivesAsync(directives: import('../renderer').RenderDirective[]): Promise<void> {
+    const basePath = this.resolvedBasePath();
     for (const directive of directives) {
       try {
         // For command directives with streaming, use special handling
         if (directive.type === 'command' && directive.params.stream) {
-          await this.resolveCommandWithStreaming(directive);
+          await this.resolveCommandWithStreaming(directive, basePath);
         } else {
           // Standard resolution
-          const block = await resolveDirective(directive);
+          const block = await resolveDirective(directive, basePath);
           this.webviewProvider.sendRenderBlockUpdate({
             blockId: directive.id,
             html: block.html,
@@ -1416,7 +1667,7 @@ export class Conductor implements vscode.Disposable {
   /**
    * Resolve a command directive with streaming output
    */
-  private async resolveCommandWithStreaming(directive: import('../renderer').CommandRenderDirective): Promise<void> {
+  private async resolveCommandWithStreaming(directive: import('../renderer').CommandRenderDirective, basePath?: string): Promise<void> {
     const params = directive.params;
     
     // Streaming callback to send chunks to webview
@@ -1431,7 +1682,7 @@ export class Conductor implements vscode.Disposable {
     };
     
     // Execute command with streaming
-    const result = await renderCommand(params, onStream);
+    const result = await renderCommand(params, onStream, basePath);
     
     // Send final result
     const finalHtml = formatAsCommandBlock(

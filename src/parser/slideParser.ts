@@ -52,6 +52,7 @@ export function parseSlides(content: string): Slide[] {
   const rawSlides = splitOnDelimiter(content);
   
   const slides: Slide[] = [];
+  let pendingFrontmatter: SlideFrontmatter | undefined;
   
   for (let index = 0; index < rawSlides.length; index++) {
     const rawContent = rawSlides[index].trim();
@@ -62,6 +63,25 @@ export function parseSlides(content: string): Slide[] {
     }
     
     const slide = parseSlideContent(index, rawContent);
+
+    // If this "slide" is frontmatter-only (no visible content), hold it
+    // and merge into the next slide. This lets authors write:
+    //   ---
+    //   notes: Speaker notes here
+    //   ---
+    //   # Actual Slide Content
+    if (isFrontmatterOnly(slide)) {
+      pendingFrontmatter = mergeFrontmatter(pendingFrontmatter, slide.frontmatter);
+      continue;
+    }
+
+    // Merge any pending frontmatter from a preceding frontmatter-only block
+    if (pendingFrontmatter) {
+      slide.frontmatter = mergeFrontmatter(pendingFrontmatter, slide.frontmatter);
+      slide.speakerNotes = slide.frontmatter?.notes ?? slide.speakerNotes;
+      pendingFrontmatter = undefined;
+    }
+
     // Re-index after filtering
     slide.index = slides.length;
     slides.push(slide);
@@ -105,6 +125,23 @@ function parseSlideContent(index: number, rawContent: string): Slide {
     } catch {
       // If frontmatter parsing fails, use raw content
       content = rawContent;
+    }
+  } else if (looksLikeBareYaml(rawContent)) {
+    // Handle bare YAML between --- delimiters (e.g. "notes: some text")
+    // This happens when authors write:
+    //   ---
+    //   notes: Speaker notes here
+    //   ---
+    // The --- delimiters get consumed by splitOnDelimiter, leaving just
+    // the YAML content without fences.
+    try {
+      const parsed = matter(`---\n${rawContent}\n---`);
+      if (parsed.data && Object.keys(parsed.data).length > 0) {
+        frontmatter = parsed.data as SlideFrontmatter;
+        content = parsed.content.trim();
+      }
+    } catch {
+      // Not valid YAML — treat as regular content
     }
   }
   
@@ -164,4 +201,54 @@ function parseSlideContent(index: number, rawContent: string): Slide {
  */
 export function renderMarkdown(content: string): string {
   return md.render(content);
+}
+
+/**
+ * Check if a parsed slide has only frontmatter and no visible content.
+ * These blocks should be merged into the next slide.
+ */
+function isFrontmatterOnly(slide: Slide): boolean {
+  // Has frontmatter but no meaningful content, HTML, or interactive elements
+  if (!slide.frontmatter) {
+    return false;
+  }
+  const hasContent = slide.content.trim().length > 0;
+  const hasElements = slide.interactiveElements.length > 0;
+  const hasDirectives = slide.renderDirectives.length > 0;
+  return !hasContent && !hasElements && !hasDirectives;
+}
+
+/**
+ * Check if raw content looks like bare YAML key-value pairs
+ * (no markdown headings, no prose, just "key: value" lines).
+ * This detects frontmatter that lost its --- fences during splitting.
+ */
+function looksLikeBareYaml(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+  const lines = trimmed.split('\n');
+  // Every non-empty line must look like "key: value" or be a YAML continuation
+  return lines.every(line => {
+    const l = line.trim();
+    if (l.length === 0) {
+      return true;
+    }
+    // key: value pattern, or YAML multi-line continuation (indented or starting with |, >)
+    return /^[\w][\w.-]*\s*:/.test(l) || /^\s+/.test(line) || /^[|>]/.test(l);
+  });
+}
+
+/**
+ * Merge two frontmatter objects, with `override` taking precedence.
+ */
+function mergeFrontmatter(
+  base: SlideFrontmatter | undefined,
+  override: SlideFrontmatter | undefined,
+): SlideFrontmatter | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+  return { ...base, ...override };
 }

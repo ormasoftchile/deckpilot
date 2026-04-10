@@ -7,3 +7,4 @@ export { SnapshotFactory } from './snapshotFactory';
 export { Conductor } from './conductor';
 export { NavigationHistory } from './navigationHistory';
 export { SceneStore } from './sceneStore';
+export { RecordingState } from './recordingState';

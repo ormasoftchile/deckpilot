@@ -21,10 +21,10 @@ export interface FileRenderResult {
 /**
  * Render file content based on parameters
  */
-export async function renderFile(params: FileRenderParams): Promise<FileRenderResult> {
+export async function renderFile(params: FileRenderParams, basePath?: string): Promise<FileRenderResult> {
   try {
     // Resolve file path relative to workspace
-    const filePath = resolveFilePath(params.path);
+    const filePath = resolveFilePath(params.path, basePath);
     if (!filePath) {
       return {
         success: false,
@@ -86,7 +86,10 @@ export async function renderFile(params: FileRenderParams): Promise<FileRenderRe
 /**
  * Resolve file path relative to workspace
  */
-function resolveFilePath(relativePath: string): string | null {
+function resolveFilePath(relativePath: string, basePath?: string): string | null {
+  if (basePath) {
+    return path.resolve(basePath, relativePath);
+  }
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return null;
