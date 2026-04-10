@@ -28,6 +28,11 @@ import {
   OnboardingStateLoadedPayload,
   RetryStepPayload,
   ResetToCheckpointPayload,
+  FragmentRevealedMessage,
+  FragmentRevealedPayload,
+  RecordingMarkerMessage,
+  RecordingMarkerPayload,
+  RecordingStatusPayload,
 } from './messages';
 import { isWebviewMessage, createMessageDispatcher, MessageHandlers } from './messageHandler';
 import { Deck } from '../models/deck';
@@ -53,6 +58,8 @@ export interface WebviewCallbacks {
   onEnvSetupRequest?(): void;
   onRetryStep?(payload: RetryStepPayload): Promise<void>;
   onResetToCheckpoint?(payload: ResetToCheckpointPayload): Promise<void>;
+  onFragmentRevealed?(payload: FragmentRevealedPayload): void;
+  onRecordingMarker?(payload: RecordingMarkerPayload): void;
 }
 
 /**
@@ -270,6 +277,13 @@ export class WebviewProvider implements vscode.Disposable {
   }
 
   /**
+   * Send recording status message to webview
+   */
+  sendRecordingStatus(payload: RecordingStatusPayload): void {
+    this.postMessage({ type: 'recordingStatus', payload });
+  }
+
+  /**
    * Check if panel is visible
    */
 
@@ -351,6 +365,12 @@ export class WebviewProvider implements vscode.Disposable {
       },
       onResetToCheckpoint: async (payload: ResetToCheckpointPayload) => {
         await this.callbacks?.onResetToCheckpoint?.(payload);
+      },
+      onFragmentRevealed: (msg: FragmentRevealedMessage) => {
+        this.callbacks?.onFragmentRevealed?.(msg.payload);
+      },
+      onRecordingMarker: (msg: RecordingMarkerMessage) => {
+        this.callbacks?.onRecordingMarker?.(msg.payload);
       },
     };
 

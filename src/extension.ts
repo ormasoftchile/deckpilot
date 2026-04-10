@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { Conductor } from './conductor';
 import { parseDeck } from './parser';
 import { registerAllExecutors } from './actions';
@@ -140,6 +141,148 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    const startRecordingDisposable = vscode.commands.registerCommand(
+        'executableTalk.startRecording',
+        async () => {
+            if (!conductor?.isActive()) {
+                void vscode.window.showWarningMessage('Start a presentation first before recording.');
+                return;
+            }
+            if (conductor.isRecording()) {
+                void vscode.window.showWarningMessage('Recording is already active.');
+                return;
+            }
+            await conductor.startRecording();
+            void vscode.window.showInformationMessage('🔴 Recording started');
+        }
+    );
+
+    const stopRecordingDisposable = vscode.commands.registerCommand(
+        'executableTalk.stopRecording',
+        async () => {
+            if (!conductor?.isRecording()) {
+                void vscode.window.showWarningMessage('No active recording to stop.');
+                return;
+            }
+            const session = await conductor.stopRecording();
+            if (session) {
+                const { RecordingSerializer } = await import('./recording/recordingSerializer');
+                const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');
+                const { CaptionsScaffoldGenerator } = await import('./recording/captionsScaffoldGenerator');
+
+                const outputDir = path.dirname(session.deckPath);
+                const serializer = new RecordingSerializer();
+                const scriptGen = new VoiceOverScriptGenerator();
+                const captionGen = new CaptionsScaffoldGenerator();
+
+                const sessionFiles = await serializer.exportSession(session, outputDir);
+                const scriptFiles = await scriptGen.exportScripts(session, outputDir);
+
+                // Export SRT next to the video file if recorder was used, otherwise next to the deck
+                const captionDir = session.recorder?.outputPath
+                    ? path.dirname(session.recorder.outputPath)
+                    : outputDir;
+                const captionFile = await captionGen.exportSrt(session, captionDir);
+
+                const allFiles = [...sessionFiles, ...scriptFiles, captionFile];
+                void vscode.window.showInformationMessage(
+                    `⏹️ Recording saved: ${allFiles.length} files exported`,
+                    'Open Script'
+                ).then(choice => {
+                    if (choice === 'Open Script') {
+                        const mdFile = allFiles.find(f => f.endsWith('.md'));
+                        if (mdFile) {
+                            void vscode.workspace.openTextDocument(mdFile).then(doc => {
+                                void vscode.window.showTextDocument(doc);
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    );
+
+    // Recording marker commands (Phase 2)
+    const pauseTimingDisposable = vscode.commands.registerCommand(
+        'executableTalk.pauseRecordingTiming',
+        async () => {
+            if (!conductor?.isRecording()) {
+                void vscode.window.showWarningMessage('No active recording.');
+                return;
+            }
+            if (conductor.isRecordingPaused()) {
+                void vscode.window.showWarningMessage('Recording timing is already paused.');
+                return;
+            }
+            conductor.pauseRecordingTiming();
+            void vscode.window.showInformationMessage('⏸️ Recording timing paused');
+        }
+    );
+
+    const resumeTimingDisposable = vscode.commands.registerCommand(
+        'executableTalk.resumeRecordingTiming',
+        async () => {
+            if (!conductor?.isRecording()) {
+                void vscode.window.showWarningMessage('No active recording.');
+                return;
+            }
+            if (!conductor.isRecordingPaused()) {
+                void vscode.window.showWarningMessage('Recording timing is not paused.');
+                return;
+            }
+            conductor.resumeRecordingTiming();
+            void vscode.window.showInformationMessage('▶️ Recording timing resumed');
+        }
+    );
+
+    const markRetakeDisposable = vscode.commands.registerCommand(
+        'executableTalk.markRetake',
+        async () => {
+            if (!conductor?.isRecording()) {
+                void vscode.window.showWarningMessage('No active recording.');
+                return;
+            }
+            const note = await vscode.window.showInputBox({
+                prompt: 'Retake note (optional)',
+                placeHolder: 'Describe what to redo...',
+            });
+            conductor.markRetake(note);
+            void vscode.window.showInformationMessage('🔁 Retake point marked');
+        }
+    );
+
+    const insertNarrationMarkerDisposable = vscode.commands.registerCommand(
+        'executableTalk.insertNarrationMarker',
+        async () => {
+            if (!conductor?.isRecording()) {
+                void vscode.window.showWarningMessage('No active recording.');
+                return;
+            }
+            const note = await vscode.window.showInputBox({
+                prompt: 'Narration note (optional)',
+                placeHolder: 'What to say here...',
+            });
+            conductor.insertNarrationMarker(note);
+            void vscode.window.showInformationMessage('🎙️ Narration marker inserted');
+        }
+    );
+
+    const toggleRecordingPauseDisposable = vscode.commands.registerCommand(
+        'executableTalk.toggleRecordingPause',
+        async () => {
+            if (!conductor?.isRecording()) {
+                return;
+            }
+            if (conductor.isRecordingPaused()) {
+                conductor.resumeRecordingTiming();
+                void vscode.window.showInformationMessage('▶️ Timing resumed');
+            } else {
+                conductor.pauseRecordingTiming();
+                void vscode.window.showInformationMessage('⏸️ Timing paused');
+            }
+        }
+    );
+
     // Register authoring assistance providers (US4)
     const documentSelector: vscode.DocumentSelector = { language: 'deck-markdown' };
 
@@ -256,6 +399,13 @@ export function activate(context: vscode.ExtensionContext): void {
         saveSceneDisposable,
         restoreSceneDisposable,
         validateDeckDisposable,
+        startRecordingDisposable,
+        stopRecordingDisposable,
+        pauseTimingDisposable,
+        resumeTimingDisposable,
+        markRetakeDisposable,
+        insertNarrationMarkerDisposable,
+        toggleRecordingPauseDisposable,
         completionDisposable,
         hoverDisposable,
         diagnosticCollection,

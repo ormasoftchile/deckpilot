@@ -68,6 +68,9 @@ export interface DeckMetadata {
   title?: string;
   /** Author name */
   author?: string;
+  /** Base path for resolving relative paths in actions and render directives.
+   *  Resolved relative to the deck file's directory. */
+  basePath?: string;
   /** Presentation display options */
   options?: PresentationOptions;
   /** Authored scenes from deck frontmatter */

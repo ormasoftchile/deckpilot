@@ -50,7 +50,7 @@ export class FileOpenExecutor extends BaseActionExecutor implements ActionExecut
       // Resolve file path relative to workspace
       const filePath = path.isAbsolute(params.path)
         ? params.path
-        : path.join(context.workspaceRoot, params.path);
+        : path.join(context.basePath, params.path);
 
       // Check if file exists
       const fileUri = vscode.Uri.file(filePath);

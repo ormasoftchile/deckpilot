@@ -172,10 +172,12 @@ export function createExecutionContext(
   slideIndex: number,
   isWorkspaceTrusted: boolean,
   outputChannel: vscode.OutputChannel,
-  cancellationToken?: vscode.CancellationToken
+  cancellationToken?: vscode.CancellationToken,
+  basePath?: string,
 ): ExecutionContext {
   return {
     workspaceRoot,
+    basePath: basePath ?? workspaceRoot,
     deckFilePath,
     currentSlideIndex: slideIndex,
     isWorkspaceTrusted,

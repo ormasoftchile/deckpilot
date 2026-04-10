@@ -113,7 +113,8 @@ export function invalidateCommand(cmd: string, cwd?: string): void {
  */
 export async function renderCommand(
   params: CommandRenderParams,
-  onStream?: StreamCallback
+  onStream?: StreamCallback,
+  basePath?: string,
 ): Promise<CommandRenderResult> {
   // Check workspace trust
   if (!isTrusted()) {
@@ -125,7 +126,7 @@ export async function renderCommand(
 
   try {
     // Resolve working directory
-    const cwd = resolveCwd(params.cwd);
+    const cwd = resolveCwd(params.cwd, basePath);
     if (!cwd) {
       return {
         success: false,
@@ -168,7 +169,10 @@ export async function renderCommand(
 /**
  * Resolve working directory
  */
-function resolveCwd(relativeCwd?: string): string | null {
+function resolveCwd(relativeCwd?: string, basePath?: string): string | null {
+  if (basePath) {
+    return relativeCwd ? path.resolve(basePath, relativeCwd) : basePath;
+  }
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return null;

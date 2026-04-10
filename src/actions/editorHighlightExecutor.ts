@@ -61,7 +61,7 @@ export class EditorHighlightExecutor extends BaseActionExecutor implements Actio
       // Resolve file path
       const filePath = path.isAbsolute(params.path)
         ? params.path
-        : path.join(context.workspaceRoot, params.path);
+        : path.join(context.basePath, params.path);
 
       // Parse line range (convert to string in case it was parsed as number)
       const linesStr = String(params.lines);

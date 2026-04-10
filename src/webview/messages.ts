@@ -143,6 +143,29 @@ export interface ResetToCheckpointMessage {
 }
 
 /**
+ * Fragment revealed during presentation (for recording timeline).
+ */
+export interface FragmentRevealedMessage {
+  type: 'fragmentRevealed';
+  payload: {
+    slideIndex: number;
+    fragmentIndex: number;
+    fragmentCount: number;
+  };
+}
+
+/**
+ * Recording marker placed by the presenter.
+ */
+export interface RecordingMarkerMessage {
+  type: 'recordingMarker';
+  payload: {
+    markerType: 'narration' | 'pause' | 'resume' | 'retake';
+    note?: string;
+  };
+}
+
+/**
  * Union of all Webview → Host messages
  */
 export type WebviewToHostMessage =
@@ -159,7 +182,9 @@ export type WebviewToHostMessage =
   | DeleteSceneMessage
   | EnvSetupRequestMessage
   | RetryStepMessage
-  | ResetToCheckpointMessage;
+  | ResetToCheckpointMessage
+  | FragmentRevealedMessage
+  | RecordingMarkerMessage;
 
 // ============================================================================
 // Extension Host → Webview Messages
@@ -378,6 +403,18 @@ export interface OnboardingStateLoadedMessage {
 }
 
 /**
+ * Recording status notification to webview.
+ */
+export interface RecordingStatusMessage {
+  type: 'recordingStatus';
+  payload: {
+    isRecording: boolean;
+    elapsedMs?: number;
+    sessionId?: string;
+  };
+}
+
+/**
  * Union of all Host → Webview messages
  */
 export type HostToWebviewMessage =
@@ -394,7 +431,8 @@ export type HostToWebviewMessage =
   | WarningMessage
   | EnvStatusChangedMessage
   | StepStatusChangedMessage
-  | OnboardingStateLoadedMessage;
+  | OnboardingStateLoadedMessage
+  | RecordingStatusMessage;
 
 // ============================================================================
 // Payload types for convenience
@@ -419,6 +457,9 @@ export type StepStatusChangedPayload = StepStatusChangedMessage['payload'];
 export type OnboardingStateLoadedPayload = OnboardingStateLoadedMessage['payload'];
 export type RetryStepPayload = RetryStepMessage['payload'];
 export type ResetToCheckpointPayload = ResetToCheckpointMessage['payload'];
+export type FragmentRevealedPayload = FragmentRevealedMessage['payload'];
+export type RecordingMarkerPayload = RecordingMarkerMessage['payload'];
+export type RecordingStatusPayload = RecordingStatusMessage['payload'];
 
 // ============================================================================
 // Error Codes

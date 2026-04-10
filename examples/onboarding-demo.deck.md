@@ -2,6 +2,7 @@
 title: "Onboarding Mode Demo"
 author: Executable Talk
 description: A showcase of Onboarding Mode features — checkpoints, validation actions, progressive disclosure, step tracking, and recovery.
+basePath: ..
 scenes:
   - name: start
     slide: 1
