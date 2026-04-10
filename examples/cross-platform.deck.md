@@ -2,6 +2,7 @@
 title: Cross-Platform Commands & Navigation Demo
 author: Executable Talk
 description: Demonstrates cross-platform command maps, scene anchors, and non-linear navigation features.
+basePath: ..
 scenes:
   - name: intro
     slide: 1

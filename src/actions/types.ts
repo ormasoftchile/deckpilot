@@ -13,6 +13,8 @@ import { SequenceErrorDetail } from './errors';
 export interface ExecutionContext {
   /** Absolute path to the workspace root */
   workspaceRoot: string;
+  /** Resolved base path for relative file resolution (from deck basePath or workspaceRoot) */
+  basePath: string;
   /** Absolute path to the .deck.md file */
   deckFilePath: string;
   /** Current slide index (0-based) */

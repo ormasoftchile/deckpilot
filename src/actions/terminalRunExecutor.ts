@@ -68,8 +68,8 @@ export class TerminalRunExecutor extends BaseActionExecutor implements ActionExe
       const cwd = params.cwd
         ? path.isAbsolute(params.cwd)
           ? params.cwd
-          : path.join(context.workspaceRoot, params.cwd)
-        : context.workspaceRoot;
+          : path.join(context.basePath, params.cwd)
+        : context.basePath;
 
       // Create or reuse terminal
       const terminalName = params.name ?? 'Executable Talk';

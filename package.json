@@ -82,6 +82,34 @@
       {
         "command": "executableTalk.restoreScene",
         "title": "Executable Talk: Restore Scene"
+      },
+      {
+        "command": "executableTalk.startRecording",
+        "title": "Executable Talk: Start Recording Session"
+      },
+      {
+        "command": "executableTalk.stopRecording",
+        "title": "Executable Talk: Stop Recording Session"
+      },
+      {
+        "command": "executableTalk.pauseRecordingTiming",
+        "title": "Executable Talk: Pause Recording Timing"
+      },
+      {
+        "command": "executableTalk.resumeRecordingTiming",
+        "title": "Executable Talk: Resume Recording Timing"
+      },
+      {
+        "command": "executableTalk.toggleRecordingPause",
+        "title": "Executable Talk: Toggle Recording Pause"
+      },
+      {
+        "command": "executableTalk.markRetake",
+        "title": "Executable Talk: Mark Retake Point"
+      },
+      {
+        "command": "executableTalk.insertNarrationMarker",
+        "title": "Executable Talk: Insert Narration Marker"
       }
     ],
     "keybindings": [
@@ -101,6 +129,24 @@
         "command": "executableTalk.restoreScene",
         "key": "ctrl+r",
         "mac": "cmd+r",
+        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+      },
+      {
+        "command": "executableTalk.toggleRecordingPause",
+        "key": "ctrl+shift+space",
+        "mac": "cmd+shift+space",
+        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+      },
+      {
+        "command": "executableTalk.markRetake",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+      },
+      {
+        "command": "executableTalk.insertNarrationMarker",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
         "when": "activeWebviewPanelId == 'executableTalkPresentation'"
       }
     ],
@@ -123,7 +169,32 @@
         "scopeName": "text.html.markdown.deck",
         "path": "./syntaxes/deck-markdown.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Executable Talk",
+      "properties": {
+        "executableTalk.recording.startCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Shell command to launch an external screen recorder when recording starts. Use {{outputPath}} for the video file path and {{sessionId}} for the session identifier."
+        },
+        "executableTalk.recording.stopCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Shell command to stop the external screen recorder when recording ends."
+        },
+        "executableTalk.recording.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory for recorder output files. Defaults to the deck file's directory if empty."
+        },
+        "executableTalk.recording.outputExtension": {
+          "type": "string",
+          "default": "mp4",
+          "description": "File extension for the recorder output file (e.g., mp4, mkv, webm)."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
