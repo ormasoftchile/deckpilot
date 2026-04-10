@@ -2,6 +2,7 @@
 title: Executable Talk - Feature Showcase
 author: Executable Talk Team
 description: A comprehensive demo of all extension features
+basePath: ..
 ---
 
 # 🎭 Executable Talk

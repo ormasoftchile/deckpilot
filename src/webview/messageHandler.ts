@@ -22,6 +22,8 @@ import {
   ResetToCheckpointMessage,
   RetryStepPayload,
   ResetToCheckpointPayload,
+  FragmentRevealedMessage,
+  RecordingMarkerMessage,
 } from './messages';
 
 // ============================================================================
@@ -127,6 +129,20 @@ export function isResetToCheckpointMessage(msg: unknown): msg is ResetToCheckpoi
 }
 
 /**
+ * Check if message is a fragment revealed message
+ */
+export function isFragmentRevealedMessage(msg: unknown): msg is FragmentRevealedMessage {
+  return isMessage(msg) && msg.type === 'fragmentRevealed';
+}
+
+/**
+ * Check if message is a recording marker message
+ */
+export function isRecordingMarkerMessage(msg: unknown): msg is RecordingMarkerMessage {
+  return isMessage(msg) && msg.type === 'recordingMarker';
+}
+
+/**
  * Base message type check
  */
 function isMessage(msg: unknown): msg is { type: string } {
@@ -169,6 +185,8 @@ export interface MessageHandlers {
   onEnvSetupRequest?: (message: EnvSetupRequestMessage) => void | Promise<void>;
   onRetryStep?: (payload: RetryStepPayload) => Promise<void>;
   onResetToCheckpoint?: (payload: ResetToCheckpointPayload) => Promise<void>;
+  onFragmentRevealed?: (message: FragmentRevealedMessage) => void | Promise<void>;
+  onRecordingMarker?: (message: RecordingMarkerMessage) => void | Promise<void>;
 }
 
 /**
@@ -210,6 +228,10 @@ export function createMessageDispatcher(handlers: MessageHandlers) {
         await handlers.onRetryStep(message.payload);
       } else if (isResetToCheckpointMessage(message) && handlers.onResetToCheckpoint) {
         await handlers.onResetToCheckpoint(message.payload);
+      } else if (isFragmentRevealedMessage(message) && handlers.onFragmentRevealed) {
+        await handlers.onFragmentRevealed(message);
+      } else if (isRecordingMarkerMessage(message) && handlers.onRecordingMarker) {
+        await handlers.onRecordingMarker(message);
       } else {
         console.warn('Unhandled message type:', (message as WebviewToHostMessage).type);
       }
@@ -230,7 +252,7 @@ export function parseMessage(data: unknown): WebviewToHostMessage | null {
   const validTypes = [
     'navigate', 'executeAction', 'undo', 'redo', 'close', 'ready', 'vscodeCommand',
     'goBack', 'saveScene', 'restoreScene', 'deleteScene', 'envSetupRequest',
-    'retryStep', 'resetToCheckpoint',
+    'retryStep', 'resetToCheckpoint', 'fragmentRevealed', 'recordingMarker',
   ];
   if (!validTypes.includes(data.type)) {
     return null;

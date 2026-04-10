@@ -21,9 +21,9 @@ export interface DiffRenderResult {
 /**
  * Render a diff based on parameters
  */
-export async function renderDiff(params: DiffRenderParams): Promise<DiffRenderResult> {
+export async function renderDiff(params: DiffRenderParams, basePath?: string): Promise<DiffRenderResult> {
   try {
-    const workspaceRoot = getWorkspaceRoot();
+    const workspaceRoot = getWorkspaceRoot(basePath);
     if (!workspaceRoot) {
       return {
         success: false,
@@ -54,7 +54,10 @@ export async function renderDiff(params: DiffRenderParams): Promise<DiffRenderRe
 /**
  * Get workspace root
  */
-function getWorkspaceRoot(): string | null {
+function getWorkspaceRoot(basePath?: string): string | null {
+  if (basePath) {
+    return basePath;
+  }
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return null;

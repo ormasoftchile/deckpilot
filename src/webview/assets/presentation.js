@@ -408,6 +408,15 @@
     if (fragment) {
       fragment.classList.add('visible');
     }
+    // Notify extension host for recording timeline
+    vscode.postMessage({
+      type: 'fragmentRevealed',
+      payload: {
+        slideIndex: currentSlide,
+        fragmentIndex: currentFragment,
+        fragmentCount: totalFragments,
+      },
+    });
     updateNavigationButtons();
   }
 

@@ -78,14 +78,14 @@ export function createLoadingPlaceholder(directive: RenderDirective): LoadingPla
 /**
  * Resolve a render directive to HTML content
  */
-export async function resolveDirective(directive: RenderDirective): Promise<RenderedBlock> {
+export async function resolveDirective(directive: RenderDirective, basePath?: string): Promise<RenderedBlock> {
   switch (directive.type) {
     case 'file':
-      return resolveFileDirective(directive);
+      return resolveFileDirective(directive, basePath);
     case 'command':
-      return resolveCommandDirective(directive);
+      return resolveCommandDirective(directive, basePath);
     case 'diff':
-      return resolveDiffDirective(directive);
+      return resolveDiffDirective(directive, basePath);
     default: {
       const unknownDirective = directive as RenderDirective;
       return createErrorBlock(unknownDirective.id, 'Unknown directive type');
@@ -96,8 +96,8 @@ export async function resolveDirective(directive: RenderDirective): Promise<Rend
 /**
  * Resolve file directive
  */
-async function resolveFileDirective(directive: FileRenderDirective): Promise<RenderedBlock> {
-  const result = await renderFile(directive.params);
+async function resolveFileDirective(directive: FileRenderDirective, basePath?: string): Promise<RenderedBlock> {
+  const result = await renderFile(directive.params, basePath);
   
   if (!result.success) {
     return createErrorBlock(directive.id, result.error || 'Failed to render file');
@@ -126,17 +126,17 @@ async function resolveFileDirective(directive: FileRenderDirective): Promise<Ren
 /**
  * Resolve command directive
  */
-async function resolveCommandDirective(directive: CommandRenderDirective): Promise<RenderedBlock> {
+async function resolveCommandDirective(directive: CommandRenderDirective, basePath?: string): Promise<RenderedBlock> {
   const params = directive.params;
   let retryCount = 0;
   const maxRetries = params.retries || 0;
   
   // Attempt execution with retries
-  let result = await renderCommand(params);
+  let result = await renderCommand(params, undefined, basePath);
   
   while (!result.success && params.onError === 'retry' && retryCount < maxRetries) {
     retryCount++;
-    result = await renderCommand(params);
+    result = await renderCommand(params, undefined, basePath);
   }
   
   if (!result.success) {
@@ -235,8 +235,8 @@ function formatAsFallbackBlock(fallback: string, command: string, originalError:
 /**
  * Resolve diff directive
  */
-async function resolveDiffDirective(directive: DiffRenderDirective): Promise<RenderedBlock> {
-  const result = await renderDiff(directive.params);
+async function resolveDiffDirective(directive: DiffRenderDirective, basePath?: string): Promise<RenderedBlock> {
+  const result = await renderDiff(directive.params, basePath);
   
   if (!result.success) {
     return createErrorBlock(directive.id, result.error || 'Failed to render diff');

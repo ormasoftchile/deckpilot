@@ -1,0 +1,6 @@
+{
+    "executableTalk.recording.startCommand": "ffmpeg -f gdigrab -i desktop -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -pix_fmt yuv420p -preset ultrafast -y {{outputPath}}",
+    "executableTalk.recording.stopCommand": "",
+    "executableTalk.recording.outputDir": "./recordings",
+    "executableTalk.recording.outputExtension": "mp4"
+}
