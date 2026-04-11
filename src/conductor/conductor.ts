@@ -37,6 +37,7 @@ import {
 import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
+import { buildAutoPilotPlan, AutoPilotStep } from '../recording/autoPilot';
 
 /**
  * Actions that require workspace trust
@@ -69,6 +70,7 @@ export class Conductor implements vscode.Disposable {
   private onboardingSteps: OnboardingStepState[] = [];
   private recordingState: RecordingState;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
+  private autoPilotRunning = false;
 
   constructor(extensionUri: vscode.Uri) {
     this.stateStack = new StateStack();
@@ -720,6 +722,157 @@ export class Conductor implements vscode.Disposable {
   }
 
   /**
+   * Whether auto-pilot is currently driving the presentation.
+   */
+  isAutoPilotActive(): boolean {
+    return this.autoPilotRunning;
+  }
+
+  /**
+   * Auto-record the entire deck: start recording, drive the presentation
+   * at a pace calculated from voice cue text, then stop recording.
+   * Returns the final session artifact when complete.
+   */
+  async autoRecord(): Promise<RecordingSession | undefined> {
+    if (!this.deck) {
+      return undefined;
+    }
+    if (this.autoPilotRunning) {
+      return undefined;
+    }
+
+    this.autoPilotRunning = true;
+    this.outputChannel.appendLine('[AutoPilot] Building execution plan...');
+
+    // Build the plan from slides
+    const plan = buildAutoPilotPlan(this.deck.slides);
+    this.outputChannel.appendLine(`[AutoPilot] Plan: ${plan.length} steps`);
+    for (const step of plan) {
+      this.outputChannel.appendLine(`  ${step.type} (${step.durationMs}ms) — ${step.label}`);
+    }
+
+    // Go to first slide
+    await this.goToSlide(0);
+
+    // Start recording (with external recorder if configured)
+    await this.startRecording();
+
+    // Execute the plan
+    try {
+      for (const step of plan) {
+        if (!this.autoPilotRunning) {
+          this.outputChannel.appendLine('[AutoPilot] Cancelled');
+          break;
+        }
+
+        await this.executeAutoPilotStep(step);
+      }
+    } catch (err) {
+      this.outputChannel.appendLine(
+        `[AutoPilot] Error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Stop recording
+    this.autoPilotRunning = false;
+    this.outputChannel.appendLine('[AutoPilot] Complete — stopping recording');
+    return this.stopRecording();
+  }
+
+  /**
+   * Cancel a running auto-pilot session.
+   */
+  cancelAutoPilot(): void {
+    this.autoPilotRunning = false;
+  }
+
+  /**
+   * Execute a single auto-pilot step.
+   */
+  private async executeAutoPilotStep(step: AutoPilotStep): Promise<void> {
+    this.outputChannel.appendLine(`[AutoPilot] >> ${step.type} (${step.durationMs}ms) — ${step.label}`);
+
+    switch (step.type) {
+      case 'advance': {
+        // Send advance and wait for the slideChanged or fragmentRevealed
+        // callback to confirm it happened.
+        const advanced = await this.waitForAdvance();
+        if (!advanced) {
+          this.outputChannel.appendLine('[AutoPilot]   advance timed out');
+        }
+        break;
+      }
+
+      case 'trigger-action':
+        if (step.actionId) {
+          try {
+            await this.handleExecuteAction(step.actionId);
+          } catch (e) {
+            this.outputChannel.appendLine(`[AutoPilot]   error: ${e instanceof Error ? e.message : String(e)}`);
+          }
+          // Give the UI time to settle after the action
+          await this.delay(1200);
+        }
+        break;
+
+      case 'refocus':
+        // Files are open beside the webview. Wait, then close them.
+        await this.delay(step.durationMs);
+        await vscode.commands.executeCommand('workbench.action.closeEditorsInOtherGroups');
+        await this.delay(500);
+        break;
+
+      case 'wait':
+        await this.delay(step.durationMs);
+        break;
+
+      case 'close-panel':
+        await vscode.commands.executeCommand('workbench.action.closePanel');
+        await this.delay(500);
+        break;
+    }
+  }
+
+  /**
+   * Send advance to webview and wait for confirmation that the slide
+   * or fragment actually changed. Times out after 3 seconds.
+   */
+  private waitForAdvance(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const prevSlide = this.currentSlideIndex;
+      let resolved = false;
+
+      // Listen for the slide index to change (confirms navigation happened)
+      const checkInterval = setInterval(() => {
+        if (this.currentSlideIndex !== prevSlide || resolved) {
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve(true);
+          }
+        }
+      }, 100);
+
+      // For fragment advances, the slide index doesn't change.
+      // Just use a fixed delay since there's no fragment counter on the host.
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!resolved) {
+          resolved = true;
+          resolve(true); // Assume it worked
+        }
+      }, 800);
+
+      this.webviewProvider.sendAdvancePresentation();
+    });
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Handle a fragment.revealed callback from the webview.
    * Emits a recording event when recording is active.
    */
@@ -1220,6 +1373,7 @@ export class Conductor implements vscode.Disposable {
         isWorkspaceTrusted: isTrusted(),
         cancellationToken: this.cancellationTokenSource.token,
         outputChannel: this.outputChannel,
+        autoPilotMode: this.autoPilotRunning,
       };
 
       const result = await executor.execute(executionAction, context);

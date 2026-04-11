@@ -284,6 +284,29 @@ export class WebviewProvider implements vscode.Disposable {
   }
 
   /**
+   * Tell the webview to advance (reveal next fragment or go to next slide).
+   * Used by auto-pilot mode.
+   */
+  sendAdvancePresentation(): void {
+    this.postMessage({ type: 'advancePresentation', payload: {} });
+  }
+
+  /**
+   * Tell the webview to trigger a specific action button.
+   * Used by auto-pilot mode.
+   */
+  sendTriggerAction(actionId: string): void {
+    this.postMessage({ type: 'triggerAction', payload: { actionId } });
+  }
+
+  /**
+   * Bring the presentation panel to focus.
+   */
+  reveal(): void {
+    this.panel?.reveal(undefined, false);
+  }
+
+  /**
    * Check if panel is visible
    */
 
