@@ -149,6 +149,10 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   const { checkpoint, cleanedContent: contentAfterCheckpoint } = extractCheckpoint(content);
   content = contentAfterCheckpoint;
 
+  // Step 1.6: Strip voice-over cue comments — they are for recording mode only
+  // and must not appear in the rendered presentation HTML
+  content = content.replace(/<!--\s*voice(?:\[\d+\])?:[\s\S]*?-->/gi, '').trim();
+
   // Step 2: Parse action blocks (NEW — extracts elements + cleans content)
   const actionBlockResult = parseActionBlocks(content, index);
   const cleanedContent = actionBlockResult.cleanedContent;
