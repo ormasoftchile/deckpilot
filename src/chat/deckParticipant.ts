@@ -159,6 +159,38 @@ voice-over script and SRT captions when recording mode is used.
 let lastActiveMdUri: vscode.Uri | undefined;
 
 /**
+ * Best-effort: return the URI of the most recently focused .md (non-deck) file.
+ *
+ * `vscode.window.activeTextEditor` returns undefined once the chat panel
+ * steals focus. `tabGroups.activeTabGroup.activeTab` persists the last active
+ * text tab even after a webview/panel opens — this is the reliable source.
+ */
+function resolveActiveMdUri(): vscode.Uri | undefined {
+  const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  if (activeTab?.input instanceof vscode.TabInputText) {
+    const uri = activeTab.input.uri;
+    if (isConvertibleMd(uri.fsPath)) {
+      return uri;
+    }
+  }
+  return lastActiveMdUri;
+}
+
+/**
+ * Best-effort: return the URI of the most recently focused .deck.md file.
+ */
+function resolveActiveDeckUri(): vscode.Uri | undefined {
+  const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  if (activeTab?.input instanceof vscode.TabInputText) {
+    const uri = activeTab.input.uri;
+    if (uri.fsPath.endsWith('.deck.md')) {
+      return uri;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Register the @deck chat participant.
  */
 export function registerDeckParticipant(context: vscode.ExtensionContext): vscode.Disposable {
@@ -315,15 +347,18 @@ async function handleConvert(
     }
   }
 
-  // Fall back to the last .md file the user had active before focus moved to chat
-  if (!sourceContent && lastActiveMdUri) {
-    try {
-      const data = await vscode.workspace.fs.readFile(lastActiveMdUri);
-      sourceContent = Buffer.from(data).toString('utf-8');
-      sourceUri = lastActiveMdUri;
-      stream.progress(`Converting ${vscode.workspace.asRelativePath(lastActiveMdUri)}...`);
-    } catch {
-      // file may have been closed/deleted
+  // Fall back to the active tab — reliable even after chat panel steals focus
+  if (!sourceContent) {
+    const fallbackUri = resolveActiveMdUri();
+    if (fallbackUri) {
+      try {
+        const data = await vscode.workspace.fs.readFile(fallbackUri);
+        sourceContent = Buffer.from(data).toString('utf-8');
+        sourceUri = fallbackUri;
+        stream.progress(`Converting ${vscode.workspace.asRelativePath(fallbackUri)}...`);
+      } catch {
+        // file may have been closed/deleted
+      }
     }
   }
 
@@ -411,10 +446,15 @@ async function handleEnrich(
   }
 
   if (!deckContent) {
-    const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.fileName.endsWith('.deck.md')) {
-      deckContent = editor.document.getText();
-      stream.progress(`Enriching ${editor.document.fileName}...`);
+    const fallbackUri = resolveActiveDeckUri();
+    if (fallbackUri) {
+      try {
+        const data = await vscode.workspace.fs.readFile(fallbackUri);
+        deckContent = Buffer.from(data).toString('utf-8');
+        stream.progress(`Enriching ${vscode.workspace.asRelativePath(fallbackUri)}...`);
+      } catch {
+        // ignore
+      }
     }
   }
 
