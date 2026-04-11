@@ -62,7 +62,9 @@ export class FileOpenExecutor extends BaseActionExecutor implements ActionExecut
 
       // Determine view column
       let viewColumn = vscode.ViewColumn.One;
-      if (params.viewColumn !== undefined) {
+      if (context.autoPilotMode) {
+        viewColumn = vscode.ViewColumn.Beside;
+      } else if (params.viewColumn !== undefined) {
         if (params.viewColumn === -1) {
           viewColumn = vscode.ViewColumn.Beside;
         } else if (params.viewColumn === -2) {
@@ -77,7 +79,7 @@ export class FileOpenExecutor extends BaseActionExecutor implements ActionExecut
       const editor = await vscode.window.showTextDocument(document, {
         viewColumn,
         preview: params.preview ?? true,
-        preserveFocus: false,
+        preserveFocus: context.autoPilotMode ?? false,
       });
 
       // Navigate to specific line/range if specified

@@ -415,6 +415,26 @@ export interface RecordingStatusMessage {
 }
 
 /**
+ * Tell the webview to advance (same as pressing →).
+ * Used by auto-pilot to drive fragment reveals and slide navigation.
+ */
+export interface AdvancePresentationMessage {
+  type: 'advancePresentation';
+  payload: Record<string, never>;
+}
+
+/**
+ * Tell the webview to execute a specific action button by ID.
+ * Used by auto-pilot to trigger interactive elements programmatically.
+ */
+export interface TriggerActionMessage {
+  type: 'triggerAction';
+  payload: {
+    actionId: string;
+  };
+}
+
+/**
  * Union of all Host → Webview messages
  */
 export type HostToWebviewMessage =
@@ -432,7 +452,9 @@ export type HostToWebviewMessage =
   | EnvStatusChangedMessage
   | StepStatusChangedMessage
   | OnboardingStateLoadedMessage
-  | RecordingStatusMessage;
+  | RecordingStatusMessage
+  | AdvancePresentationMessage
+  | TriggerActionMessage;
 
 // ============================================================================
 // Payload types for convenience

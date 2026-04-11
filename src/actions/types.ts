@@ -25,6 +25,8 @@ export interface ExecutionContext {
   cancellationToken: vscode.CancellationToken;
   /** Output channel for logging */
   outputChannel: vscode.OutputChannel;
+  /** When true, file.open/editor.highlight should use ViewColumn.Beside */
+  autoPilotMode?: boolean;
 }
 
 /**

@@ -3,7 +3,7 @@ title: Demo Presentation
 author: Test User
 basePath: ..
 options:
-  zenMode: false
+  zenMode: true
 ---
 
 <!-- voice: Welcome to Executable Talk — a VS Code extension that turns Markdown presentations into interactive demos with live code execution. -->
@@ -56,18 +56,16 @@ Run a command in the terminal:
 [Show npm version](action:terminal.run?command=npm%20--version) <!-- .fragment -->
 
 <!-- voice[2]: List the files in the project directory. -->
-<div class="fragment"> <!-- .fragment -->
 
 ```action
 type: terminal.run
 label: List files
+fragment: true
 command:
-  win32: dir
-  darwin: ls -la
+  windows: dir
+  macos: ls -la
   linux: ls -la
 ```
-
-</div>
 
 ---
 
@@ -202,26 +200,22 @@ steps:
 # YAML Terminal & VS Code Commands
 
 <!-- voice[1]: Run an echo command from YAML. -->
-<div class="fragment"> <!-- .fragment -->
 
 ```action
 type: terminal.run
 command: echo "YAML blocks are great!"
 label: Run Echo Command
+fragment: true
 ```
 
-</div>
-
 <!-- voice[2]: Toggle the sidebar with a single YAML block. -->
-<div class="fragment"> <!-- .fragment -->
 
 ```action
 type: vscode.command
 id: workbench.action.toggleSidebarVisibility
 label: Toggle Sidebar
+fragment: true
 ```
-
-</div>
 
 ---
 notes: |
@@ -258,27 +252,23 @@ The validator checks for: <!-- .fragment -->
 These action blocks have problems the validator will catch:
 
 <!-- voice[1]: This file doesn't exist — the validator flags it. -->
-<div class="fragment"> <!-- .fragment -->
 
 ```action
 type: file.open
 path: this/file/does/not/exist.ts
 label: Missing File (validator catches this!)
+fragment: true
 ```
 
-</div>
-
 <!-- voice[2]: These line numbers are way out of range. -->
-<div class="fragment"> <!-- .fragment -->
 
 ```action
 type: editor.highlight
 path: package.json
 lines: 9999-10000
 label: Out of Range (validator catches this!)
+fragment: true
 ```
-
-</div>
 
 ---
 notes: |

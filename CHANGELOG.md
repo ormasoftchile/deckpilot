@@ -5,6 +5,68 @@ All notable changes to the Executable Talk extension will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-10
+
+### Added
+
+- **@deck Chat Participant**: Generate and convert decks via Copilot Chat
+  - `/create` — generate a new deck from a description
+  - `/convert` — convert existing Markdown into a .deck.md
+  - `/enrich` — add voice cues, fragments, and actions to a deck
+  - Freeform deck-related questions
+
+- **Auto-Pilot Recording**: Hands-free presentation capture
+  - `Auto-Record Deck` command drives slides, fragments, and actions automatically
+  - Pacing calculated from voice cue word count (150 WPM default)
+  - Files open in side-by-side view (no focus fighting)
+  - Terminal commands show with preserved focus, auto-close panel
+  - `Cancel Auto-Record` to abort
+
+- **basePath Frontmatter**: Resolve relative paths from the deck file's directory
+  - Add `basePath: ..` for decks in subdirectories that reference repo root files
+  - All action executors and render directives respect basePath
+
+- **Fragment-Level Voice Cues**: `<!-- voice[N]: text -->` syntax for per-fragment captions
+
+### Fixed
+
+- YAML action blocks use `fragment: true` property (div wrapper was broken)
+- Platform command map keys use `windows`/`macos`/`linux` (not `win32`/`darwin`)
+- Auto-pilot sorts elements by source position for correct execution order
+- Launch config opens examples folder for testing
+
+## [0.6.0] - 2026-04-10
+
+### Added
+
+- **Recording Mode**: Capture live presentation sessions with timestamped events
+  - Start/stop recording via command palette
+  - Timeline event logging: slides, fragments, actions, scenes
+  - Export `recording-session.json`, `voiceover-script.md`, `voiceover-script.json`
+  - Voice-over cue annotations: `<!-- voice: text -->`
+
+- **Manual Markers & Captions**
+  - Pause/resume timing (`Ctrl+Shift+Space`) — excluded from narration pacing
+  - Retake markers (`Ctrl+Shift+R`) with optional notes
+  - Narration markers (`Ctrl+Shift+M`) with optional notes
+  - SRT captions scaffold export (auto-named to match video file)
+  - Ignored intervals subtracted from segment durations
+
+- **External Recorder Orchestration**
+  - Configurable ffmpeg integration via settings
+  - Graceful shutdown (stdin `q` for proper MP4 finalization)
+  - Recorder metadata in session artifacts
+  - Template variables: `{{outputPath}}`, `{{sessionId}}`
+
+- **Frontmatter-Only Block Merging**: Notes blocks between `---` delimiters merge into the next slide instead of creating empty phantom slides
+
+### Fixed
+
+- Segment builder now wired into conductor's `stopRecording()` (was returning empty segments)
+- First slide gets a segment (session.started treated as boundary)
+- Draft narration falls back to slide text content (strips markdown/actions)
+- Segment boundary events use exclusive end (no bleed between segments)
+
 ## [0.5.0] - 2026-03-07
 
 ### Added

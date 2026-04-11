@@ -110,6 +110,14 @@
       {
         "command": "executableTalk.insertNarrationMarker",
         "title": "Executable Talk: Insert Narration Marker"
+      },
+      {
+        "command": "executableTalk.autoRecord",
+        "title": "Executable Talk: Auto-Record Deck"
+      },
+      {
+        "command": "executableTalk.cancelAutoRecord",
+        "title": "Executable Talk: Cancel Auto-Record"
       }
     ],
     "keybindings": [
@@ -194,7 +202,30 @@
           "description": "File extension for the recorder output file (e.g., mp4, mkv, webm)."
         }
       }
-    }
+    },
+    "chatParticipants": [
+      {
+        "id": "executableTalk.deck",
+        "fullName": "Deck Creator",
+        "name": "deck",
+        "description": "Create and convert Markdown presentations into interactive Executable Talk decks",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "create",
+            "description": "Create a new deck from a description (e.g., 'installation guide for Docker')"
+          },
+          {
+            "name": "convert",
+            "description": "Convert an existing Markdown file into a .deck.md presentation"
+          },
+          {
+            "name": "enrich",
+            "description": "Add voice cues, fragments, and actions to an existing deck"
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

@@ -104,7 +104,8 @@ export class TerminalRunExecutor extends BaseActionExecutor implements ActionExe
 
       // Show terminal unless background
       if (params.reveal !== false && !params.background) {
-        terminal.show(!params.background);
+        // In auto-pilot mode, show terminal but preserve focus on the webview
+        terminal.show(context.autoPilotMode ? true : !params.background);
       }
 
       // Send command

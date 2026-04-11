@@ -25,6 +25,15 @@ Transform your Markdown presentations into live coding demonstrations with VS Co
 - **Onboarding Mode**: Step-by-step guided experiences with checkpoints, validation, and retry/reset
 - **Validation Actions**: Verify setup with `validate.command`, `validate.fileExists`, and `validate.port`
 - **Progressive Disclosure**: Collapsible `:::advanced` sections and `:::optional` non-blocking content
+- **Recording Mode**: Capture a live presentation session with timestamped events and export voice-over scripts
+- **Voice-Over Cues**: `<!-- voice: -->` and `<!-- voice[N]: -->` annotations for narration scripting
+- **SRT Captions**: Auto-generated subtitle files timed to your actual presentation pace
+- **External Recorder**: Configurable ffmpeg integration for automatic screen capture
+- **Pause/Resume Timing**: Exclude interruptions from narration pacing with keyboard shortcuts
+- **Retake Markers**: Flag sections for re-recording during post-production
+- **Auto-Pilot Mode**: Hands-free recording that drives the deck at calculated reading pace
+- **@deck Chat Participant**: Generate and convert decks via Copilot Chat (`/create`, `/convert`, `/enrich`)
+- **basePath**: Resolve relative paths from the deck file's directory for decks in subdirectories
 
 ## Getting Started
 
@@ -131,6 +140,15 @@ A floating toolbar appears in the bottom-right corner when you hover over the pr
 | `Executable Talk: Restore Scene` | Open the scene picker to restore a saved scene |
 | `Executable Talk: Open Presenter View` | Show speaker notes and next slide preview |
 | `Executable Talk: Validate Deck` | Run preflight checks on the current `.deck.md` file |
+| `Executable Talk: Start Recording Session` | Begin recording timeline events during presentation |
+| `Executable Talk: Stop Recording Session` | Stop recording and export session artifacts |
+| `Executable Talk: Pause Recording Timing` | Pause narration timing (excluded from pacing) |
+| `Executable Talk: Resume Recording Timing` | Resume narration timing |
+| `Executable Talk: Toggle Recording Pause` | Toggle pause/resume (`Ctrl+Shift+Space`) |
+| `Executable Talk: Mark Retake Point` | Flag current position for re-recording (`Ctrl+Shift+R`) |
+| `Executable Talk: Insert Narration Marker` | Add a narration cue (`Ctrl+Shift+M`) |
+| `Executable Talk: Auto-Record Deck` | Hands-free: drive presentation + record at calculated pace |
+| `Executable Talk: Cancel Auto-Record` | Stop a running auto-pilot session |
 
 ## Action Reference
 
@@ -397,6 +415,94 @@ A breadcrumb trail appears at the bottom of the presentation showing your recent
 - Click any breadcrumb to jump back to that slide
 - Icons show how you reached each slide: → sequential, ⤳ jump, ← go-back, 📌 scene restore
 - Up to 10 recent entries are shown; the trail fades in on hover
+
+## Recording Mode
+
+Record a live presentation session and export a time-calibrated voice-over script with captions.
+
+### Voice-Over Cues
+
+Add narration annotations to your slides — invisible during presentation, used in exported scripts:
+
+```markdown
+<!-- voice: Welcome to the demo. I'll show you live code execution. -->
+
+# Welcome
+
+<!-- voice[1]: Let's open the main file first. -->
+[Open main.ts](action:file.open?path=src/main.ts) <!-- .fragment -->
+
+<!-- voice[2]: Now highlight the key function. -->
+[Show function](action:editor.highlight?path=src/main.ts&lines=5-10) <!-- .fragment -->
+```
+
+Slide-level cues use `<!-- voice: text -->`. Fragment-level cues use `<!-- voice[N]: text -->` where N is the 1-based fragment index.
+
+### Manual Recording
+
+1. Start a presentation
+2. Run `Start Recording Session`
+3. Present at your natural pace — **talk as you go** to set the timing
+4. Use shortcuts during recording:
+   - `Ctrl+Shift+Space` — toggle pause/resume (for interruptions)
+   - `Ctrl+Shift+R` — mark retake point
+   - `Ctrl+Shift+M` — insert narration marker
+5. Run `Stop Recording Session`
+
+Exported artifacts:
+- `recording-session.json` — full event stream with timestamps
+- `voiceover-script.md` — human-editable narration script
+- `voiceover-script.json` — machine-readable script
+- `{session-id}.srt` — SRT captions (auto-named to match video)
+
+### Auto-Pilot Recording
+
+Hands-free recording that drives the entire presentation automatically:
+
+1. Start a presentation
+2. Run `Auto-Record Deck`
+3. The extension navigates slides, reveals fragments, triggers actions — all at a pace calculated from voice cue word count (150 WPM)
+4. Files open in a side panel; terminal output is shown then closed automatically
+5. When complete: MP4 + SRT + voiceover script exported
+
+### External Screen Recorder
+
+Configure ffmpeg (or any recorder) to start/stop automatically:
+
+```jsonc
+// .vscode/settings.json
+{
+  "executableTalk.recording.startCommand": "ffmpeg -f gdigrab -i desktop -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -pix_fmt yuv420p -preset ultrafast -y {{outputPath}}",
+  "executableTalk.recording.outputDir": "./recordings",
+  "executableTalk.recording.outputExtension": "mp4"
+}
+```
+
+Template variables: `{{outputPath}}`, `{{sessionId}}`
+
+## @deck Chat Participant
+
+Generate and convert decks using Copilot Chat:
+
+| Command | Example |
+|---------|---------|
+| `@deck /create` | `@deck /create installation guide for Docker Desktop on Windows` |
+| `@deck /convert` | `@deck /convert #file:README.md` |
+| `@deck /enrich` | `@deck /enrich #file:demo.deck.md add voice cues` |
+| `@deck` (freeform) | `@deck how do I add a terminal command to a slide?` |
+
+## basePath
+
+When a deck file is in a subdirectory but references files at the repository root, add `basePath` to the frontmatter:
+
+```yaml
+---
+title: My Demo
+basePath: ..
+---
+```
+
+Paths in all actions and render directives resolve relative to the basePath directory.
 
 ## Scene Checkpoints
 
