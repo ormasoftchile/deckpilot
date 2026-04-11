@@ -264,40 +264,45 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get content from referenced file
+  // Try to get content from referenced file — handle Uri and Location (implicit editor ref)
   let sourceContent = '';
+  let sourceUri: vscode.Uri | undefined;
   for (const ref of request.references) {
+    let uri: vscode.Uri | undefined;
     if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.deck.md')) {
       try {
-        const data = await vscode.workspace.fs.readFile(ref.value);
+        const data = await vscode.workspace.fs.readFile(uri);
         sourceContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Converting ${ref.value.fsPath}...`);
+        sourceUri = uri;
+        stream.progress(`Converting ${vscode.workspace.asRelativePath(uri)}...`);
+        break;
       } catch {
         // ignore read errors
       }
-    } else if (typeof ref.value === 'string') {
-      sourceContent = ref.value;
     }
   }
 
-  // Fall back to the active editor if no file was explicitly referenced
+  // Fall back to any open file-scheme .md document
   if (!sourceContent) {
-    const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.fileName.endsWith('.md') && !editor.document.fileName.endsWith('.deck.md')) {
-      sourceContent = editor.document.getText();
-      stream.progress(`Converting ${vscode.workspace.asRelativePath(editor.document.uri)}...`);
+    const mdDoc = vscode.workspace.textDocuments.find(
+      (d) => d.uri.scheme === 'file' && d.fileName.endsWith('.md') && !d.fileName.endsWith('.deck.md'),
+    );
+    if (mdDoc) {
+      sourceContent = mdDoc.getText();
+      sourceUri = mdDoc.uri;
+      stream.progress(`Converting ${vscode.workspace.asRelativePath(mdDoc.uri)}...`);
     }
-  }
-
-  if (!sourceContent && request.prompt) {
-    sourceContent = request.prompt;
   }
 
   if (!sourceContent) {
     stream.markdown(
-      'Please reference the Markdown file you want to convert:\n\n' +
-      '```\n@deck /convert #file:README.md\n```\n\n' +
-      'Or open the Markdown file in the editor before calling `@deck /convert`.',
+      'No Markdown file found. Please reference it explicitly:\n\n' +
+      '```\n@deck /convert #file:README.md\n```',
     );
     return { command: 'convert' };
   }
@@ -319,11 +324,30 @@ async function handleConvert(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let deckContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    deckContent += chunk;
   }
 
-  stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
+  // Strip accidental wrapping code fences the model may have added
+  deckContent = deckContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  if (sourceUri) {
+    const outputUri = vscode.Uri.file(sourceUri.fsPath.replace(/\.md$/, '.deck.md'));
+    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(deckContent, 'utf-8'));
+    await vscode.window.showTextDocument(outputUri, { preview: false });
+    const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
+    stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
+    stream.anchor(outputUri, 'Open deck file');
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+  } else {
+    // No source URI tracked (shouldn't happen) — fall back to showing in chat
+    stream.markdown(deckContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
+  }
 
   return { command: 'convert' };
 }

@@ -23,9 +23,6 @@ export function activate(context: vscode.ExtensionContext): void {
     conductor = new Conductor(context.extensionUri);
     context.subscriptions.push(conductor);
 
-    // Register @deck chat participant
-    registerDeckParticipant(context);
-
     // Register commands
     const openPresentationDisposable = vscode.commands.registerCommand(
         'executableTalk.openPresentation',
