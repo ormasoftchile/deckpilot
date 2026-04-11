@@ -2,7 +2,7 @@
   "name": "executable-talk",
   "displayName": "Executable Talk — Markdown Developer Presentations",
   "description": "Transform Markdown presentations into executable narratives with interactive code demonstrations and environment variable support",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "focus-space",
   "license": "MIT",
   "repository": {
@@ -167,11 +167,25 @@
     ],
     "chatParticipants": [
       {
-        "id": "executable-talk.deck",
-        "name": "deck",
+        "id": "executableTalk.deck",
         "fullName": "Deck Creator",
-        "description": "Convert a Markdown file into an Executable Talk .deck.md presentation",
-        "isSticky": false
+        "name": "deck",
+        "description": "Create and convert Markdown presentations into interactive Executable Talk decks",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "create",
+            "description": "Create a new deck from a description (e.g., 'installation guide for Docker')"
+          },
+          {
+            "name": "convert",
+            "description": "Convert an existing Markdown file into a .deck.md presentation"
+          },
+          {
+            "name": "enrich",
+            "description": "Add voice cues, fragments, and actions to an existing deck"
+          }
+        ]
       }
     ],
     "languages": [
@@ -218,30 +232,7 @@
           "description": "File extension for the recorder output file (e.g., mp4, mkv, webm)."
         }
       }
-    },
-    "chatParticipants": [
-      {
-        "id": "executableTalk.deck",
-        "fullName": "Deck Creator",
-        "name": "deck",
-        "description": "Create and convert Markdown presentations into interactive Executable Talk decks",
-        "isSticky": true,
-        "commands": [
-          {
-            "name": "create",
-            "description": "Create a new deck from a description (e.g., 'installation guide for Docker')"
-          },
-          {
-            "name": "convert",
-            "description": "Convert an existing Markdown file into a .deck.md presentation"
-          },
-          {
-            "name": "enrich",
-            "description": "Add voice cues, fragments, and actions to an existing deck"
-          }
-        ]
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
