@@ -5,39 +5,63 @@
 
 /**
  * Process fragment markers in HTML
- * Transforms <!-- .fragment --> comments into fragment class attributes
- * 
+ * Transforms <!-- .fragment --> comments into fragment class attributes.
+ *
+ * Also promotes any non-fragment block elements that appear AFTER the first
+ * fragment on a slide so they don't render immediately while earlier
+ * fragments are still hidden.
+ *
+ * Uses a two-phase sentinel approach so all fragment indices are assigned in
+ * document order (explicit AND auto-promoted elements interleaved correctly).
+ *
  * @param html - The HTML content to process
  * @returns Object with processed HTML and fragment count
  */
 export function processFragments(html: string): { html: string; fragmentCount: number } {
-  let fragmentIndex = 0;
-  
-  // Single-pass regex that matches ALL fragment-bearing elements (li, p,
-  // h1-h6, div, blockquote) in one sweep so that fragment indices follow
-  // document order.
-  //
-  // The content group uses a negative lookahead for block-level closing
-  // tags — `(?!<\/(?:li|p|h[1-6]|div|blockquote)\b)` — to prevent a
-  // match that starts at one element (e.g. <h1>) from extending through
-  // its closing tag into a sibling element's content.  This is more
-  // reliable than the previous approach of omitting the `s` (dotall) flag,
-  // which broke when two elements happened to sit on the same line.
-  const processedHtml = html.replace(
+  if (!/<!--\s*\.fragment/.test(html)) {
+    return { html, fragmentCount: 0 };
+  }
+
+  // Phase 1 — tag every element that needs a fragment index with a sentinel
+  // attribute (__frag) so we can assign indices in a single document-order
+  // pass later.
+
+  // 1a. Explicit <!-- .fragment [animation] --> markers → add sentinel, strip comment.
+  let tagged = html.replace(
     /(<(li|p|h[1-6]|div|blockquote)\b[^>]*>)((?:(?!<\/(?:li|p|h[1-6]|div|blockquote)\b)[\s\S])*?)(<!--\s*\.fragment(?:\s+([\w-]+))?\s*-->)/g,
-    (_match, openTag: string, tagName: string, content: string, _comment: string, animationType: string | undefined) => {
-      fragmentIndex++;
-      const animation = animationType || 'fade';
-      const newOpenTag = openTag.replace(
-        `<${tagName}`,
-        `<${tagName} class="fragment" data-fragment="${fragmentIndex}" data-fragment-animation="${animation}"`,
-      );
-      return `${newOpenTag}${content}`;
-    }
+    (_m, openTag: string, tagName: string, content: string, _comment: string, anim?: string) => {
+      const animation = anim ?? 'fade';
+      return openTag.replace(`<${tagName}`, `<${tagName} __frag="${animation}"`) + content;
+    },
   );
-  
-  return {
-    html: processedHtml,
-    fragmentCount: fragmentIndex,
-  };
+
+  // 1b. Auto-promote: p, h1-h6, and blockquote elements that appear AFTER
+  //     the first sentinel-tagged element and are not already tagged.
+  //     This ensures content after a fragment list doesn't render immediately.
+  const firstSentinel = tagged.search(/__frag="/);
+  if (firstSentinel === -1) {
+    return { html, fragmentCount: 0 };
+  }
+
+  const pre = tagged.slice(0, firstSentinel);
+  const post = tagged.slice(firstSentinel).replace(
+    /(<(p|h[1-6]|blockquote)\b)(?![^>]*__frag=)([^>]*>)/g,
+    (_m, tagStart: string, _tag: string, rest: string) => `${tagStart} __frag="fade"${rest}`,
+  );
+  tagged = pre + post;
+
+  // Phase 2 — single document-order sweep: assign sequential fragment indices
+  // to every sentinelled element so explicit and auto-promoted elements are
+  // correctly interleaved.
+  let fragmentIndex = 0;
+  const result = tagged.replace(
+    /(<(li|p|h[1-6]|div|blockquote)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    (_m, pre2: string, _tag: string, animation: string, post2: string) => {
+      fragmentIndex++;
+      return `${pre2} class="fragment" data-fragment="${fragmentIndex}" data-fragment-animation="${animation}"${post2}`;
+    },
+  );
+
+  return { html: result, fragmentCount: fragmentIndex };
 }
+

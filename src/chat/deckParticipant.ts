@@ -85,7 +85,12 @@ Add \`<!-- .fragment -->\` after an element to reveal it on click:
 \`\`\`markdown
 - First point <!-- .fragment -->
 - Second point <!-- .fragment -->
+- Third point <!-- .fragment -->
+
+**Key takeaway:** shown after all bullets <!-- .fragment -->
 \`\`\`
+
+**IMPORTANT**: Once any element on a slide is a fragment, every element that comes after it must also be a fragment. Non-fragment content after a fragment list renders immediately — before any fragment is revealed — which breaks the reveal order.
 
 For action blocks, wrap in a div:
 \`\`\`markdown
@@ -130,6 +135,7 @@ voice-over script and SRT captions when recording mode is used.
 - Split on natural heading boundaries (# and ##)
 - Convert code blocks into action links or render directives where appropriate
 - Convert bullet lists into fragments for progressive reveal
+- **Fragment consistency rule**: once a slide uses \`<!-- .fragment -->\`, ALL content that appears AFTER the first fragment marker must also be a fragment. Non-fragment content (paragraphs, bold text, callouts) that follows a fragment list would appear on screen BEFORE the fragments are revealed, which is confusing. Mark them with \`<!-- .fragment -->\` too.
 - Add voice cues that paraphrase each slide's content in spoken language
 - Add a frontmatter block with title and author
 - Keep the original content structure but make it presentation-friendly
@@ -145,9 +151,31 @@ voice-over script and SRT captions when recording mode is used.
 - Write voice cues as natural spoken narration`;
 
 /**
+ * URI of the last .md file that had editor focus.
+ * Updated whenever the active editor changes so that when the chat panel
+ * steals focus (setting activeTextEditor to undefined) we still know which
+ * file the user was working on.
+ */
+let lastActiveMdUri: vscode.Uri | undefined;
+
+/**
  * Register the @deck chat participant.
  */
 export function registerDeckParticipant(context: vscode.ExtensionContext): vscode.Disposable {
+  // Seed with current editor in case extension activates while a .md file is open
+  const current = vscode.window.activeTextEditor;
+  if (current && isConvertibleMd(current.document.uri.fsPath)) {
+    lastActiveMdUri = current.document.uri;
+  }
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && isConvertibleMd(editor.document.uri.fsPath)) {
+        lastActiveMdUri = editor.document.uri;
+      }
+    }),
+  );
+
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, handleRequest);
 
   participant.iconPath = new vscode.ThemeIcon('file-media');
@@ -287,15 +315,15 @@ async function handleConvert(
     }
   }
 
-  // Fall back to any open file-scheme .md document
-  if (!sourceContent) {
-    const mdDoc = vscode.workspace.textDocuments.find(
-      (d) => d.uri.scheme === 'file' && d.fileName.endsWith('.md') && !d.fileName.endsWith('.deck.md'),
-    );
-    if (mdDoc) {
-      sourceContent = mdDoc.getText();
-      sourceUri = mdDoc.uri;
-      stream.progress(`Converting ${vscode.workspace.asRelativePath(mdDoc.uri)}...`);
+  // Fall back to the last .md file the user had active before focus moved to chat
+  if (!sourceContent && lastActiveMdUri) {
+    try {
+      const data = await vscode.workspace.fs.readFile(lastActiveMdUri);
+      sourceContent = Buffer.from(data).toString('utf-8');
+      sourceUri = lastActiveMdUri;
+      stream.progress(`Converting ${vscode.workspace.asRelativePath(lastActiveMdUri)}...`);
+    } catch {
+      // file may have been closed/deleted
     }
   }
 
@@ -334,6 +362,10 @@ async function handleConvert(
     .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
     .replace(/\r?\n```\s*$/, '')
     .trim();
+
+  // Strip stray ``` that the model sometimes inserts right after the deck frontmatter
+  // e.g.  ---\n(frontmatter)\n---\n```\n# Slide → renders first slide as a code block
+  deckContent = deckContent.replace(/(^---\n[\s\S]*?\n---)\n```\n/, '$1\n\n');
 
   if (sourceUri) {
     const outputUri = vscode.Uri.file(sourceUri.fsPath.replace(/\.md$/, '.deck.md'));
@@ -439,4 +471,8 @@ async function handleFreeform(
   }
 
   return {};
+}
+
+function isConvertibleMd(fsPath: string): boolean {
+  return fsPath.endsWith('.md') && !fsPath.endsWith('.deck.md');
 }
