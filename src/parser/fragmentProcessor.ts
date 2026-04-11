@@ -45,7 +45,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
 
   const pre = tagged.slice(0, firstSentinel);
   const post = tagged.slice(firstSentinel).replace(
-    /(<(p|h[1-6]|blockquote)\b)(?![^>]*__frag=)([^>]*>)/g,
+    /(<(p|h[1-6]|blockquote|table)\b)(?![^>]*__frag=)([^>]*>)/g,
     (_m, tagStart: string, _tag: string, rest: string) => `${tagStart} __frag="fade"${rest}`,
   );
   tagged = pre + post;
@@ -55,7 +55,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   // correctly interleaved.
   let fragmentIndex = 0;
   const result = tagged.replace(
-    /(<(li|p|h[1-6]|div|blockquote)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    /(<(li|p|h[1-6]|div|blockquote|table)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
     (_m, pre2: string, _tag: string, animation: string, post2: string) => {
       fragmentIndex++;
       return `${pre2} class="fragment" data-fragment="${fragmentIndex}" data-fragment-animation="${animation}"${post2}`;
