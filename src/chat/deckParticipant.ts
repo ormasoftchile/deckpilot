@@ -85,7 +85,12 @@ Add \`<!-- .fragment -->\` after an element to reveal it on click:
 \`\`\`markdown
 - First point <!-- .fragment -->
 - Second point <!-- .fragment -->
+- Third point <!-- .fragment -->
+
+**Key takeaway:** shown after all bullets <!-- .fragment -->
 \`\`\`
+
+**IMPORTANT**: Once any element on a slide is a fragment, every element that comes after it must also be a fragment. Non-fragment content after a fragment list renders immediately — before any fragment is revealed — which breaks the reveal order.
 
 For action blocks, wrap in a div:
 \`\`\`markdown
@@ -130,6 +135,7 @@ voice-over script and SRT captions when recording mode is used.
 - Split on natural heading boundaries (# and ##)
 - Convert code blocks into action links or render directives where appropriate
 - Convert bullet lists into fragments for progressive reveal
+- **Fragment consistency rule**: once a slide uses \`<!-- .fragment -->\`, ALL content that appears AFTER the first fragment marker must also be a fragment. Non-fragment content (paragraphs, bold text, callouts) that follows a fragment list would appear on screen BEFORE the fragments are revealed, which is confusing. Mark them with \`<!-- .fragment -->\` too.
 - Add voice cues that paraphrase each slide's content in spoken language
 - Add a frontmatter block with title and author
 - Keep the original content structure but make it presentation-friendly
@@ -145,9 +151,31 @@ voice-over script and SRT captions when recording mode is used.
 - Write voice cues as natural spoken narration`;
 
 /**
+ * URI of the last .md file that had editor focus.
+ * Updated whenever the active editor changes so that when the chat panel
+ * steals focus (setting activeTextEditor to undefined) we still know which
+ * file the user was working on.
+ */
+let lastActiveMdUri: vscode.Uri | undefined;
+
+/**
  * Register the @deck chat participant.
  */
 export function registerDeckParticipant(context: vscode.ExtensionContext): vscode.Disposable {
+  // Seed with current editor in case extension activates while a .md file is open
+  const current = vscode.window.activeTextEditor;
+  if (current && isConvertibleMd(current.document.uri.fsPath)) {
+    lastActiveMdUri = current.document.uri;
+  }
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && isConvertibleMd(editor.document.uri.fsPath)) {
+        lastActiveMdUri = editor.document.uri;
+      }
+    }),
+  );
+
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, handleRequest);
 
   participant.iconPath = new vscode.ThemeIcon('file-media');
@@ -264,40 +292,45 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get content from referenced file
+  // Try to get content from referenced file — handle Uri and Location (implicit editor ref)
   let sourceContent = '';
+  let sourceUri: vscode.Uri | undefined;
   for (const ref of request.references) {
+    let uri: vscode.Uri | undefined;
     if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.deck.md')) {
       try {
-        const data = await vscode.workspace.fs.readFile(ref.value);
+        const data = await vscode.workspace.fs.readFile(uri);
         sourceContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Converting ${ref.value.fsPath}...`);
+        sourceUri = uri;
+        stream.progress(`Converting ${vscode.workspace.asRelativePath(uri)}...`);
+        break;
       } catch {
         // ignore read errors
       }
-    } else if (typeof ref.value === 'string') {
-      sourceContent = ref.value;
     }
   }
 
-  // Fall back to the active editor if no file was explicitly referenced
-  if (!sourceContent) {
-    const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.fileName.endsWith('.md') && !editor.document.fileName.endsWith('.deck.md')) {
-      sourceContent = editor.document.getText();
-      stream.progress(`Converting ${vscode.workspace.asRelativePath(editor.document.uri)}...`);
+  // Fall back to the last .md file the user had active before focus moved to chat
+  if (!sourceContent && lastActiveMdUri) {
+    try {
+      const data = await vscode.workspace.fs.readFile(lastActiveMdUri);
+      sourceContent = Buffer.from(data).toString('utf-8');
+      sourceUri = lastActiveMdUri;
+      stream.progress(`Converting ${vscode.workspace.asRelativePath(lastActiveMdUri)}...`);
+    } catch {
+      // file may have been closed/deleted
     }
-  }
-
-  if (!sourceContent && request.prompt) {
-    sourceContent = request.prompt;
   }
 
   if (!sourceContent) {
     stream.markdown(
-      'Please reference the Markdown file you want to convert:\n\n' +
-      '```\n@deck /convert #file:README.md\n```\n\n' +
-      'Or open the Markdown file in the editor before calling `@deck /convert`.',
+      'No Markdown file found. Please reference it explicitly:\n\n' +
+      '```\n@deck /convert #file:README.md\n```',
     );
     return { command: 'convert' };
   }
@@ -319,11 +352,34 @@ async function handleConvert(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let deckContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    deckContent += chunk;
   }
 
-  stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
+  // Strip accidental wrapping code fences the model may have added
+  deckContent = deckContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  // Strip stray ``` that the model sometimes inserts right after the deck frontmatter
+  // e.g.  ---\n(frontmatter)\n---\n```\n# Slide → renders first slide as a code block
+  deckContent = deckContent.replace(/(^---\n[\s\S]*?\n---)\n```\n/, '$1\n\n');
+
+  if (sourceUri) {
+    const outputUri = vscode.Uri.file(sourceUri.fsPath.replace(/\.md$/, '.deck.md'));
+    await vscode.workspace.fs.writeFile(outputUri, Buffer.from(deckContent, 'utf-8'));
+    await vscode.window.showTextDocument(outputUri, { preview: false });
+    const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
+    stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
+    stream.anchor(outputUri, 'Open deck file');
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+  } else {
+    // No source URI tracked (shouldn't happen) — fall back to showing in chat
+    stream.markdown(deckContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
+  }
 
   return { command: 'convert' };
 }
@@ -415,4 +471,8 @@ async function handleFreeform(
   }
 
   return {};
+}
+
+function isConvertibleMd(fsPath: string): boolean {
+  return fsPath.endsWith('.md') && !fsPath.endsWith('.deck.md');
 }
