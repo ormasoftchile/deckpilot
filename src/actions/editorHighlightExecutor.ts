@@ -77,7 +77,8 @@ export class EditorHighlightExecutor extends BaseActionExecutor implements Actio
       const fileUri = vscode.Uri.file(filePath);
       const document = await vscode.workspace.openTextDocument(fileUri);
       const editor = await vscode.window.showTextDocument(document, {
-        preserveFocus: false,
+        viewColumn: context.autoPilotMode ? vscode.ViewColumn.Beside : undefined,
+        preserveFocus: context.autoPilotMode ?? false,
         preview: true,
       });
 

@@ -327,6 +327,26 @@
         case 'onboardingStateLoaded':
           handleOnboardingStateLoaded(message);
           break;
+
+        case 'advancePresentation':
+          navigateNext();
+          break;
+
+        case 'triggerAction':
+          if (message.payload && message.payload.actionId) {
+            var actionBtn = slideContent.querySelector('[data-action-id="' + message.payload.actionId + '"]');
+            if (actionBtn) {
+              actionBtn.click();
+            } else {
+              // Try by href match
+              sendMessage({
+                type: 'executeAction',
+                payload: { actionId: message.payload.actionId },
+                messageId: 'auto-' + Date.now(),
+              });
+            }
+          }
+          break;
       }
     });
   }
@@ -564,6 +584,11 @@
     // Update fragment state
     updateFragmentState();
     
+    // Ensure fragments start hidden (CSS should handle this, but enforce it)
+    if (!payload.showAllFragments && totalFragments > 0) {
+      hideAllFragments();
+    }
+
     // If navigating back, show all fragments
     if (payload.showAllFragments) {
       showAllFragments();

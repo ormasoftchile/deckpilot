@@ -6,6 +6,7 @@ import { registerAllExecutors } from './actions';
 import { ActionCompletionProvider } from './providers/actionCompletionProvider';
 import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
+import { registerDeckParticipant } from './chat/deckParticipant';
 
 let conductor: Conductor | undefined;
 
@@ -14,6 +15,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Register all action executors
     registerAllExecutors();
+
+    // Register @deck chat participant
+    registerDeckParticipant(context);
 
     // Initialize conductor
     conductor = new Conductor(context.extensionUri);
@@ -283,6 +287,74 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    const autoRecordDisposable = vscode.commands.registerCommand(
+        'executableTalk.autoRecord',
+        async () => {
+            if (!conductor?.isActive()) {
+                await vscode.window.showErrorMessage('Start a presentation first before auto-recording.', { modal: true });
+                return;
+            }
+            if (conductor.isRecording() || conductor.isAutoPilotActive()) {
+                await vscode.window.showErrorMessage('A recording or auto-pilot is already running.', { modal: true });
+                return;
+            }
+
+            const confirm = await vscode.window.showWarningMessage(
+                'Auto-Record will drive the entire presentation and record it. This may take a minute.',
+                { modal: true },
+                'Start'
+            );
+            if (confirm !== 'Start') {
+                return;
+            }
+
+            void vscode.window.showInformationMessage('🤖 Auto-pilot started — recording...');
+            const session = await conductor.autoRecord();
+            if (session) {
+                const { RecordingSerializer } = await import('./recording/recordingSerializer');
+                const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');
+                const { CaptionsScaffoldGenerator } = await import('./recording/captionsScaffoldGenerator');
+
+                const outputDir = path.dirname(session.deckPath);
+                const serializer = new RecordingSerializer();
+                const scriptGen = new VoiceOverScriptGenerator();
+                const captionGen = new CaptionsScaffoldGenerator();
+
+                const sessionFiles = await serializer.exportSession(session, outputDir);
+                const scriptFiles = await scriptGen.exportScripts(session, outputDir);
+                const captionDir = session.recorder?.outputPath
+                    ? path.dirname(session.recorder.outputPath)
+                    : outputDir;
+                const captionFile = await captionGen.exportSrt(session, captionDir);
+
+                const allFiles = [...sessionFiles, ...scriptFiles, captionFile];
+                void vscode.window.showInformationMessage(
+                    `🤖 Auto-record complete: ${allFiles.length} files exported`,
+                    'Open Script'
+                ).then(choice => {
+                    if (choice === 'Open Script') {
+                        const mdFile = allFiles.find(f => f.endsWith('.md'));
+                        if (mdFile) {
+                            void vscode.workspace.openTextDocument(mdFile).then(doc => {
+                                void vscode.window.showTextDocument(doc);
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    );
+
+    const cancelAutoRecordDisposable = vscode.commands.registerCommand(
+        'executableTalk.cancelAutoRecord',
+        () => {
+            if (conductor?.isAutoPilotActive()) {
+                conductor.cancelAutoPilot();
+                void vscode.window.showInformationMessage('🛑 Auto-pilot cancelled');
+            }
+        }
+    );
+
     // Register authoring assistance providers (US4)
     const documentSelector: vscode.DocumentSelector = { language: 'deck-markdown' };
 
@@ -406,6 +478,8 @@ export function activate(context: vscode.ExtensionContext): void {
         markRetakeDisposable,
         insertNarrationMarkerDisposable,
         toggleRecordingPauseDisposable,
+        autoRecordDisposable,
+        cancelAutoRecordDisposable,
         completionDisposable,
         hoverDisposable,
         diagnosticCollection,
