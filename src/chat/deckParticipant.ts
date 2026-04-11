@@ -280,12 +280,25 @@ async function handleConvert(
     }
   }
 
+  // Fall back to the active editor if no file was explicitly referenced
+  if (!sourceContent) {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.fileName.endsWith('.md') && !editor.document.fileName.endsWith('.deck.md')) {
+      sourceContent = editor.document.getText();
+      stream.progress(`Converting ${vscode.workspace.asRelativePath(editor.document.uri)}...`);
+    }
+  }
+
   if (!sourceContent && request.prompt) {
     sourceContent = request.prompt;
   }
 
   if (!sourceContent) {
-    stream.markdown('Please provide a Markdown file or paste content to convert. You can reference a file with `#file`.');
+    stream.markdown(
+      'Please reference the Markdown file you want to convert:\n\n' +
+      '```\n@deck /convert #file:README.md\n```\n\n' +
+      'Or open the Markdown file in the editor before calling `@deck /convert`.',
+    );
     return { command: 'convert' };
   }
 

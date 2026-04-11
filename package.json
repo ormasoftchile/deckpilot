@@ -1,6 +1,6 @@
 {
   "name": "executable-talk",
-  "displayName": "Executable Talk",
+  "displayName": "Executable Talk — Markdown Developer Presentations",
   "description": "Transform Markdown presentations into executable narratives with interactive code demonstrations and environment variable support",
   "version": "0.8.0",
   "publisher": "focus-space",
@@ -19,17 +19,23 @@
     "theme": "dark"
   },
   "keywords": [
-    "presentation",
+    "markdown slides",
     "slides",
-    "markdown",
-    "demo",
-    "executable",
-    "live coding",
-    "environment variables",
-    "deck.env"
+    "presentation",
+    "presentation markdown",
+    "slides markdown",
+    "developer presentation",
+    "technical presentation",
+    "live demo",
+    "live coding presentation",
+    "revealjs",
+    "markdown presentation",
+    "md slides",
+    "demo slides",
+    "interactive presentation"
   ],
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.95.0"
   },
   "categories": [
     "Other",
@@ -38,6 +44,7 @@
   "activationEvents": [
     "onCommand:executableTalk.openPresentation",
     "onLanguage:markdown",
+    "onChatParticipant:executable-talk.deck",
     "workspaceContains:**/*.deck.md"
   ],
   "main": "./out/src/extension.js",
@@ -158,6 +165,15 @@
         "when": "activeWebviewPanelId == 'executableTalkPresentation'"
       }
     ],
+    "chatParticipants": [
+      {
+        "id": "executable-talk.deck",
+        "name": "deck",
+        "fullName": "Deck Creator",
+        "description": "Convert a Markdown file into an Executable Talk .deck.md presentation",
+        "isSticky": false
+      }
+    ],
     "languages": [
       {
         "id": "deck-markdown",
@@ -250,7 +266,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.95.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@vscode/test-electron": "^2.3.8",
