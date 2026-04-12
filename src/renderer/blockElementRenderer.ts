@@ -98,7 +98,7 @@ function buildButtonHtml(el: InteractiveElement): string {
 
   let preview = '';
   if (el.showCommand) {
-    const previewText = getCommandPreview(type, params as Record<string, unknown>);
+    const previewText = getCommandPreview(type, params);
     if (previewText) {
       preview = `<code class="action-preview">${escapeHtml(previewText)}</code>`;
     }
