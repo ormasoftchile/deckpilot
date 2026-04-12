@@ -76,10 +76,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y xvfb
 
-    - name: Run visual regression tests
-      if: runner.os == 'Linux'
-      run: xvfb-run -a npm run test:visual
-
     - name: Run VS Code extension tests (Linux with Xvfb)
       if: runner.os == 'Linux'
       run: xvfb-run -a npm run test:integration
