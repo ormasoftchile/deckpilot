@@ -3,41 +3,50 @@ title: "fragments"
 basePath: ..
 ---
 
-# Fragments — Lists
+# Fragments — What Auto-Fragments
 
-Each bullet reveals on its own step (press **→** to advance):
+Every block-level element reveals on its own step automatically.
+Press **→** to advance:
 
-- First point
-- Second point
-- Third point
+Paragraph one steps in first.
+
+Paragraph two steps in second.
+
+- List item A
+- List item B
+- List item C
+
+> Blockquotes step in too.
 
 ---
 
-# Fragments — Mixed Content
+# Fragments — What Does NOT Fragment
 
-Paragraphs, code blocks, and action buttons each step in separately:
+Fenced code blocks (```` ``` ````) are **always visible** — they appear immediately
+and are never held back as a fragment step.
 
-This is the setup step.
+Use this intentionally: show the code up front, then step through the explanation:
 
-```bash
-npm install
-```
+Here is the method signature.
+
+This paragraph reveals after the code above — which was already visible.
 
 ```action
-type: terminal.run
-command: npm install
-label: Run it
+type: editor.highlight
+path: src/extension.ts
+lines: 1-10
+label: Highlight the imports
 ```
 
 ---
 
-# Fragments — :::group
+# Fragments — `:::group`
 
-Use `:::group` to make multiple items appear together as one step:
+Use `:::group` to reveal multiple items together as a single step:
 
 :::group
-- Item A reveals with
-- Item B at the same time
+- Item A
+- Item B reveals at the same time as A
 :::
 
 - Item C is its own step
@@ -47,12 +56,13 @@ Use `:::group` to make multiple items appear together as one step:
 
 # Fragments — `fragment: false`
 
-Disable fragmentation on a specific action button so it's always visible:
+Set `fragment: false` on an action button to keep it always visible —
+useful for a reference action the audience might need at any point:
 
 ```action
 type: file.open
 path: package.json
-label: Always visible (no fragment)
+label: Always visible
 fragment: false
 ```
 

@@ -1,6 +1,11 @@
 ---
 title: "env vars + showCommand"
 basePath: ..
+env:
+  - name: MY_APP
+    description: Application name shown in slides
+  - name: DEPLOY_ENV
+    description: Deployment environment (e.g. production, staging)
 ---
 
 # `{{VAR}}` — Environment Variable Interpolation
