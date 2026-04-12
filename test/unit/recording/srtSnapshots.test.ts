@@ -156,8 +156,10 @@ describe('SRT Snapshots', () => {
       }
 
       const expected = fs.readFileSync(snapshotPath, 'utf8');
-      expect(actual).to.equal(
-        expected,
+      // Normalize CRLF → LF so Windows checkout doesn't produce false diffs
+      const normalize = (s: string) => s.replace(/\r\n/g, '\n');
+      expect(normalize(actual)).to.equal(
+        normalize(expected),
         `SRT output for "${deckName}" has changed. ` +
         `Run with UPDATE_SNAPSHOTS=1 to accept the new output.`,
       );
