@@ -213,6 +213,95 @@ describe('EnvResolver', () => {
       expect(v.resolvedValue).to.equal('from-file');
       expect(v.source).to.equal('env-file');
     });
+
+    // ---- inter-variable expansion -----------------------------------------
+
+    it('should expand {{VAR}} references between .deck.env values', () => {
+      const declarations = [
+        makeDeclaration({ name: 'BASE' }),
+        makeDeclaration({ name: 'FULL' }),
+      ];
+      const envFile = makeEnvFile({ BASE: '/home/user', FULL: '{{BASE}}/projects' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(result.variables.get('FULL')!.resolvedValue).to.equal('/home/user/projects');
+    });
+
+    it('should expand a chain of three dependent vars', () => {
+      const declarations = [
+        makeDeclaration({ name: 'ROOT' }),
+        makeDeclaration({ name: 'SRC' }),
+        makeDeclaration({ name: 'FILE' }),
+      ];
+      const envFile = makeEnvFile({ ROOT: '/app', SRC: '{{ROOT}}/src', FILE: '{{SRC}}/index.ts' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(result.variables.get('FILE')!.resolvedValue).to.equal('/app/src/index.ts');
+    });
+
+    it('should expand {{VAR}} in default values', () => {
+      const declarations = [
+        makeDeclaration({ name: 'HOME' }),
+        makeDeclaration({ name: 'CONFIG', default: '{{HOME}}/.config' }),
+      ];
+      const envFile = makeEnvFile({ HOME: '/root' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(result.variables.get('CONFIG')!.resolvedValue).to.equal('/root/.config');
+    });
+
+    it('should not expand {{VAR}} that references a missing variable (leaves placeholder)', () => {
+      const declarations = [
+        makeDeclaration({ name: 'DERIVED' }),
+      ];
+      const envFile = makeEnvFile({ DERIVED: '{{MISSING}}/sub' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(result.variables.get('DERIVED')!.resolvedValue).to.equal('{{MISSING}}/sub');
+    });
+
+    it('should not expand {{VAR}} that references a secret variable', () => {
+      const declarations = [
+        makeDeclaration({ name: 'TOKEN', secret: true }),
+        makeDeclaration({ name: 'URL' }),
+      ];
+      const envFile = makeEnvFile({ TOKEN: 'secret', URL: 'https://api.example.com/{{TOKEN}}' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      // Secret vars should not be inlined into other vars' resolved values
+      expect(result.variables.get('URL')!.resolvedValue).to.equal('https://api.example.com/{{TOKEN}}');
+    });
+
+    it('should handle a circular reference gracefully — leave unresolved references as-is', () => {
+      const declarations = [
+        makeDeclaration({ name: 'A' }),
+        makeDeclaration({ name: 'B' }),
+      ];
+      const envFile = makeEnvFile({ A: '{{B}}-a', B: '{{A}}-b' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      // Should not throw; circular refs get left as-is
+      expect(result.variables.get('A')!.resolvedValue).to.be.a('string');
+      expect(result.variables.get('B')!.resolvedValue).to.be.a('string');
+    });
+
+    it('should update displayValue after inter-var expansion', () => {
+      const declarations = [
+        makeDeclaration({ name: 'HOST' }),
+        makeDeclaration({ name: 'URL' }),
+      ];
+      const envFile = makeEnvFile({ HOST: 'localhost', URL: 'http://{{HOST}}:3000' });
+
+      const result = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(result.variables.get('URL')!.displayValue).to.equal('http://localhost:3000');
+    });
   });
 
   // ==========================================================================
