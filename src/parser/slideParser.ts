@@ -21,6 +21,48 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+// :::group ... ::: plugin — wraps the inner block content in a single
+// <div class="slide-group"> so fragmentProcessor treats it as one step.
+md.block.ruler.before('fence', 'slide_group', (state, startLine, endLine, silent) => {
+  const pos = state.bMarks[startLine] + state.tShift[startLine];
+  const max = state.eMarks[startLine];
+  const line = state.src.slice(pos, max).trim();
+
+  if (line !== ':::group') { return false; }
+  if (silent) { return true; }
+
+  // Find the closing :::
+  let nextLine = startLine + 1;
+  let found = false;
+  while (nextLine < endLine) {
+    const lpos = state.bMarks[nextLine] + state.tShift[nextLine];
+    const lmax = state.eMarks[nextLine];
+    const l = state.src.slice(lpos, lmax).trim();
+    if (l === ':::') { found = true; break; }
+    nextLine++;
+  }
+  if (!found) { return false; }
+
+  const oldParentType = state.parentType;
+  const oldLineMax = state.lineMax;
+  (state.parentType as unknown) = 'blockquote';
+
+  const openToken = state.push('html_block', '', 0);
+  openToken.content = '<div class="slide-group">\n';
+  openToken.map = [startLine, nextLine];
+
+  state.lineMax = nextLine;
+  state.md.block.tokenize(state, startLine + 1, nextLine);
+  state.lineMax = oldLineMax;
+  state.parentType = oldParentType;
+
+  const closeToken = state.push('html_block', '', 0);
+  closeToken.content = '</div>\n';
+
+  state.line = nextLine + 1;
+  return true;
+}, { alt: [] });
+
 /**
  * Slide delimiter pattern: --- on its own line
  * Must be at least 3 dashes with optional whitespace

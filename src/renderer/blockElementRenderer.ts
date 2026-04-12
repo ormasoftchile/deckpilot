@@ -69,12 +69,8 @@ export function injectBlockElements(html: string, slide: Slide): string {
       .join('&');
     const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
     const escapedLabel = escapeHtml(el.label);
-    // If element has fragment animation, append a fragment comment so
-    // processFragments will pick it up during the single-pass sweep.
-    const fragmentComment = el.fragment
-      ? ` <!-- .fragment${typeof el.fragment === 'string' ? ` ${el.fragment}` : ''} -->`
-      : '';
-    buttonMap.set(el.id, `<p><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${fragmentComment}</p>`);
+    const noFrag = el.fragment === false ? ' data-no-fragment' : '';
+    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a></p>`);
   }
 
   // Replace each placeholder; remove unmatched ones (from errored blocks)
@@ -104,10 +100,8 @@ export function injectBlockElementsFromParsed(html: string, elements: Interactiv
       .join('&');
     const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
     const escapedLabel = escapeHtml(el.label);
-    const fragmentComment = el.fragment
-      ? ` <!-- .fragment${typeof el.fragment === 'string' ? ` ${el.fragment}` : ''} -->`
-      : '';
-    buttonMap.set(el.id, `<p><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${fragmentComment}</p>`);
+    const noFrag = el.fragment === false ? ' data-no-fragment' : '';
+    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a></p>`);
   }
   return html.replace(
     /<!--ACTION:(block-\d+-\d+)-->/g,
