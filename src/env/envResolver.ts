@@ -155,6 +155,22 @@ export class EnvResolver {
   }
 
   /**
+   * Interpolate {{VAR}} placeholders in a plain string for display.
+   * Secret variables remain as {{VAR}} placeholder text.
+   */
+  interpolateStringForDisplay(
+    str: string,
+    resolvedEnv: ResolvedEnv,
+  ): string {
+    return str.replace(VAR_PATTERN, (match, varName: string) => {
+      const v = resolvedEnv.variables.get(varName);
+      if (!v) { return match; }
+      if (v.declaration.secret) { return `{{${varName}}}`; }
+      return v.displayValue;
+    });
+  }
+
+  /**
    * Interpolate {{VAR}} placeholders in action params for display in webview.
    * Secret variables remain as {{VAR}} placeholder text.
    * T013 — implemented in Phase 3.
