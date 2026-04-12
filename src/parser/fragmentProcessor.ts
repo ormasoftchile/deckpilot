@@ -59,7 +59,7 @@ function splitOnGroups(html: string): Array<{ text: string; isGroup: boolean }> 
  * Add __frag sentinel to all eligible block elements in an HTML segment
  * that should each be their own fragment step.
  *
- * Eligible: p, h2–h6, blockquote, table, li, div.render-block
+ * Eligible: p, pre, h2–h6, blockquote, table, li, div.render-block
  * NOT eligible: h1 (always visible), ul/ol containers (their li children fragment)
  */
 function tagEligibleElements(seg: string): string {
@@ -70,6 +70,11 @@ function tagEligibleElements(seg: string): string {
   seg = seg.replace(
     /(<h([2-6])\b)(?![^>]*__frag)([^>]*>)/g,
     (_m, start, _n, rest) => `${start} __frag="fade"${rest}`,
+  );
+  // pre (code blocks)
+  seg = seg.replace(
+    /(<pre\b)(?![^>]*__frag)(?![^>]*data-no-fragment)([^>]*>)/g,
+    (_m, start, rest) => `${start} __frag="fade"${rest}`,
   );
   // p (skip if data-no-fragment)
   seg = seg.replace(
@@ -138,7 +143,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   // Phase 2 — assign sequential fragment indices in document order
   let fragmentIndex = 0;
   const result = tagged.replace(
-    /(<(?:li|p|h[2-6]|blockquote|table|div)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    /(<(?:li|p|pre|h[2-6]|blockquote|table|div)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
     (_m, pre: string, animation, post) => {
       fragmentIndex++;
       // Merge fragment into an existing class attribute to avoid duplicate class= attributes
