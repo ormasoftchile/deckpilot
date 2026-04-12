@@ -17,20 +17,14 @@ Use for title slides or emphasis moments.
 
 :::columns
 :::left
-### Left Column
-
 - Point one
 - Point two
 - Point three
 :::
 :::right
-### Right Column
-
-```bash
-npm install
-npm run build
-npm test
-```
+- `npm install`
+- `npm run build`
+- `npm test`
 :::
 :::
 

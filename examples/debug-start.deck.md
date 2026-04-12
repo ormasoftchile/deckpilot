@@ -20,8 +20,6 @@ The `configName` value must exactly match the `"name"` field in your `launch.jso
 
 # `debug.start` — Typical Setup
 
-Example `launch.json` entry this pairs with:
-
 ```json
 {
   "name": "Extension",
