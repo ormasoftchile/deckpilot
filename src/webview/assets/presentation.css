@@ -444,6 +444,18 @@ html, body {
   transform: translateY(0);
 }
 
+/* Regular links */
+#slide-content a:not([href^="action:"]) {
+  color: var(--accent-hover);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+#slide-content a:not([href^="action:"]):hover {
+  border-bottom-color: var(--accent-hover);
+}
+
 #slide-content a[href^="action:"].running {
   background-color: var(--running-color);
   pointer-events: none;
