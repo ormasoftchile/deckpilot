@@ -388,6 +388,9 @@ export class Conductor implements vscode.Disposable {
    * Close the presentation
    */
   async close(): Promise<void> {
+    // Cancel any running auto-pilot so its loop and delays stop immediately
+    this.cancelAutoPilot();
+
     // Exit Zen Mode
     await exitZenMode();
 
@@ -869,7 +872,22 @@ export class Conductor implements vscode.Disposable {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => {
+      let done = false;
+      const finish = () => {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          clearInterval(poll);
+          resolve();
+        }
+      };
+      const timer = setTimeout(finish, ms);
+      // Poll cancellation flag every 50ms so long waits abort promptly
+      const poll = setInterval(() => {
+        if (!this.autoPilotRunning) { finish(); }
+      }, 50);
+    });
   }
 
   /**
