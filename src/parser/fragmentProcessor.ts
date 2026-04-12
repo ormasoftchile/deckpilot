@@ -124,7 +124,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   // Phase 1 — add __frag sentinels
 
   const segments = splitOnGroups(html);
-  let tagged = segments.map(seg => {
+  const tagged = segments.map(seg => {
     if (seg.isGroup) {
       // Tag the slide-group div itself as one fragment, leave its children alone
       return seg.text.replace(
@@ -139,7 +139,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   let fragmentIndex = 0;
   const result = tagged.replace(
     /(<(?:li|p|h[2-6]|blockquote|table|div)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
-    (_m, pre, animation, post) => {
+    (_m, pre: string, animation, post) => {
       fragmentIndex++;
       // Merge fragment into an existing class attribute to avoid duplicate class= attributes
       // (duplicate class= causes browsers to only honour the first one, breaking visibility)
