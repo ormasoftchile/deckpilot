@@ -7,13 +7,30 @@ on:
     branches: [ main ]
 
 jobs:
+  validate-pr-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: Check for version tag
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        if echo "$PR_TITLE" | grep -qE '\[(version:(major|minor|patch)|skip ci)\]'; then
+          echo "✓ PR title contains a valid version tag"
+        else
+          echo "✗ PR title must include [version:major], [version:minor], [version:patch], or [skip ci]"
+          echo "  Title was: $PR_TITLE"
+          exit 1
+        fi
+
   test:
     name: Test Suite
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [18.x, 20.x]
+        node-version: [20.x]
 
     steps:
     - name: Checkout code
@@ -49,7 +66,9 @@ jobs:
 
     - name: Run unit tests
       run: npm run test:unit
-      continue-on-error: true
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
 
     - name: Setup Xvfb for VS Code tests (Linux)
       if: runner.os == 'Linux'
