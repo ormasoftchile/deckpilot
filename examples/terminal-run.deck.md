@@ -19,6 +19,7 @@ Run a command using an inline action link:
 type: terminal.run
 command: npm run test:unit
 label: Run unit tests
+showCommand: true
 ```
 
 ---
