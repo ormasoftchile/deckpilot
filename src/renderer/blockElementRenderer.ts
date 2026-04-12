@@ -48,6 +48,19 @@ function getCommandPreview(type: string, params: Record<string, unknown>): strin
       return typeof params.configName === 'string' ? params.configName : null;
     case 'vscode.command':
       return typeof params.id === 'string' ? params.id : null;
+    case 'sequence': {
+      const steps = params.steps;
+      if (!Array.isArray(steps) || steps.length === 0) { return null; }
+      const lines: string[] = [];
+      for (const step of steps) {
+        if (!step || typeof step !== 'object') { continue; }
+        const s = step as Record<string, unknown>;
+        const sType = typeof s.type === 'string' ? s.type : '';
+        const sPreview = sType ? getCommandPreview(sType, s) : null;
+        lines.push(sPreview ?? sType);
+      }
+      return lines.length > 0 ? lines.join('\n') : null;
+    }
     default:
       return null;
   }

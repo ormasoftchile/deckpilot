@@ -37,3 +37,24 @@ steps:
 
 Each step runs to completion before the next starts.
 If any step fails, the sequence stops and reports which step failed.
+
+---
+
+# `sequence` — showCommand Preview
+
+Add `showCommand: true` to show the audience what each step will do before the button is clicked:
+
+```action
+type: sequence
+label: Setup project
+showCommand: true
+steps:
+  - type: file.open
+    path: package.json
+  - type: terminal.run
+    command: npm install
+  - type: terminal.run
+    command: npm run compile
+```
+
+The preview lists one resolved value per step (file paths, commands, etc.).
