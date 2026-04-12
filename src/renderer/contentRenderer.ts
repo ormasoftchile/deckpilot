@@ -2,7 +2,7 @@
  * Content renderer - resolves render directives to HTML
  */
 
-import { RenderDirective, FileRenderDirective, CommandRenderDirective, DiffRenderDirective } from './renderDirectiveParser';
+import type { RenderDirective, FileRenderDirective, CommandRenderDirective, DiffRenderDirective } from './renderDirectiveParser';
 import { renderFile } from './fileRenderer';
 import { renderCommand, CommandRenderResult } from './commandRenderer';
 import { renderDiff, parseDiff } from './diffRenderer';

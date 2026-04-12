@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as path from 'path';
-import { DiffRenderParams } from './renderDirectiveParser';
+import type { DiffRenderParams } from './renderDirectiveParser';
 
 /**
  * Result of rendering a diff

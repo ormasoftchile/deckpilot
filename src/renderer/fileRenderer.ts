@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { FileRenderParams } from './renderDirectiveParser';
+import type { FileRenderParams } from './renderDirectiveParser';
 
 /**
  * Result of rendering a file

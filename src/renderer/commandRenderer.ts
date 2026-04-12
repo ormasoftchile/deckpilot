@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import { spawn, SpawnOptions } from 'child_process';
 import * as path from 'path';
-import { CommandRenderParams } from './renderDirectiveParser';
+import type { CommandRenderParams } from './renderDirectiveParser';
 import { isTrusted } from '../utils/workspaceTrust';
 
 /**
