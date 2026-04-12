@@ -973,6 +973,22 @@ export class Conductor implements vscode.Disposable {
     return workspaceRoot;
   }
 
+  /**
+   * Interpolate {{VAR}} in action-preview code elements using the resolved env.
+   * Secrets remain as {{VAR}}. No-op if no resolved env.
+   */
+  private interpolatePreviewHtml(html: string): string {
+    if (!this.resolvedEnv) {
+      return html;
+    }
+    const resolvedEnv = this.resolvedEnv;
+    return html.replace(
+      /(<code class="action-preview">)([\s\S]*?)(<\/code>)/g,
+      (_, open: string, content: string, close: string) =>
+        `${open}${this.envResolver.interpolateStringForDisplay(content, resolvedEnv)}${close}`,
+    );
+  }
+
   private handleNavigate(direction: 'next' | 'previous' | 'first' | 'last' | 'goto', slideIndex?: number, showAllFragments?: boolean): void {
     switch (direction) {
       case 'next':
@@ -1750,13 +1766,13 @@ export class Conductor implements vscode.Disposable {
   private resolveSlideRenderDirectives(slide: Slide): string {
     // If no render directives, return HTML with block elements injected at placeholder positions
     if (!slide.renderDirectives || slide.renderDirectives.length === 0) {
-      return injectBlockElements(slide.html, slide);
+      return this.interpolatePreviewHtml(injectBlockElements(slide.html, slide));
     }
 
     // Parse the full directives from raw content
     const directives = parseRenderDirectives(slide.content, slide.index);
     if (directives.length === 0) {
-      return injectBlockElements(slide.html, slide);
+      return this.interpolatePreviewHtml(injectBlockElements(slide.html, slide));
     }
 
     // First pass: replace directive links with loading placeholders
@@ -1786,7 +1802,7 @@ export class Conductor implements vscode.Disposable {
     // Schedule async resolution of directives (don't await - let the slide show immediately)
     void this.resolveDirectivesAsync(directives);
 
-    return injectBlockElements(html, slide);
+    return this.interpolatePreviewHtml(injectBlockElements(html, slide));
   }
 
   /**
