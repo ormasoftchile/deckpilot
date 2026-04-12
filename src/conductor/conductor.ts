@@ -1750,13 +1750,13 @@ export class Conductor implements vscode.Disposable {
   private resolveSlideRenderDirectives(slide: Slide): string {
     // If no render directives, return HTML with block elements injected at placeholder positions
     if (!slide.renderDirectives || slide.renderDirectives.length === 0) {
-      return injectBlockElements(slide.html, slide);
+      return this.applyEnvInterpolation(injectBlockElements(slide.html, slide));
     }
 
     // Parse the full directives from raw content
     const directives = parseRenderDirectives(slide.content, slide.index);
     if (directives.length === 0) {
-      return injectBlockElements(slide.html, slide);
+      return this.applyEnvInterpolation(injectBlockElements(slide.html, slide));
     }
 
     // First pass: replace directive links with loading placeholders
@@ -1786,8 +1786,21 @@ export class Conductor implements vscode.Disposable {
     // Schedule async resolution of directives (don't await - let the slide show immediately)
     void this.resolveDirectivesAsync(directives);
 
-    return injectBlockElements(html, slide);
+    return this.applyEnvInterpolation(injectBlockElements(html, slide));
   }
+
+  /**
+   * Replace {{VAR}} placeholders in slide HTML with their display values.
+   * Secrets remain as {{VAR}}. Only runs when env is loaded.
+   * Safe: operates on already-rendered HTML text nodes ({{ }} are not HTML-special).
+   */
+  private applyEnvInterpolation(html: string): string {
+    if (!this.resolvedEnv) {
+      return html;
+    }
+    return this.envResolver.interpolateStringForDisplay(html, this.resolvedEnv);
+  }
+
 
   /**
    * Resolve directives asynchronously and send updates to webview

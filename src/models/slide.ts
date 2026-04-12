@@ -51,6 +51,9 @@ export interface InteractiveElement {
    *  - A string like `'slide-up'` = specific animation type
    *  - `undefined` / `false` = no fragment, immediately visible */
   fragment?: boolean | string;
+  /** When true, render a code snippet showing the action's command/params
+   *  next to the button so the audience can see what will run. */
+  showCommand?: boolean;
 }
 
 /**

@@ -49,6 +49,36 @@ export function renderBlockElements(slide: Slide): string {
 }
 
 /**
+ * Build a human-readable command preview string for showCommand display.
+ * For terminal.run → shows the command. For file.open → shows the path. Etc.
+ */
+function buildCommandPreview(el: InteractiveElement): string {
+  const params = el.action.params ?? {};
+  const type = el.action.type;
+
+  if (type === 'terminal.run' && typeof params.command === 'string') {
+    return params.command;
+  }
+  if (type === 'file.open' && typeof params.path === 'string') {
+    return params.path;
+  }
+  if (type === 'editor.highlight' && typeof params.path === 'string') {
+    const lines = typeof params.lines === 'string' ? `:${params.lines}` : '';
+    return `${params.path}${lines}`;
+  }
+  if (type === 'debug.start') {
+    const cfg = typeof params.config === 'string' ? params.config : '';
+    return cfg ? `Debug: ${cfg}` : 'debug.start';
+  }
+
+  // Fallback: key=value pairs for unknown types
+  return Object.entries(params)
+    .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
+    .map(([k, v]) => `${k}: ${String(v)}`)
+    .join('\n');
+}
+
+/**
  * Replace `<!--ACTION:id-->` placeholders in slide HTML with rendered
  * action-button links, so buttons appear at their original position in
  * the slide content rather than being appended at the end.
@@ -70,7 +100,14 @@ export function injectBlockElements(html: string, slide: Slide): string {
     const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
     const escapedLabel = escapeHtml(el.label);
     const noFrag = el.fragment === false ? ' data-no-fragment' : '';
-    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a></p>`);
+
+    let commandSnippet = '';
+    if (el.showCommand) {
+      const preview = escapeHtml(buildCommandPreview(el));
+      commandSnippet = `<pre class="action-command-preview"><code>${preview}</code></pre>`;
+    }
+
+    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${commandSnippet}</p>`);
   }
 
   // Replace each placeholder; remove unmatched ones (from errored blocks)
@@ -101,7 +138,14 @@ export function injectBlockElementsFromParsed(html: string, elements: Interactiv
     const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
     const escapedLabel = escapeHtml(el.label);
     const noFrag = el.fragment === false ? ' data-no-fragment' : '';
-    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a></p>`);
+
+    let commandSnippet = '';
+    if (el.showCommand) {
+      const preview = escapeHtml(buildCommandPreview(el));
+      commandSnippet = `<pre class="action-command-preview"><code>${preview}</code></pre>`;
+    }
+
+    buttonMap.set(el.id, `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${commandSnippet}</p>`);
   }
   return html.replace(
     /<!--ACTION:(block-\d+-\d+)-->/g,

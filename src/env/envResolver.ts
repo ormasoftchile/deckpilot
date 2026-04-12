@@ -167,6 +167,17 @@ export class EnvResolver {
   }
 
   /**
+   * Interpolate {{VAR}} placeholders in a plain string for display.
+   * Secret variables remain as {{VAR}}. Safe to include in webview HTML.
+   */
+  interpolateStringForDisplay(
+    text: string,
+    resolvedEnv: ResolvedEnv,
+  ): string {
+    return this.deepWalk(text, resolvedEnv, 'display') as string;
+  }
+
+  /**
    * Interpolate {{VAR}} placeholders in action params for execution.
    * ALL variables (including secrets) are replaced with resolved values.
    * CRITICAL: Output must NEVER cross the postMessage boundary.

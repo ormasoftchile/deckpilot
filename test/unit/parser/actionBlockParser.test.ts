@@ -475,4 +475,52 @@ describe('Action Block Parser', () => {
       expect(result.elements.length + result.errors.length).to.be.at.most(1);
     });
   });
+
+  describe('showCommand option', () => {
+    it('should set showCommand=true when YAML contains showCommand: true', () => {
+      const content = [
+        '```action',
+        'type: terminal.run',
+        'command: npm test',
+        'showCommand: true',
+        '```',
+      ].join('\n');
+
+      const result = parseActionBlocks(content, 0);
+
+      expect(result.elements).to.have.length(1);
+      expect(result.elements[0].showCommand).to.equal(true);
+    });
+
+    it('should not set showCommand when YAML does not include it', () => {
+      const content = [
+        '```action',
+        'type: terminal.run',
+        'command: npm test',
+        '```',
+      ].join('\n');
+
+      const result = parseActionBlocks(content, 0);
+
+      expect(result.elements).to.have.length(1);
+      expect(result.elements[0].showCommand).to.be.undefined;
+    });
+
+    it('should exclude showCommand key from action params', () => {
+      const content = [
+        '```action',
+        'type: terminal.run',
+        'command: npm deploy',
+        'showCommand: true',
+        '```',
+      ].join('\n');
+
+      const result = parseActionBlocks(content, 0);
+
+      expect(result.elements).to.have.length(1);
+      const params = result.elements[0].action.params ?? {};
+      expect(params).to.not.have.property('showCommand');
+      expect(params).to.deep.include({ command: 'npm deploy' });
+    });
+  });
 });

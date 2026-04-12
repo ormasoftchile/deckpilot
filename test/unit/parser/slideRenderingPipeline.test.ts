@@ -297,3 +297,68 @@ describe('slideRenderingPipeline — edge cases', () => {
     expect(html).not.to.contain('class="layout-center"');
   });
 });
+
+// ---------------------------------------------------------------------------
+// showCommand option
+// ---------------------------------------------------------------------------
+
+describe('slideRenderingPipeline — showCommand action block option', () => {
+  it('should render action-command-preview when showCommand: true', () => {
+    const markdown = [
+      '# Demo',
+      '',
+      '```action',
+      'type: terminal.run',
+      'command: npm test',
+      'showCommand: true',
+      '```',
+    ].join('\n');
+
+    const html = renderSlide(markdown);
+    expect(html).to.contain('action-command-preview');
+    expect(html).to.contain('npm test');
+  });
+
+  it('should NOT render action-command-preview when showCommand is omitted', () => {
+    const markdown = [
+      '# Demo',
+      '',
+      '```action',
+      'type: terminal.run',
+      'command: npm test',
+      '```',
+    ].join('\n');
+
+    const html = renderSlide(markdown);
+    expect(html).not.to.contain('action-command-preview');
+  });
+
+  it('should show the file path for file.open with showCommand: true', () => {
+    const markdown = [
+      '```action',
+      'type: file.open',
+      'path: src/main.ts',
+      'showCommand: true',
+      '```',
+    ].join('\n');
+
+    const html = renderSlide(markdown);
+    expect(html).to.contain('action-command-preview');
+    expect(html).to.contain('src/main.ts');
+  });
+
+  it('should show path:lines for editor.highlight with showCommand: true', () => {
+    const markdown = [
+      '```action',
+      'type: editor.highlight',
+      'path: src/main.ts',
+      'lines: 10-20',
+      'showCommand: true',
+      '```',
+    ].join('\n');
+
+    const html = renderSlide(markdown);
+    expect(html).to.contain('action-command-preview');
+    expect(html).to.contain('src/main.ts:10-20');
+  });
+});
