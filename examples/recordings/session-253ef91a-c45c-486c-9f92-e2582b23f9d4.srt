@@ -1,0 +1,37 @@
+1
+00:00:00,000 --> 00:00:07,940
+Welcome to Executable Talk! 🎉 Press → or
+Space to navigate forward.
+
+2
+00:00:07,940 --> 00:00:08,532
+This slide demonstrates file opening.
+Click the link below.
+
+3
+00:00:08,532 --> 00:00:08,861
+This slide demonstrates file opening.
+Click the link below.
+
+4
+00:00:08,861 --> 00:00:09,136
+This slide demonstrates file opening.
+Click the link below.
+
+5
+00:00:09,136 --> 00:00:09,402
+Code Highlighting Highlight specific lines
+in a file: Highlight lines 1-10 Highlight
+line 20
+
+6
+00:00:09,402 --> 00:00:09,859
+Code Highlighting Highlight specific lines
+in a file: Highlight lines 1-10 Highlight
+line 20
+
+7
+00:00:09,859 --> 00:00:12,955
+Code Highlighting Highlight specific lines
+in a file: Highlight lines 1-10 Highlight
+line 20

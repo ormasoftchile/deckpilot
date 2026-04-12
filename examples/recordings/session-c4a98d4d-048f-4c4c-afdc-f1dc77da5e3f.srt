@@ -1,0 +1,19 @@
+1
+00:00:00,000 --> 00:00:04,404
+YAML Action Blocks — Highlighting YAML
+blocks make complex actions much easier to
+read:
+
+2
+00:00:04,404 --> 00:00:04,862
+This slide shows a sequence in YAML.
+Compare how much cleaner this is than the
+URL-encoded version!
+
+3
+00:00:04,862 --> 00:00:05,184
+YAML Terminal & VS Code Commands
+
+4
+00:00:05,184 --> 00:00:07,831
+YAML Terminal & VS Code Commands

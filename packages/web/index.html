@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Executable Talk — Web Preview</title>
+  <!--
+    Serve presentation.css directly from source via Vite's /@fs/ virtual path.
+    This guarantees the web app always reflects the canonical styles.
+  -->
+  <link rel="stylesheet" href="/@fs/Volumes/Projects/executable-talk/src/webview/assets/presentation.css">
+  <style>
+    /* ── Layout ──────────────────────────────────────────────────── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* ── Deck picker sidebar ─────────────────────────────────────── */
+    #deck-sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #252526;
+      border-right: 1px solid #3e3e3e;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #deck-sidebar h2 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #bbbbbb;
+      padding: 12px 12px 8px;
+      border-bottom: 1px solid #3e3e3e;
+    }
+
+    #deck-list {
+      list-style: none;
+      overflow-y: auto;
+      flex: 1;
+      padding: 4px 0;
+    }
+
+    .deck-picker-item {
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #cccccc;
+    }
+
+    .deck-picker-item:hover {
+      background: #2a2d2e;
+    }
+
+    .deck-picker-item.active {
+      background: #094771;
+      color: #ffffff;
+    }
+
+    .deck-picker-error,
+    .deck-picker-empty {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
+    }
+
+    #deck-loading-indicator {
+      display: none;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: #888;
+    }
+
+    /* ── Presentation area ───────────────────────────────────────── */
+    #presentation-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Override presentation.css width constraints for the wrapper */
+    #presentation-wrapper #presentation-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<!--
+  theme-dark font-medium: defaults matching the VS Code dark theme fallbacks in presentation.css.
+  These match what the extension uses by default.
+-->
+<body class="theme-dark font-medium mode-presentation">
+
+  <!-- ── Deck picker sidebar ─────────────────────────────────────────── -->
+  <aside id="deck-sidebar">
+    <h2>Decks</h2>
+    <ul id="deck-list"></ul>
+    <div id="deck-loading-indicator">Loading…</div>
+  </aside>
+
+  <!-- ── Presentation area (identical DOM to webviewProvider.ts) ──────── -->
+  <div id="presentation-wrapper">
+    <div id="presentation-container">
+      <div id="progress-bar" class="hidden"></div>
+      <div id="slide-container">
+        <div id="slide-content"></div>
+      </div>
+      <div id="onboarding-controls" class="hidden">
+        <div id="step-progress"></div>
+        <div id="step-actions">
+          <button id="btn-retry" class="onboarding-btn hidden" title="Retry this step">🔄 Retry Step</button>
+          <button id="btn-reset" class="onboarding-btn hidden" title="Reset to checkpoint">⏪ Reset to Checkpoint</button>
+        </div>
+        <div id="validation-result" class="hidden"></div>
+      </div>
+      <nav id="navigation">
+        <button id="btn-first" title="First slide (Home)">⏮</button>
+        <button id="btn-prev" title="Previous slide (←)">◀</button>
+        <span id="slide-indicator">0 / 0</span>
+        <button id="btn-next" title="Next slide (→)">▶</button>
+        <button id="btn-last" title="Last slide (End)">⏭</button>
+      </nav>
+      <div id="env-badge" class="env-badge hidden"></div>
+      <div id="action-overlay" class="hidden" role="alert" aria-live="assertive">
+        <div id="action-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    1. Define acquireVsCodeApi BEFORE presentation.js runs.
+       The stub captures postMessage calls and re-dispatches them as
+       CustomEvent('webview-to-host') so main.ts can handle them.
+  -->
+  <script>
+    window.acquireVsCodeApi = (function () {
+      let created = false;
+      return function () {
+        if (created) throw new Error('acquireVsCodeApi() called more than once');
+        created = true;
+        return {
+          postMessage: function (msg) {
+            window.dispatchEvent(new CustomEvent('webview-to-host', { detail: msg }));
+          },
+          getState: function () { return null; },
+          setState: function () {},
+        };
+      };
+    })();
+    // Prevent presentation.js from trying to close the window
+    window.deckData = null;
+  </script>
+
+  <!--
+    2. Load the ES module host — registers webview-to-host listener and boots the picker.
+  -->
+  <script type="module" src="/src/entry.ts"></script>
+
+  <!--
+    3. presentation.js last — by the time it runs, acquireVsCodeApi is defined.
+       Uses defer so it executes after the inline scripts above.
+  -->
+  <script defer src="/@fs/Volumes/Projects/executable-talk/src/webview/assets/presentation.js"></script>
+
+</body>
+</html>

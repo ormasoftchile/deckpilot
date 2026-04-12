@@ -38,6 +38,13 @@ coverage/
 *.tmp
 *.temp
 
+# Test output
+playwright-report/
+test-results/
+
+# Recording binaries (keep .srt transcripts)
+*.mp4
+
 # AI tooling — never commit
 .squad/
 .copilot/
