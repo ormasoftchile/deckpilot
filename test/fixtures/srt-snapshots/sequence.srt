@@ -28,8 +28,44 @@ any step fails, the sequence stops and
 reports which step failed.
 
 6
-00:00:13,500 --> 00:00:18,000
+00:00:13,500 --> 00:00:16,000
 `sequence` — Full Demo Flow Each step runs
 to completion before the next starts. If
 any step fails, the sequence stops and
 reports which step failed.
+
+7
+00:00:16,000 --> 00:00:18,500
+`sequence` — showCommand Preview Add
+`showCommand: true` to show the audience
+what each step will do before the button
+is clicked: The preview lists one resolved
+value per step (file paths, commands,
+etc.).
+
+8
+00:00:18,500 --> 00:00:21,000
+`sequence` — showCommand Preview Add
+`showCommand: true` to show the audience
+what each step will do before the button
+is clicked: The preview lists one resolved
+value per step (file paths, commands,
+etc.).
+
+9
+00:00:21,000 --> 00:00:23,500
+`sequence` — showCommand Preview Add
+`showCommand: true` to show the audience
+what each step will do before the button
+is clicked: The preview lists one resolved
+value per step (file paths, commands,
+etc.).
+
+10
+00:00:23,500 --> 00:00:28,000
+`sequence` — showCommand Preview Add
+`showCommand: true` to show the audience
+what each step will do before the button
+is clicked: The preview lists one resolved
+value per step (file paths, commands,
+etc.).
