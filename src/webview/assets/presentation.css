@@ -1216,6 +1216,25 @@ html, body {
   visibility: visible !important;
 }
 
+/* slide-group: groups multiple elements into one fragment step.
+   The container itself is the fragment; its children are always visible
+   once the group appears.
+   Because display:contents generates no box, opacity/visibility on the container
+   itself have no effect — so we hide the direct children instead. */
+.slide-group {
+  display: contents;
+}
+
+.slide-group.fragment:not(.visible) > * {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 0.4s ease, visibility 0s 0.4s;
+}
+
+.slide-group.fragment.visible > * {
+  transition: opacity 0.4s ease, visibility 0s;
+}
+
 /* Fade animation (default) */
 .fragment[data-fragment-animation="fade"] {
   /* Just opacity, handled by base styles */

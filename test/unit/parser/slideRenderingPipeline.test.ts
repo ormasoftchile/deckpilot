@@ -186,16 +186,21 @@ describe('slideRenderingPipeline — plain slide (no layout directive)', () => {
     expect(html).not.to.contain('step-optional');
   });
 
-  it('should render a paragraph as a <p> tag', () => {
+  it('should render a paragraph as a <p> tag (auto-fragmented)', () => {
+    // Auto-fragment system: every <p> gets class="fragment" by default
     const html = renderSlide('Just some text.');
-    expect(html).to.contain('<p>Just some text.</p>');
+    expect(html).to.contain('<p');
+    expect(html).to.contain('Just some text.');
+    expect(html).to.contain('class="fragment"');
   });
 
-  it('should render a bullet list as <ul>/<li> elements', () => {
+  it('should render a bullet list as <ul>/<li> elements (auto-fragmented)', () => {
+    // Auto-fragment system: every <li> gets class="fragment" by default
     const html = renderSlide('- Item A\n- Item B');
     expect(html).to.contain('<ul>');
-    expect(html).to.contain('<li>Item A</li>');
-    expect(html).to.contain('<li>Item B</li>');
+    expect(html).to.contain('Item A');
+    expect(html).to.contain('Item B');
+    expect(html).to.contain('class="fragment"');
   });
 
   it('should render inline code within a <code> tag', () => {
