@@ -1,0 +1,4 @@
+# Deck files contain markdown tables and raw content that Prettier reformats
+# in ways that change rendered output and break SRT snapshot tests on Windows.
+examples/
+*.deck.md
