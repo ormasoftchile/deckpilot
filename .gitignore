@@ -42,8 +42,9 @@ coverage/
 playwright-report/
 test-results/
 
-# Recording binaries (keep .srt transcripts)
+# Recording binaries and transcripts
 *.mp4
+*.srt
 
 # AI tooling — never commit
 .squad/
