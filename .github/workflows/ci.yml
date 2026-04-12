@@ -49,6 +49,13 @@ jobs:
 
     - name: Run unit tests
       run: npm run test:unit
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+
+    - name: Run visual regression tests
+      if: runner.os == 'Linux'
+      run: xvfb-run -a npm run test:visual
       continue-on-error: true
 
     - name: Setup Xvfb for VS Code tests (Linux)

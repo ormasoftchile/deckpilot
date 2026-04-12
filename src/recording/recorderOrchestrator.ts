@@ -13,8 +13,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as cp from 'child_process';
-import * as os from 'os';
-import * as fs from 'fs';
 import { RecorderMetadata } from '../models/recording';
 
 export interface RecorderConfig {
@@ -321,47 +319,223 @@ export class RecorderOrchestrator {
   /**
    * Get the VS Code window bounds using platform-specific methods.
    */
-  private async getWindowBounds(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+  private async getWindowBounds(): Promise<{ x: number; y: number; width: number; height: number; screenIndex?: number } | undefined> {
+    if (process.platform === 'darwin') {
+      return this.getWindowBoundsDarwin();
+    }
+    if (process.platform === 'linux') {
+      return this.getWindowBoundsLinux();
+    }
     if (process.platform === 'win32') {
       return this.getWindowBoundsWindows();
     }
-    // macOS/Linux: not implemented yet
     return undefined;
   }
 
   /**
-   * Get the VS Code window bounds on Windows using a PowerShell script.
-   * Finds the foreground window and reads its rect.
+   * Get the VS Code window bounds on macOS using osascript via stdin pipe mode.
+   * Supports multi-monitor setups; returns screen-relative coords and screenIndex.
+   */
+  private getWindowBoundsDarwin(): Promise<{ x: number; y: number; width: number; height: number; screenIndex?: number } | undefined> {
+    return new Promise((resolve) => {
+      const script = [
+        'tell application "System Events"',
+        '  set vscProcs to (processes where displayed name contains "Code")',
+        '  if (count of vscProcs) = 0 then',
+        '    return "error:no_process"',
+        '  end if',
+        '  set vscWin to first window of (item 1 of vscProcs)',
+        '  set {wx, wy} to position of vscWin',
+        '  set {ww, wh} to size of vscWin',
+        'end tell',
+        'set screenData to ""',
+        'set allScreens to do shell script "system_profiler SPDisplaysDataType | grep Resolution"',
+        'return ((wx as text) & "," & (wy as text) & "," & (ww as text) & "," & (wh as text))',
+      ].join('\n');
+
+      const proc = cp.spawn('osascript', ['-']);
+      let stdout = '';
+      let stderr = '';
+      let resolved = false;
+
+      proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+      proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        if (resolved) { return; }
+        resolved = true;
+        this.outputChannel.appendLine(`[Recorder] osascript spawn error: ${err.message}`);
+        resolve(undefined);
+      });
+
+      proc.on('close', (code: number) => {
+        if (resolved) { return; }
+        resolved = true;
+
+        if (code !== 0) {
+          this.outputChannel.appendLine(`[Recorder] osascript error (code ${code}): ${stderr.trim()}`);
+          resolve(undefined);
+          return;
+        }
+
+        const output = stdout.trim();
+
+        if (output === 'error:no_process') {
+          resolve(undefined);
+          return;
+        }
+
+        // Format: "winX,winY,winW,winH" or "winX,winY,winW,winH|scrX,scrY,scrW,scrH;...;"
+        const pipeIdx = output.indexOf('|');
+        const windowPart = pipeIdx === -1 ? output : output.slice(0, pipeIdx);
+        const screensPart = pipeIdx === -1 ? '' : output.slice(pipeIdx + 1);
+
+        const windowNums = windowPart.split(',').map(Number);
+        if (windowNums.length < 4 || windowNums.some(n => isNaN(n))) {
+          this.outputChannel.appendLine(`[Recorder] Unexpected osascript output: ${output}`);
+          resolve(undefined);
+          return;
+        }
+
+        const [winX, winY] = windowNums;
+        let winW = windowNums[2];
+        let winH = windowNums[3];
+        // Round odd dimensions up to even (required by most video encoders)
+        if (winW % 2 !== 0) { winW += 1; }
+        if (winH % 2 !== 0) { winH += 1; }
+
+        let screenIndex = 0;
+        let relX = winX;
+        let relY = winY;
+
+        if (screensPart) {
+          const screens = screensPart
+            .split(';')
+            .filter(s => s.trim().length > 0)
+            .map(s => {
+              const parts = s.split(',').map(Number);
+              return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+            });
+
+          for (let i = 0; i < screens.length; i++) {
+            const scr = screens[i];
+            if (winX >= scr.x && winX < scr.x + scr.w && winY >= scr.y && winY < scr.y + scr.h) {
+              screenIndex = i;
+              relX = winX - scr.x;
+              relY = winY - scr.y;
+              break;
+            }
+          }
+        }
+
+        resolve({ x: relX, y: relY, width: winW, height: winH, screenIndex });
+      });
+
+      proc.stdin.write(script);
+      proc.stdin.end();
+    });
+  }
+
+  /**
+   * Get the VS Code window bounds on Linux using xdotool (with wmctrl fallback).
+   */
+  private async getWindowBoundsLinux(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+    try {
+      // Try xdotool first
+      let windowId: string;
+      try {
+        const activeId = (cp.execFileSync('xdotool', ['getactivewindow']) as Buffer | string).toString().trim();
+        const activeName = (cp.execFileSync('xdotool', ['getwindowname', activeId]) as Buffer | string).toString().trim();
+
+        if (activeName.includes('Visual Studio Code')) {
+          windowId = activeId;
+        } else {
+          // Search for VS Code window
+          const searchResult = (cp.execFileSync('xdotool', ['search', '--name', 'Visual Studio Code']) as Buffer | string).toString().trim();
+          if (!searchResult) {
+            return undefined;
+          }
+          windowId = searchResult.split('\n')[0].trim();
+        }
+
+        const geometry = (cp.execFileSync('xdotool', ['getwindowgeometry', windowId]) as Buffer | string).toString();
+        const xMatch = /X=(\d+)/.exec(geometry);
+        const yMatch = /Y=(\d+)/.exec(geometry);
+        const wMatch = /WIDTH=(\d+)/.exec(geometry);
+        const hMatch = /HEIGHT=(\d+)/.exec(geometry);
+
+        if (!xMatch || !yMatch || !wMatch || !hMatch) {
+          return undefined;
+        }
+
+        const x = parseInt(xMatch[1]);
+        const y = parseInt(yMatch[1]);
+        let width = parseInt(wMatch[1]);
+        let height = parseInt(hMatch[1]);
+
+        if (width % 2 !== 0) { width += 1; }
+        if (height % 2 !== 0) { height += 1; }
+
+        return { x, y, width, height };
+      } catch {
+        // xdotool not available — fall through to wmctrl
+      }
+
+      // Fallback: wmctrl
+      try {
+        const wmOutput = (cp.execFileSync('wmctrl', ['-l', '-G']) as Buffer | string).toString();
+        for (const line of wmOutput.split('\n')) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length < 7) { continue; }
+          const title = parts.slice(6).join(' ');
+          if (!title.includes('Visual Studio Code')) { continue; }
+
+          const x = parseInt(parts[2]);
+          const y = parseInt(parts[3]);
+          let width = parseInt(parts[4]);
+          let height = parseInt(parts[5]);
+
+          if (isNaN(x) || isNaN(y) || isNaN(width) || isNaN(height)) { continue; }
+          if (width % 2 !== 0) { width += 1; }
+          if (height % 2 !== 0) { height += 1; }
+
+          return { x, y, width, height };
+        }
+        return undefined;
+      } catch {
+        this.outputChannel.appendLine('[Recorder] wmctrl unavailable — cannot detect window bounds on Linux');
+        return undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Get the VS Code window bounds on Windows using an inline PowerShell command.
+   * Uses -Command flag (no temp files written).
    */
   private getWindowBoundsWindows(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
     return new Promise((resolve) => {
       const script = [
-        'Add-Type @"',
-        'using System;',
-        'using System.Runtime.InteropServices;',
+        'Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices;',
         'public class WinRect {',
-        '  [DllImport("user32.dll")]',
-        '  public static extern IntPtr GetForegroundWindow();',
-        '  [DllImport("user32.dll")]',
-        '  [return: MarshalAs(UnmanagedType.Bool)]',
+        '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+        '  [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]',
         '  public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);',
-        '  [StructLayout(LayoutKind.Sequential)]',
-        '  public struct RECT { public int Left, Top, Right, Bottom; }',
-        '}',
-        '"@',
+        '  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }',
+        '}\'',
         '$hwnd = [WinRect]::GetForegroundWindow()',
         '$rect = New-Object WinRect+RECT',
         '[WinRect]::GetWindowRect($hwnd, [ref]$rect) | Out-Null',
         '$w = $rect.Right - $rect.Left',
         '$h = $rect.Bottom - $rect.Top',
         'Write-Output "$($rect.Left),$($rect.Top),$w,$h"',
-      ].join('\n');
+      ].join('; ');
 
-      const tmpFile = path.join(os.tmpdir(), 'et-window-bounds.ps1');
-      fs.writeFileSync(tmpFile, script, 'utf-8');
-
-      cp.exec(
-        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpFile}"`,
+      cp.execFile(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
         { timeout: 5000 },
         (err, stdout) => {
           if (err) {
@@ -372,7 +546,11 @@ export class RecorderOrchestrator {
 
           const parts = stdout.trim().split(',').map(Number);
           if (parts.length === 4 && parts.every(n => !isNaN(n)) && parts[2] > 0 && parts[3] > 0) {
-            resolve({ x: parts[0], y: parts[1], width: parts[2], height: parts[3] });
+            let width = parts[2];
+            let height = parts[3];
+            if (width % 2 !== 0) { width += 1; }
+            if (height % 2 !== 0) { height += 1; }
+            resolve({ x: parts[0], y: parts[1], width, height });
           } else {
             this.outputChannel.appendLine(`[Recorder] Unexpected bounds output: ${stdout.trim()}`);
             resolve(undefined);
