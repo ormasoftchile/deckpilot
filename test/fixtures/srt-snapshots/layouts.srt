@@ -1,0 +1,161 @@
+1
+00:00:00,000 --> 00:00:03,500
+`:::center` Layout :::center This content
+is centered Use for title slides or
+emphasis moments. :::
+
+2
+00:00:03,500 --> 00:00:06,000
+`:::center` Layout :::center This content
+is centered Use for title slides or
+emphasis moments. :::
+
+3
+00:00:06,000 --> 00:00:08,500
+`:::center` Layout :::center This content
+is centered Use for title slides or
+emphasis moments. :::
+
+4
+00:00:08,500 --> 00:00:11,000
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+5
+00:00:11,000 --> 00:00:13,500
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+6
+00:00:13,500 --> 00:00:16,000
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+7
+00:00:16,000 --> 00:00:18,500
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+8
+00:00:18,500 --> 00:00:21,000
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+9
+00:00:21,000 --> 00:00:23,500
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+10
+00:00:23,500 --> 00:00:26,000
+`:::columns` Layout :::columns :::left -
+Point one - Point two - Point three :::
+:::right - `npm install` - `npm run build`
+- `npm test` ::: :::
+
+11
+00:00:26,000 --> 00:00:28,500
+`:::advanced` — Progressive Disclosure The
+advanced block is collapsed by default.
+Click to expand: Here is the main
+explanation that everyone sees.
+:::advanced Under the Hood This is the
+deep-dive content — architecture details,
+edge cases, or implementation notes that
+only some audience members need. :::
+
+12
+00:00:28,500 --> 00:00:31,000
+`:::advanced` — Progressive Disclosure The
+advanced block is collapsed by default.
+Click to expand: Here is the main
+explanation that everyone sees.
+:::advanced Under the Hood This is the
+deep-dive content — architecture details,
+edge cases, or implementation notes that
+only some audience members need. :::
+
+13
+00:00:31,000 --> 00:00:33,500
+`:::advanced` — Progressive Disclosure The
+advanced block is collapsed by default.
+Click to expand: Here is the main
+explanation that everyone sees.
+:::advanced Under the Hood This is the
+deep-dive content — architecture details,
+edge cases, or implementation notes that
+only some audience members need. :::
+
+14
+00:00:33,500 --> 00:00:36,000
+`:::advanced` — Progressive Disclosure The
+advanced block is collapsed by default.
+Click to expand: Here is the main
+explanation that everyone sees.
+:::advanced Under the Hood This is the
+deep-dive content — architecture details,
+edge cases, or implementation notes that
+only some audience members need. :::
+
+15
+00:00:36,000 --> 00:00:38,500
+`:::advanced` — Progressive Disclosure The
+advanced block is collapsed by default.
+Click to expand: Here is the main
+explanation that everyone sees.
+:::advanced Under the Hood This is the
+deep-dive content — architecture details,
+edge cases, or implementation notes that
+only some audience members need. :::
+
+16
+00:00:38,500 --> 00:00:41,000
+`:::optional` — Optional Steps Mark a step
+as optional so it doesn't block progress:
+Follow the main path here. :::optional If
+you want to explore further, try this
+extra step: :::
+
+17
+00:00:41,000 --> 00:00:46,500
+`:::optional` — Optional Steps Mark a step
+as optional so it doesn't block progress:
+Follow the main path here. :::optional If
+you want to explore further, try this
+extra step: :::
+
+18
+00:00:46,500 --> 00:00:49,000
+`:::optional` — Optional Steps Mark a step
+as optional so it doesn't block progress:
+Follow the main path here. :::optional If
+you want to explore further, try this
+extra step: :::
+
+19
+00:00:49,000 --> 00:00:51,500
+`:::optional` — Optional Steps Mark a step
+as optional so it doesn't block progress:
+Follow the main path here. :::optional If
+you want to explore further, try this
+extra step: :::
+
+20
+00:00:51,500 --> 00:00:56,000
+`:::optional` — Optional Steps Mark a step
+as optional so it doesn't block progress:
+Follow the main path here. :::optional If
+you want to explore further, try this
+extra step: :::

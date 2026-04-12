@@ -1,0 +1,35 @@
+1
+00:00:00,000 --> 00:00:03,500
+`sequence` — Chain Actions Run multiple
+actions in order with a single click:
+
+2
+00:00:03,500 --> 00:00:06,000
+`sequence` — Chain Actions Run multiple
+actions in order with a single click:
+
+3
+00:00:06,000 --> 00:00:08,500
+`sequence` — Chain Actions Run multiple
+actions in order with a single click:
+
+4
+00:00:08,500 --> 00:00:11,000
+`sequence` — Full Demo Flow Each step runs
+to completion before the next starts. If
+any step fails, the sequence stops and
+reports which step failed.
+
+5
+00:00:11,000 --> 00:00:13,500
+`sequence` — Full Demo Flow Each step runs
+to completion before the next starts. If
+any step fails, the sequence stops and
+reports which step failed.
+
+6
+00:00:13,500 --> 00:00:18,000
+`sequence` — Full Demo Flow Each step runs
+to completion before the next starts. If
+any step fails, the sequence stops and
+reports which step failed.

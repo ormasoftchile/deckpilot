@@ -1,0 +1,82 @@
+1
+00:00:00,000 --> 00:00:03,500
+Cross-Platform Commands Use a map instead
+of a single string to run the right
+command per OS. The current platform's key
+is selected at execution time.
+
+2
+00:00:03,500 --> 00:00:09,000
+Cross-Platform Commands Use a map instead
+of a single string to run the right
+command per OS. The current platform's key
+is selected at execution time.
+
+3
+00:00:09,000 --> 00:00:11,500
+Cross-Platform Commands Use a map instead
+of a single string to run the right
+command per OS. The current platform's key
+is selected at execution time.
+
+4
+00:00:11,500 --> 00:00:14,000
+Path Placeholders Use built-in
+placeholders that resolve per platform: |
+Placeholder | macOS/Linux | Windows |
+|---|---|---| | `${pathSep}` | `/` | `\` |
+| `${home}` | `/Users/you` |
+`C:\Users\you` | | `${shell}` | `/bin/zsh`
+| `cmd.exe` | | `${pathDelimiter}` | `:` |
+`;` |
+
+5
+00:00:14,000 --> 00:00:19,500
+Path Placeholders Use built-in
+placeholders that resolve per platform: |
+Placeholder | macOS/Linux | Windows |
+|---|---|---| | `${pathSep}` | `/` | `\` |
+| `${home}` | `/Users/you` |
+`C:\Users\you` | | `${shell}` | `/bin/zsh`
+| `cmd.exe` | | `${pathDelimiter}` | `:` |
+`;` |
+
+6
+00:00:19,500 --> 00:00:22,000
+Path Placeholders Use built-in
+placeholders that resolve per platform: |
+Placeholder | macOS/Linux | Windows |
+|---|---|---| | `${pathSep}` | `/` | `\` |
+| `${home}` | `/Users/you` |
+`C:\Users\you` | | `${shell}` | `/bin/zsh`
+| `cmd.exe` | | `${pathDelimiter}` | `:` |
+`;` |
+
+7
+00:00:22,000 --> 00:00:24,500
+Path Placeholders Use built-in
+placeholders that resolve per platform: |
+Placeholder | macOS/Linux | Windows |
+|---|---|---| | `${pathSep}` | `/` | `\` |
+| `${home}` | `/Users/you` |
+`C:\Users\you` | | `${shell}` | `/bin/zsh`
+| `cmd.exe` | | `${pathDelimiter}` | `:` |
+`;` |
+
+8
+00:00:24,500 --> 00:00:27,000
+`default` Fallback Add a `default` key to
+handle unknown or unlisted platforms
+gracefully:
+
+9
+00:00:27,000 --> 00:00:32,500
+`default` Fallback Add a `default` key to
+handle unknown or unlisted platforms
+gracefully:
+
+10
+00:00:32,500 --> 00:00:37,000
+`default` Fallback Add a `default` key to
+handle unknown or unlisted platforms
+gracefully:

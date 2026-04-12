@@ -1,0 +1,90 @@
+1
+00:00:00,000 --> 00:00:03,500
+Speaker Notes Add per-slide notes in the
+slide separator or with the `notes`
+frontmatter key. Notes appear in the
+presenter view, not the main display.
+
+2
+00:00:03,500 --> 00:00:06,000
+Speaker Notes Add per-slide notes in the
+slide separator or with the `notes`
+frontmatter key. Notes appear in the
+presenter view, not the main display.
+
+3
+00:00:06,000 --> 00:00:14,000
+This is the speaker note for this slide.
+It can be multi-line. Only you see this —
+not the audience.
+
+4
+00:00:14,000 --> 00:00:16,500
+This is the speaker note for this slide.
+It can be multi-line. Only you see this —
+not the audience. 
+
+5
+00:00:16,500 --> 00:00:19,000
+This is the speaker note for this slide.
+It can be multi-line. Only you see this —
+not the audience. 
+
+6
+00:00:19,000 --> 00:00:21,500
+`` — Narration Cues Voice cues annotate
+when specific content should be mentioned.
+Used by the recording system to sync
+transcript to slide state. Content appears
+here. - First fragment - Second fragment
+
+7
+00:00:21,500 --> 00:00:24,000
+`` — Narration Cues Voice cues annotate
+when specific content should be mentioned.
+Used by the recording system to sync
+transcript to slide state. Content appears
+here. - First fragment - Second fragment
+
+8
+00:00:24,000 --> 00:00:26,500
+`` — Narration Cues Voice cues annotate
+when specific content should be mentioned.
+Used by the recording system to sync
+transcript to slide state. Content appears
+here. - First fragment - Second fragment
+
+9
+00:00:26,500 --> 00:00:29,000
+`` — Narration Cues Voice cues annotate
+when specific content should be mentioned.
+Used by the recording system to sync
+transcript to slide state. Content appears
+here. - First fragment - Second fragment
+
+10
+00:00:29,000 --> 00:00:31,500
+`` — Narration Cues Voice cues annotate
+when specific content should be mentioned.
+Used by the recording system to sync
+transcript to slide state. Content appears
+here. - First fragment - Second fragment
+
+11
+00:00:31,500 --> 00:00:34,000
+Combined: Notes + Voice
+
+12
+00:00:34,000 --> 00:00:38,400
+Remind the audience to look at the
+terminal on the right.
+
+13
+00:00:38,400 --> 00:00:43,900
+Remind the audience to look at the
+terminal on the right.
+
+14
+00:00:43,900 --> 00:00:51,400
+Remind the audience to look at the
+terminal on the right.

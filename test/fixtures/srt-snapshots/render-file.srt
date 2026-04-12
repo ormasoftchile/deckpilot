@@ -1,0 +1,46 @@
+1
+00:00:00,000 --> 00:00:03,500
+`render:file` — Embed File Content Embed
+live file contents directly in the slide.
+Content is read at presentation time —
+always current.
+
+2
+00:00:03,500 --> 00:00:06,000
+`render:file` — Embed File Content Embed
+live file contents directly in the slide.
+Content is read at presentation time —
+always current.
+
+3
+00:00:06,000 --> 00:00:08,500
+`render:file` — Embed File Content Embed
+live file contents directly in the slide.
+Content is read at presentation time —
+always current.
+
+4
+00:00:08,500 --> 00:00:11,000
+`render:file` — TypeScript
+
+5
+00:00:11,000 --> 00:00:13,500
+`render:file` — TypeScript
+
+6
+00:00:13,500 --> 00:00:16,000
+`render:file` — No Line Range Omit `lines`
+to embed the whole file (use with care on
+large files):
+
+7
+00:00:16,000 --> 00:00:18,500
+`render:file` — No Line Range Omit `lines`
+to embed the whole file (use with care on
+large files):
+
+8
+00:00:18,500 --> 00:00:23,000
+`render:file` — No Line Range Omit `lines`
+to embed the whole file (use with care on
+large files):
