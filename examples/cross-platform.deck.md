@@ -15,6 +15,7 @@ command:
   macos: ls -la
   windows: dir
   linux: ls -la
+showCommand: true
 ```
 
 ---

@@ -10,17 +10,15 @@ Requires **Workspace Trust**.
 
 ```action
 type: debug.start
-config: Extension
+configName: Extension
 label: Start debugger
 ```
 
-The `config` value must exactly match the `"name"` field in your `launch.json` configuration.
+The `configName` value must exactly match the `"name"` field in your `launch.json` configuration.
 
 ---
 
 # `debug.start` — Typical Setup
-
-Example `launch.json` entry this pairs with:
 
 ```json
 {
@@ -33,6 +31,6 @@ Example `launch.json` entry this pairs with:
 
 ```action
 type: debug.start
-config: Extension
+configName: Extension
 label: Launch Extension Host
 ```

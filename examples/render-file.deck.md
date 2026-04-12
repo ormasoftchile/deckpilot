@@ -22,4 +22,4 @@ Content is read at presentation time — always current.
 
 Omit `lines` to embed the whole file (use with care on large files):
 
-[](render:file?path=.eslintrc.json&format=json)
+[](render:file?path=tsconfig.json&format=json)

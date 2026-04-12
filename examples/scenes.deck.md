@@ -37,10 +37,6 @@ Click any breadcrumb to jump back to that slide.
 
 # Named Scenes in Frontmatter
 
-This deck has two pre-authored scenes: **start** (slide 1) and **demo** (slide 3 — this one).
-
-Scenes are defined in frontmatter:
-
 ```yaml
 scenes:
   - name: start
@@ -49,4 +45,8 @@ scenes:
     slide: 3
 ```
 
-Open the scene picker (`Ctrl+R` / `Cmd+R`) and select **start** to jump back to slide 1.
+Define scenes in deck frontmatter — each `name` becomes an entry in the scene picker.
+
+This deck has two scenes: **start** (slide 1) and **demo** (this slide).
+
+Open the scene picker (`Ctrl+R` / `Cmd+R`) and select **start** to jump back.

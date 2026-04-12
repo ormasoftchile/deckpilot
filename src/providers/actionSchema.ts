@@ -256,7 +256,7 @@ export const ACTION_SCHEMAS: ReadonlyMap<ActionType, ActionSchema> = new Map<Act
     {
       type: 'vscode.command',
       description: 'Executes an arbitrary VS Code command by ID.',
-      requiresTrust: false,
+      requiresTrust: true,
       parameters: [
         {
           name: 'id',
