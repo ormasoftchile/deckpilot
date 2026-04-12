@@ -101,6 +101,29 @@ export class EnvResolver {
       }
     }
 
+    // Expand {{VAR}} references between resolved variables (non-secret only).
+    // Uses up to N iterations to resolve chains; stops when no changes occur
+    // (handles forward references) or limits are hit (breaks cycles).
+    const MAX_PASSES = variables.size + 1;
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+      let changed = false;
+      for (const v of variables.values()) {
+        if (v.status !== 'resolved' || v.resolvedValue === undefined) { continue; }
+        const expanded = v.resolvedValue.replace(VAR_PATTERN, (match, name: string) => {
+          const dep = variables.get(name);
+          if (!dep || dep.status !== 'resolved' || dep.resolvedValue === undefined) { return match; }
+          if (dep.declaration.secret) { return match; }
+          return dep.resolvedValue;
+        });
+        if (expanded !== v.resolvedValue) {
+          v.resolvedValue = expanded;
+          v.displayValue = v.declaration.secret ? '•••••' : expanded;
+          changed = true;
+        }
+      }
+      if (!changed) { break; }
+    }
+
     // Sort secret values longest first (for scrubbing)
     secretValues.sort((a, b) => b.length - a.length);
 
