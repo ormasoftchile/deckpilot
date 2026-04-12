@@ -14,7 +14,7 @@ Transform your Markdown presentations into live coding demonstrations with VS Co
 - **Cross-Platform Commands**: Write terminal commands that adapt to macOS, Windows, and Linux automatically
 - **Navigation History**: Breadcrumb trail of visited slides for quick retracing
 - **Syntax Highlighting**: Full Markdown highlighting in `.deck.md` files with YAML coloring inside `action` blocks
-- **Zen Mode**: Presentations automatically enter distraction-free Zen Mode
+- **Zen Mode**: Opt-in distraction-free Zen Mode (`zenMode: true` in options)
 - **Presenter View**: Open speaker notes and next slide preview on a secondary panel
 - **Environment Variables**: Parameterize decks with `{{VAR}}` placeholders and `.deck.env` sidecar files for portable onboarding decks
 - **Secret Masking**: Mark variables as `secret` to prevent tokens and credentials from appearing on screen
@@ -194,12 +194,12 @@ Runs a command in the integrated terminal. **Requires Workspace Trust.**
 Starts a debug session. **Requires Workspace Trust.**
 
 ```markdown
-[Start Debugging](action:debug.start?config=Launch%20Program)
+[Start Debugging](action:debug.start?configName=Launch%20Program)
 ```
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
-| `config` | Name of the launch configuration | Yes |
+| `configName` | Name of the launch configuration | Yes |
 
 ### `sequence`
 
@@ -316,7 +316,28 @@ label: Open Main
 ```
 ````
 
-Action blocks support all 6 action types. Here are some examples:
+Action blocks support all action types and the following meta-fields:
+
+| Meta-field | Description |
+|------------|-------------|
+| `label` | Button text (defaults to action type if omitted) |
+| `fragment` | Set `false` to exclude the button from fragment stepping |
+| `showCommand` | Set `true` to display the resolved command below the button |
+
+Example with `showCommand`:
+
+````markdown
+```action
+type: terminal.run
+command: npm test
+label: Run Tests
+showCommand: true
+```
+````
+
+This renders the button with `npm test` shown below it — useful for teaching demos where the audience needs to see the actual command. `{{VAR}}` placeholders are resolved to their display values.
+
+Here are some action type examples:
 
 ````markdown
 ```action
@@ -941,7 +962,7 @@ title: My Presentation
 author: Your Name
 options:
   toolbar: true                    # Show toolbar (default: true)
-  zenMode: true                    # Enter Zen Mode on start (default: true)
+  zenMode: true                    # Enter Zen Mode on start (default: false)
   showSlideNumbers: true           # Show slide numbers (default: true)
   showProgress: false              # Show progress bar (default: false)
   fontSize: medium                 # Font size: small, medium, large
@@ -1051,7 +1072,7 @@ label: Verify dependencies installed
 
 ### Example
 
-See `examples/onboarding-demo.deck.md` for a complete onboarding deck demonstrating all features.
+See `examples/onboarding.deck.md` for a complete onboarding deck demonstrating all features.
 
 ## Workspace Trust
 
