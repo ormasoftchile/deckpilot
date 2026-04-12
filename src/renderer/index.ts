@@ -4,6 +4,9 @@
 
 export {
   parseRenderDirectives,
+} from './renderDirectiveParser';
+
+export type {
   RenderDirective,
   RenderType,
   FileRenderDirective,
@@ -16,6 +19,9 @@ export {
 
 export {
   renderFile,
+} from './fileRenderer';
+
+export type {
   FileRenderResult,
 } from './fileRenderer';
 
@@ -23,6 +29,9 @@ export {
   renderCommand,
   clearCommandCache,
   invalidateCommand,
+} from './commandRenderer';
+
+export type {
   CommandRenderResult,
   StreamCallback,
 } from './commandRenderer';
@@ -30,6 +39,9 @@ export {
 export {
   renderDiff,
   parseDiff,
+} from './diffRenderer';
+
+export type {
   DiffRenderResult,
   DiffHunk,
   DiffLine,
@@ -39,6 +51,9 @@ export {
   resolveDirective,
   createLoadingPlaceholder,
   formatAsCommandBlock,
+} from './contentRenderer';
+
+export type {
   RenderedBlock,
   LoadingPlaceholder,
 } from './contentRenderer';
