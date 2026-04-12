@@ -216,6 +216,12 @@ export class ActionHoverProvider {
           '- `"zoom"` — zoom in\n\n' +
           'Fragments are revealed in document order alongside other `<!-- .fragment -->` elements.',
       },
+      showCommand: {
+        type: 'boolean',
+        description:
+          'When `true`, renders a code preview of the command or path next to the action button ' +
+          'so the audience sees what will run before clicking.',
+      },
     };
 
     const meta = META_FIELDS[name];
