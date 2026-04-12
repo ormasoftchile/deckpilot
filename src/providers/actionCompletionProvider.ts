@@ -354,6 +354,16 @@ export class ActionCompletionProvider {
         sortText: '1_fragment',
       });
     }
+    if (!existingKeys.has('showCommand')) {
+      items.push({
+        label: 'showCommand',
+        kind: CompletionKind.Property,
+        detail: 'boolean',
+        documentation: 'When true, renders a code preview of the command or path next to the action button so the audience sees what will run before clicking.',
+        insertText: 'showCommand: true',
+        sortText: '1_showCommand',
+      });
+    }
 
     return items;
   }

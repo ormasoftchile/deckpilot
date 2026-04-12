@@ -161,8 +161,8 @@ export class ActionDiagnosticProvider {
     }
 
     // Check unknown parameters
-    // 'type', 'label', and 'fragment' are universal meta-fields valid on all action blocks
-    const knownKeys = new Set(['type', 'label', 'fragment', ...schema.parameters.map((p) => p.name)]);
+    // 'type', 'label', 'fragment', and 'showCommand' are universal meta-fields valid on all action blocks
+    const knownKeys = new Set(['type', 'label', 'fragment', 'showCommand', ...schema.parameters.map((p) => p.name)]);
     for (const key of Object.keys(parsed)) {
       if (!knownKeys.has(key)) {
         const keyLine = this.findLineInBlock(block, new RegExp(`^\\s*${this.escapeRegex(key)}:`));
@@ -240,7 +240,7 @@ export class ActionDiagnosticProvider {
       }
 
       // Check unknown params in this step
-      const stepKnownKeys = new Set(['type', 'label', ...stepSchema.parameters.map(p => p.name)]);
+      const stepKnownKeys = new Set(['type', 'label', 'fragment', 'showCommand', ...stepSchema.parameters.map(p => p.name)]);
       for (const key of Object.keys(stepObj)) {
         if (!stepKnownKeys.has(key)) {
           // Find the line with this key inside the step
