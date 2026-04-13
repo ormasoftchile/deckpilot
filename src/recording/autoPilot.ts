@@ -102,12 +102,23 @@ export function buildAutoPilotPlan(
 
     if (slide.fragmentCount > 0) {
       // Slide has fragments — advance through them one at a time.
-      // Sort elements by their position in the source content so
-      // element order matches visual/DOM order (block elements may
-      // have been parsed before inline elements).
+      // Use the rendered HTML to determine each interactive element's exact
+      // data-fragment index so that trigger-action steps fire only after the
+      // element's containing fragment is revealed, not based on array position.
       const allElements = [...slide.interactiveElements].sort(
         (a, b) => a.position.line - b.position.line,
       );
+
+      // Map element ID → data-fragment index as assigned by processFragments.
+      // Elements with data-no-fragment (fragment: false) are absent from the map
+      // and will be triggered at slide-entry level (already visible on load).
+      const fragMap = extractElementFragmentMap(slide.html);
+
+      // Elements not enclosed in any fragment → fire after slide-level wait
+      const entryElements = allElements.filter(el => !fragMap.has(el.id));
+      for (const el of entryElements) {
+        addActionSteps(steps, el, si, undefined, cfg);
+      }
 
       for (let fi = 1; fi <= slide.fragmentCount; fi++) {
         // Advance (reveals next fragment)
@@ -132,10 +143,9 @@ export function buildAutoPilotPlan(
             : `Fragment ${fi}: display`,
         });
 
-        // Match the element for this fragment by index.
-        // Fragment N (1-based) corresponds to element N-1 (0-based).
-        const el = allElements[fi - 1];
-        if (el) {
+        // Fire all elements whose button is inside this specific fragment
+        const fragElements = allElements.filter(el => fragMap.get(el.id) === fi);
+        for (const el of fragElements) {
           addActionSteps(steps, el, si, fi, cfg);
         }
       }
@@ -156,6 +166,40 @@ export function buildAutoPilotPlan(
   });
 
   return steps;
+}
+
+/**
+ * Extract a map of action-element ID → data-fragment index from the slide's
+ * rendered HTML.  The HTML produced by the parser has each interactive
+ * button's wrapping <p> annotated with data-fragment="N" by processFragments.
+ * We scan for data-action-id occurrences and look backwards to find the
+ * nearest data-fragment attribute — that attribute belongs to the element's
+ * enclosing fragment container.
+ *
+ * Elements that are not inside any fragment (data-no-fragment or not wrapped
+ * by a fragment element) will be absent from the returned map.
+ */
+function extractElementFragmentMap(html: string): Map<string, number> {
+  const map = new Map<string, number>();
+  const actionIdRegex = /data-action-id="([^"]+)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = actionIdRegex.exec(html)) !== null) {
+    const actionId = match[1];
+    const before = html.slice(0, match.index);
+    // Find the last data-fragment="N" that appears before this data-action-id
+    const lastFragPos = before.lastIndexOf('data-fragment="');
+    if (lastFragPos !== -1) {
+      const fragStr = before.slice(lastFragPos + 'data-fragment="'.length);
+      const fragNumEnd = fragStr.indexOf('"');
+      if (fragNumEnd !== -1) {
+        const fragNum = parseInt(fragStr.slice(0, fragNumEnd), 10);
+        if (!isNaN(fragNum)) {
+          map.set(actionId, fragNum);
+        }
+      }
+    }
+  }
+  return map;
 }
 
 /**
