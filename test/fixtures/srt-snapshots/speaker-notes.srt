@@ -1,16 +1,10 @@
 1
 00:00:00,000 --> 00:00:03,500
-Speaker Notes Add per-slide notes in the
-slide separator or with the `notes`
-frontmatter key. Notes appear in the
-presenter view, not the main display.
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-Speaker Notes Add per-slide notes in the
-slide separator or with the `notes`
-frontmatter key. Notes appear in the
-presenter view, not the main display.
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:14,000
@@ -32,59 +26,39 @@ not the audience.
 
 6
 00:00:19,000 --> 00:00:21,500
-`` — Narration Cues Voice cues annotate
-when specific content should be mentioned.
-Used by the recording system to sync
-transcript to slide state. Content appears
-here. - First fragment - Second fragment
+Entered slide 3
 
 7
 00:00:21,500 --> 00:00:24,000
-`` — Narration Cues Voice cues annotate
-when specific content should be mentioned.
-Used by the recording system to sync
-transcript to slide state. Content appears
-here. - First fragment - Second fragment
+Revealed fragment 2
 
 8
 00:00:24,000 --> 00:00:26,500
-`` — Narration Cues Voice cues annotate
-when specific content should be mentioned.
-Used by the recording system to sync
-transcript to slide state. Content appears
-here. - First fragment - Second fragment
+Revealed fragment 3
 
 9
 00:00:26,500 --> 00:00:29,000
-`` — Narration Cues Voice cues annotate
-when specific content should be mentioned.
-Used by the recording system to sync
-transcript to slide state. Content appears
-here. - First fragment - Second fragment
+Revealed fragment 4
 
 10
 00:00:29,000 --> 00:00:31,500
-`` — Narration Cues Voice cues annotate
-when specific content should be mentioned.
-Used by the recording system to sync
-transcript to slide state. Content appears
-here. - First fragment - Second fragment
+Revealed fragment 5
 
 11
 00:00:31,500 --> 00:00:34,000
-Combined: Notes + Voice
+Entered slide 4
 
 12
-00:00:34,000 --> 00:00:38,400
+00:00:34,000 --> 00:00:44,400
 Remind the audience to look at the
 terminal on the right.
 
 13
-00:00:38,400 --> 00:00:43,900
+00:00:44,400 --> 00:00:46,900
 Remind the audience to look at the
 terminal on the right.
 
 14
-00:00:43,900 --> 00:00:51,400
+00:00:46,900 --> 00:00:51,400
 Remind the audience to look at the
 terminal on the right.

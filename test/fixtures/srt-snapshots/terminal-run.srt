@@ -1,51 +1,39 @@
 1
-00:00:00,000 --> 00:00:03,500
-`terminal.run` — Inline Link Run a command
-using an inline action link: Check Node
-version Show git status
+00:00:00,000 --> 00:00:09,500
+Entered slide 1
 
 2
-00:00:03,500 --> 00:00:09,000
-`terminal.run` — Inline Link Run a command
-using an inline action link: Check Node
-version Show git status
+00:00:09,500 --> 00:00:12,000
+Revealed fragment 2
 
 3
-00:00:09,000 --> 00:00:14,500
-`terminal.run` — Inline Link Run a command
-using an inline action link: Check Node
-version Show git status
+00:00:12,000 --> 00:00:14,500
+Revealed fragment 3
 
 4
 00:00:14,500 --> 00:00:17,000
-`terminal.run` — Inline Link Run a command
-using an inline action link: Check Node
-version Show git status
+Revealed fragment 4
 
 5
-00:00:17,000 --> 00:00:19,500
-`terminal.run` — YAML Block
+00:00:17,000 --> 00:00:22,500
+Entered slide 2
 
 6
-00:00:19,500 --> 00:00:25,000
-`terminal.run` — YAML Block
+00:00:22,500 --> 00:00:25,000
+Revealed fragment 2
 
 7
-00:00:25,000 --> 00:00:27,500
-`terminal.run` — Cross-Platform One block,
-the right command on every OS:
+00:00:25,000 --> 00:00:33,500
+Entered slide 3
 
 8
-00:00:27,500 --> 00:00:33,000
-`terminal.run` — Cross-Platform One block,
-the right command on every OS:
+00:00:33,500 --> 00:00:36,000
+Revealed fragment 2
 
 9
-00:00:33,000 --> 00:00:38,500
-`terminal.run` — Cross-Platform One block,
-the right command on every OS:
+00:00:36,000 --> 00:00:38,500
+Revealed fragment 3
 
 10
 00:00:38,500 --> 00:00:43,000
-`terminal.run` — Cross-Platform One block,
-the right command on every OS:
+Revealed fragment 4

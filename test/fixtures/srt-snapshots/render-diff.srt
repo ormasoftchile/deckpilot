@@ -1,45 +1,27 @@
 1
 00:00:00,000 --> 00:00:03,500
-`render:diff` — Show Git Diffs Render a
-git diff inline. Perfect for code review
-presentations. Compare `package.json`
-against the previous commit:
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-`render:diff` — Show Git Diffs Render a
-git diff inline. Perfect for code review
-presentations. Compare `package.json`
-against the previous commit:
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:08,500
-`render:diff` — Show Git Diffs Render a
-git diff inline. Perfect for code review
-presentations. Compare `package.json`
-against the previous commit:
+Revealed fragment 3
 
 4
 00:00:08,500 --> 00:00:11,000
-`render:diff` — Show Git Diffs Render a
-git diff inline. Perfect for code review
-presentations. Compare `package.json`
-against the previous commit:
+Revealed fragment 4
 
 5
 00:00:11,000 --> 00:00:13,500
-`render:diff` — Specific Commit Compare
-against any ref — commit hash, tag, or
-branch:
+Entered slide 2
 
 6
 00:00:13,500 --> 00:00:16,000
-`render:diff` — Specific Commit Compare
-against any ref — commit hash, tag, or
-branch:
+Revealed fragment 2
 
 7
 00:00:16,000 --> 00:00:20,500
-`render:diff` — Specific Commit Compare
-against any ref — commit hash, tag, or
-branch:
+Revealed fragment 3

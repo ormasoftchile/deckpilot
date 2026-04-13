@@ -1,46 +1,31 @@
 1
 00:00:00,000 --> 00:00:03,500
-`render:file` — Embed File Content Embed
-live file contents directly in the slide.
-Content is read at presentation time —
-always current.
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-`render:file` — Embed File Content Embed
-live file contents directly in the slide.
-Content is read at presentation time —
-always current.
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:08,500
-`render:file` — Embed File Content Embed
-live file contents directly in the slide.
-Content is read at presentation time —
-always current.
+Revealed fragment 3
 
 4
 00:00:08,500 --> 00:00:11,000
-`render:file` — TypeScript
+Entered slide 2
 
 5
 00:00:11,000 --> 00:00:13,500
-`render:file` — TypeScript
+Revealed fragment 2
 
 6
 00:00:13,500 --> 00:00:16,000
-`render:file` — No Line Range Omit `lines`
-to embed the whole file (use with care on
-large files):
+Entered slide 3
 
 7
 00:00:16,000 --> 00:00:18,500
-`render:file` — No Line Range Omit `lines`
-to embed the whole file (use with care on
-large files):
+Revealed fragment 2
 
 8
 00:00:18,500 --> 00:00:23,000
-`render:file` — No Line Range Omit `lines`
-to embed the whole file (use with care on
-large files):
+Revealed fragment 3

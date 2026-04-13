@@ -1,66 +1,43 @@
 1
 00:00:00,000 --> 00:00:03,500
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:08,500
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Revealed fragment 3
 
 4
 00:00:08,500 --> 00:00:11,000
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Revealed fragment 4
 
 5
 00:00:11,000 --> 00:00:13,500
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Revealed fragment 5
 
 6
 00:00:13,500 --> 00:00:16,000
-`render:command` — Embed Command Output
-Run a command and embed its output inline.
-Executed when the slide is rendered. Node
-version: Current branch:
+Revealed fragment 6
 
 7
 00:00:16,000 --> 00:00:18,500
-`render:command` — Multiple Outputs
-Working directory: Source files:
+Entered slide 2
 
 8
 00:00:18,500 --> 00:00:21,000
-`render:command` — Multiple Outputs
-Working directory: Source files:
+Revealed fragment 2
 
 9
 00:00:21,000 --> 00:00:23,500
-`render:command` — Multiple Outputs
-Working directory: Source files:
+Revealed fragment 3
 
 10
 00:00:23,500 --> 00:00:26,000
-`render:command` — Multiple Outputs
-Working directory: Source files:
+Revealed fragment 4
 
 11
 00:00:26,000 --> 00:00:30,500
-`render:command` — Multiple Outputs
-Working directory: Source files:
+Revealed fragment 5
