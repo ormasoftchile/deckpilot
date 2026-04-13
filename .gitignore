@@ -48,6 +48,13 @@ test-results/
 # Allow committed snapshot fixtures
 !test/fixtures/**/*.srt
 
+# Recording output artifacts — generated, not source
+examples/recording-session.json
+examples/voiceover-script.json
+examples/voiceover-script.md
+examples/recordings/*.srt
+examples/recordings/*.mp4
+
 # AI tooling — never commit
 .squad/
 .copilot/

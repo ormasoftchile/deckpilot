@@ -22,6 +22,8 @@ export interface RecorderConfig {
   stopCommand: string;
   outputDir: string;
   outputExtension: string;
+  /** avfoundation / directshow screen device identifier, e.g. "0:none" or "1" */
+  screenDevice: string;
 }
 
 /**
@@ -34,6 +36,7 @@ export function getRecorderConfig(): RecorderConfig {
     stopCommand: config.get<string>('stopCommand', ''),
     outputDir: config.get<string>('outputDir', ''),
     outputExtension: config.get<string>('outputExtension', 'mp4'),
+    screenDevice: config.get<string>('screenDevice', '0:none'),
   };
 }
 
@@ -290,7 +293,8 @@ export class RecorderOrchestrator {
   ): Promise<string> {
     let result = template
       .replace(/\{\{outputPath\}\}/g, outputPath)
-      .replace(/\{\{sessionId\}\}/g, sessionId);
+      .replace(/\{\{sessionId\}\}/g, sessionId)
+      .replace(/\{\{screenDevice\}\}/g, this.config.screenDevice);
 
     // Resolve window bounds if any window template vars are present
     if (/\{\{window(X|Y|Width|Height)\}\}/.test(result)) {
@@ -325,8 +329,46 @@ export class RecorderOrchestrator {
     if (process.platform === 'win32') {
       return this.getWindowBoundsWindows();
     }
-    // macOS/Linux: not implemented yet
+    if (process.platform === 'darwin') {
+      return this.getWindowBoundsMac();
+    }
     return undefined;
+  }
+
+  /**
+   * Get the VS Code window bounds on macOS using osascript.
+   */
+  private getWindowBoundsMac(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+    return new Promise((resolve) => {
+      const script = [
+        'tell application "System Events"',
+        '  tell process "Code"',
+        '    set {px, py} to position of window 1',
+        '    set {pw, ph} to size of window 1',
+        '  end tell',
+        'end tell',
+        'return (px as string) & "," & (py as string) & "," & (pw as string) & "," & (ph as string)',
+      ].join('\n');
+
+      cp.exec(
+        `osascript -e '${script.replace(/'/g, "'\"'\"'")}'`,
+        { timeout: 5000 },
+        (err, stdout) => {
+          if (err) {
+            this.outputChannel.appendLine(`[Recorder] macOS window bounds error: ${err.message}`);
+            resolve(undefined);
+            return;
+          }
+          const parts = stdout.trim().split(',').map(Number);
+          if (parts.length === 4 && parts.every(n => !isNaN(n)) && parts[2] > 0 && parts[3] > 0) {
+            resolve({ x: parts[0], y: parts[1], width: parts[2], height: parts[3] });
+          } else {
+            this.outputChannel.appendLine(`[Recorder] Unexpected macOS bounds output: ${stdout.trim()}`);
+            resolve(undefined);
+          }
+        },
+      );
+    });
   }
 
   /**

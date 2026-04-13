@@ -27,7 +27,20 @@ export function parseCues(slides: Slide[]): VoiceOverCue[] {
   const cues: VoiceOverCue[] = [];
 
   for (const slide of slides) {
-    const commentCues = extractCommentCues(slide.content, slide.index);
+    // Use pre-extracted voiceCues if available (set by slideParser before it
+    // strips the comments from slide.content).  Fall back to re-parsing
+    // slide.content for callers that build Slide objects independently.
+    let commentCues: VoiceOverCue[];
+    if (slide.voiceCues && slide.voiceCues.length > 0) {
+      commentCues = slide.voiceCues.map(c => ({
+        slideIndex: slide.index,
+        text: c.text,
+        source: 'comment' as const,
+        ...(c.fragmentIndex !== undefined ? { fragmentIndex: c.fragmentIndex } : {}),
+      }));
+    } else {
+      commentCues = extractCommentCues(slide.content, slide.index);
+    }
     cues.push(...commentCues);
 
     // If no comment cues found and speaker notes exist, use notes as fallback

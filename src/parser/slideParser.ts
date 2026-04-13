@@ -191,7 +191,11 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   const { checkpoint, cleanedContent: contentAfterCheckpoint } = extractCheckpoint(content);
   content = contentAfterCheckpoint;
 
-  // Step 1.6: Strip voice-over cue comments — they are for recording mode only
+  // Step 1.6: Extract voice-over cues BEFORE stripping them, so parseCues()
+  // can still find them after slide.content no longer contains the comments.
+  const voiceCues = extractVoiceCues(content);
+
+  // Strip voice-over cue comments — they are for recording mode only
   // and must not appear in the rendered presentation HTML
   content = content.replace(/<!--\s*voice(?:\[\d+\])?:[\s\S]*?-->/gi, '').trim();
 
@@ -223,6 +227,9 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   // Create base slide
   const slide = createSlide(index, content, html, frontmatter, checkpoint);
   slide.fragmentCount = fragmentCount;
+  if (voiceCues.length > 0) {
+    slide.voiceCues = voiceCues;
+  }
   
   // Step 6: Parse interactive action links from original content (inline links still parsed)
   const inlineElements = parseActionLinks(content, index);
@@ -247,6 +254,29 @@ function parseSlideContent(index: number, rawContent: string): Slide {
  */
 export function renderMarkdown(content: string): string {
   return md.render(content);
+}
+
+/**
+ * Extract voice-over cues from raw slide content before they are stripped.
+ * Returns minimal objects — slideIndex is assigned by the caller (parseCues).
+ */
+function extractVoiceCues(
+  content: string,
+): Array<{ fragmentIndex?: number; text: string }> {
+  const cues: Array<{ fragmentIndex?: number; text: string }> = [];
+  const regex = /<!--\s*voice(?:\[(\d+)\])?:\s*([\s\S]*?)\s*-->/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    const text = match[2].trim();
+    if (text.length > 0) {
+      const cue: { fragmentIndex?: number; text: string } = { text };
+      if (match[1] !== undefined) {
+        cue.fragmentIndex = parseInt(match[1], 10);
+      }
+      cues.push(cue);
+    }
+  }
+  return cues;
 }
 
 /**

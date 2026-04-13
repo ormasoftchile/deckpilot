@@ -1,6 +1,7 @@
 {
-    "executableTalk.recording.startCommand": "ffmpeg -f gdigrab -i desktop -vf \"pad=ceil(iw/2)*2:ceil(ih/2)*2\" -pix_fmt yuv420p -preset ultrafast -y {{outputPath}}",
+    "executableTalk.recording.startCommand": "/opt/homebrew/bin/ffmpeg -f avfoundation -i \"{{screenDevice}}\" -vf crop={{windowWidth}}:{{windowHeight}}:{{windowX}}:{{windowY}} -r 30 -c:v libx264 -preset ultrafast -pix_fmt yuv420p {{outputPath}}",
     "executableTalk.recording.stopCommand": "",
     "executableTalk.recording.outputDir": "./recordings",
-    "executableTalk.recording.outputExtension": "mp4"
+    "executableTalk.recording.outputExtension": "mp4",
+    "executableTalk.recording.screenDevice": "0:none"
 }

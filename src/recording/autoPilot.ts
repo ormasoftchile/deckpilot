@@ -109,13 +109,13 @@ export function buildAutoPilotPlan(
         (a, b) => a.position.line - b.position.line,
       );
 
-      // Map element ID → data-fragment index as assigned by processFragments.
+      // Map action.id → data-fragment index as assigned by processFragments.
       // Elements with data-no-fragment (fragment: false) are absent from the map
       // and will be triggered at slide-entry level (already visible on load).
       const fragMap = extractElementFragmentMap(slide.html);
 
       // Elements not enclosed in any fragment → fire after slide-level wait
-      const entryElements = allElements.filter(el => !fragMap.has(el.id));
+      const entryElements = allElements.filter(el => !fragMap.has(el.action.id));
       for (const el of entryElements) {
         addActionSteps(steps, el, si, undefined, cfg);
       }
@@ -144,7 +144,7 @@ export function buildAutoPilotPlan(
         });
 
         // Fire all elements whose button is inside this specific fragment
-        const fragElements = allElements.filter(el => fragMap.get(el.id) === fi);
+        const fragElements = allElements.filter(el => fragMap.get(el.action.id) === fi);
         for (const el of fragElements) {
           addActionSteps(steps, el, si, fi, cfg);
         }
@@ -169,12 +169,15 @@ export function buildAutoPilotPlan(
 }
 
 /**
- * Extract a map of action-element ID → data-fragment index from the slide's
+ * Extract a map of Action.id → data-fragment index from the slide's
  * rendered HTML.  The HTML produced by the parser has each interactive
  * button's wrapping <p> annotated with data-fragment="N" by processFragments.
  * We scan for data-action-id occurrences and look backwards to find the
  * nearest data-fragment attribute — that attribute belongs to the element's
  * enclosing fragment container.
+ *
+ * Keys are Action.id values (from data-action-id attribute), not
+ * InteractiveElement.id values — callers must use el.action.id for lookups.
  *
  * Elements that are not inside any fragment (data-no-fragment or not wrapped
  * by a fragment element) will be absent from the returned map.
