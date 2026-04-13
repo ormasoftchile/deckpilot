@@ -139,7 +139,6 @@ function createSegment(
   const eventSummary = summarizeEvents(spanEvents);
   const draftNarration = cue?.text
     ?? slide?.speakerNotes
-    ?? extractSlideText(slide)
     ?? eventSummary
     ?? '';
 
@@ -222,47 +221,3 @@ function summarizeEvents(events: RecordingEvent[]): string {
   return parts.join(', ');
 }
 
-/**
- * Extract readable text from slide content for draft narration.
- * Strips markdown syntax, action links, render directives,
- * and HTML comments to produce plain prose.
- * Returns undefined if no meaningful text remains.
- */
-function extractSlideText(slide: Slide | undefined): string | undefined {
-  if (!slide) {
-    return undefined;
-  }
-
-  let text = slide.content;
-
-  // Remove HTML comments (including voice cues)
-  text = text.replace(/<!--[\s\S]*?-->/g, '');
-  // Remove fenced code blocks (action blocks, render blocks)
-  text = text.replace(/```[\s\S]*?```/g, '');
-  // Remove action links [label](action:...)
-  text = text.replace(/\[([^\]]*)\]\(action:[^)]*\)/g, '$1');
-  // Remove render directives [](render:...)
-  text = text.replace(/\[([^\]]*)\]\(render:[^)]*\)/g, '');
-  // Remove remaining markdown links [text](url)
-  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-  // Remove markdown headings markers
-  text = text.replace(/^#{1,6}\s+/gm, '');
-  // Remove bold/italic markers
-  text = text.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
-  text = text.replace(/_{1,3}([^_]+)_{1,3}/g, '$1');
-  // Remove frontmatter delimiters
-  text = text.replace(/^---\s*$/gm, '');
-  // Collapse whitespace
-  text = text.replace(/\n{2,}/g, '\n').trim();
-
-  if (text.length === 0) {
-    return undefined;
-  }
-
-  // Combine title + body into a narration-friendly string
-  const title = slide.frontmatter?.title;
-  if (title && !text.startsWith(title)) {
-    return `${title}. ${text}`;
-  }
-  return text;
-}
