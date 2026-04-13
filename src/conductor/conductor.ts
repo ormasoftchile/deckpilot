@@ -1365,6 +1365,15 @@ export class Conductor implements vscode.Disposable {
     // Execute action
     this.webviewProvider.sendActionStatusChanged(statusId, 'running');
 
+    // In auto-pilot mode the webview runs in a separate context and postMessage
+    // delivery is async.  Without a brief pause the VS Code side-effect
+    // (terminal open, editor highlight, …) fires before the webview has had a
+    // chance to render the 'running' button state and any showCommand preview,
+    // causing recordings to show the action result before the command label.
+    if (this.autoPilotRunning) {
+      await this.delay(300);
+    }
+
     // Record action.triggered if recording (scrub sensitive params)
     if (this.recordingState.isRecording()) {
       let scrubbedTarget = typeof action.params?.path === 'string'
