@@ -234,6 +234,11 @@
           "type": "string",
           "default": "mp4",
           "description": "File extension for the recorder output file (e.g., mp4, mkv, webm)."
+        },
+        "executableTalk.recording.screenDevice": {
+          "type": "string",
+          "default": "0:none",
+          "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '0:none', '1:none', etc. For directshow (Windows) use the display name."
         }
       }
     }

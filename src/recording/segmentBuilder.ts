@@ -36,13 +36,19 @@ export function buildSegments(
 
   // Identify boundary events (ordered by time)
   const sorted = [...events].sort((a, b) => a.relativeTimeMs - b.relativeTimeMs);
-  const boundaries = identifyBoundaries(sorted, cues);
+
+  // Build ordinal cue map before identifying boundaries so both phases use
+  // the same matching: voice[N] means the Nth fragment reveal on the slide,
+  // not the element whose data-fragment attribute equals N.
+  const cueForEvent = buildCueForEventMap(sorted, cues);
+
+  const boundaries = identifyBoundaries(sorted, cues, cueForEvent);
 
   if (boundaries.length === 0) {
     // Single segment spanning entire session
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
-    return [createSegment(first, last, sorted, cues, slides, ignoredIntervals)];
+    return [createSegment(first, last, sorted, cueForEvent, cues, slides, ignoredIntervals)];
   }
 
   const segments: RecordingSegment[] = [];
@@ -58,10 +64,50 @@ export function buildSegments(
            e.relativeTimeMs < endEvent.relativeTimeMs,
     );
 
-    segments.push(createSegment(startEvent, endEvent, spanEvents, cues, slides, ignoredIntervals));
+    segments.push(createSegment(startEvent, endEvent, spanEvents, cueForEvent, cues, slides, ignoredIntervals));
   }
 
   return segments;
+}
+
+/**
+ * Build a map from fragment.revealed event ID → the VoiceOverCue that should
+ * narrate that moment.
+ *
+ * Matching is ORDINAL: <!-- voice[1]: --> is paired with the 1st
+ * fragment.revealed event on that slide, <!-- voice[2]: --> with the 2nd,
+ * etc.  This matches how authors write cues — next to the content they're
+ * introducing in document order — rather than requiring them to know the
+ * absolute data-fragment index assigned by the fragment processor.
+ */
+function buildCueForEventMap(
+  sorted: RecordingEvent[],
+  cues: VoiceOverCue[],
+): Map<string, VoiceOverCue> {
+  const map = new Map<string, VoiceOverCue>();
+
+  const slideIndices = new Set(
+    cues.filter(c => c.fragmentIndex !== undefined).map(c => c.slideIndex),
+  );
+
+  for (const slideIndex of slideIndices) {
+    // Sort fragment cues by their declared ordinal (voice[1] before voice[2])
+    const fragCues = cues
+      .filter(c => c.slideIndex === slideIndex && c.fragmentIndex !== undefined)
+      .sort((a, b) => (a.fragmentIndex ?? 0) - (b.fragmentIndex ?? 0));
+
+    // Get all fragment.revealed events on this slide in chronological order
+    const fragEvents = sorted.filter(
+      e => e.slideIndex === slideIndex && e.type === 'fragment.revealed',
+    );
+
+    // Pair Nth cue with Nth event
+    for (let i = 0; i < fragCues.length && i < fragEvents.length; i++) {
+      map.set(fragEvents[i].id, fragCues[i]);
+    }
+  }
+
+  return map;
 }
 
 /**
@@ -70,20 +116,31 @@ export function buildSegments(
 function identifyBoundaries(
   sorted: RecordingEvent[],
   cues: VoiceOverCue[],
+  cueForEvent: Map<string, VoiceOverCue>,
 ): RecordingEvent[] {
   const boundaries: RecordingEvent[] = [];
   const seen = new Set<string>();
 
-  // Priority 1: events that correspond to explicit cues
+  // Priority 1a: slide-level cues — match the first event on each slide
   for (const cue of cues) {
+    if (cue.fragmentIndex !== undefined) { continue; }
     const match = sorted.find(e =>
       e.slideIndex === cue.slideIndex &&
-      (cue.fragmentIndex === undefined || e.fragmentIndex === cue.fragmentIndex) &&
       !seen.has(e.id),
     );
     if (match) {
       seen.add(match.id);
       boundaries.push(match);
+    }
+  }
+
+  // Priority 1b: fragment cues — already mapped to specific events by ordinal
+  // in cueForEvent; just mark those events as boundaries.
+  for (const [eventId] of cueForEvent) {
+    const event = sorted.find(e => e.id === eventId && !seen.has(e.id));
+    if (event) {
+      seen.add(event.id);
+      boundaries.push(event);
     }
   }
 
@@ -115,6 +172,7 @@ function createSegment(
   startEvent: RecordingEvent,
   endEvent: RecordingEvent,
   spanEvents: RecordingEvent[],
+  cueForEvent: Map<string, VoiceOverCue>,
   cues: VoiceOverCue[],
   slides: Slide[],
   ignoredIntervals: IgnoredInterval[] = [],
@@ -123,22 +181,22 @@ function createSegment(
   const slide = slides[slideIndex];
   const slideTitle = slide?.frontmatter?.title;
 
-  // Find matching cue — fragment-level cues take priority over slide-level cues
-  const fragmentCue = cues.find(c =>
-    c.slideIndex === slideIndex &&
-    c.fragmentIndex !== undefined &&
-    c.fragmentIndex === startEvent.fragmentIndex,
-  );
-  const slideCue = cues.find(c =>
-    c.slideIndex === slideIndex &&
-    c.fragmentIndex === undefined &&
-    startEvent.fragmentIndex === undefined,
-  );
-  const cue = fragmentCue ?? slideCue;
+  // Look up the cue for this specific event (ordinal-matched for fragments).
+  const eventCue = cueForEvent.get(startEvent.id);
+
+  // Slide-level cue and speaker notes only apply on the slide entry segment,
+  // not on every fragment segment — otherwise the same text repeats N times.
+  const isSlideEntry =
+    startEvent.type === 'slide.entered' || startEvent.type === 'session.started';
+  const slideCue = isSlideEntry
+    ? cues.find(c => c.slideIndex === slideIndex && c.fragmentIndex === undefined)
+    : undefined;
+
+  const cue = eventCue ?? slideCue;
 
   const eventSummary = summarizeEvents(spanEvents);
   const draftNarration = cue?.text
-    ?? slide?.speakerNotes
+    ?? (isSlideEntry ? slide?.speakerNotes : undefined)
     ?? eventSummary
     ?? '';
 
@@ -202,17 +260,13 @@ function summarizeEvents(events: RecordingEvent[]): string {
         parts.push(`Ran command: ${String(e.metadata?.['command'] ?? 'unknown')}`);
         break;
       case 'action.triggered':
-        parts.push(`Triggered action ${String(e.metadata?.['actionId'] ?? '')}`);
+        // Internal event — not suitable as narration text
         break;
       case 'scene.restored':
         parts.push(`Restored scene ${String(e.metadata?.['sceneName'] ?? '')}`);
         break;
-      case 'slide.entered':
-        parts.push(`Entered slide ${e.slideIndex + 1}`);
-        break;
-      case 'fragment.revealed':
-        parts.push(`Revealed fragment ${(e.fragmentIndex ?? 0) + 1}`);
-        break;
+      // slide.entered and fragment.revealed are navigation boundaries, not
+      // caption content — omit them so they don't bleed into subtitles.
       default:
         break;
     }

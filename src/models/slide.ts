@@ -79,6 +79,13 @@ export interface Slide {
   fragmentCount: number;
   /** Checkpoint identifier for onboarding mode */
   checkpoint?: string;
+  /**
+   * Voice-over cues extracted from <!-- voice: --> and <!-- voice[N]: -->
+   * comments in the raw slide content.  Populated by the parser before cue
+   * comments are stripped from content.  Used by parseCues() so cues remain
+   * available even though the comments are removed from rendered HTML.
+   */
+  voiceCues?: Array<{ fragmentIndex?: number; text: string }>;
 }
 
 /**

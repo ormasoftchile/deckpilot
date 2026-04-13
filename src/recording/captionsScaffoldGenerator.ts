@@ -18,19 +18,20 @@ export class CaptionsScaffoldGenerator {
   generateSrt(session: RecordingSession): string {
     const lines: string[] = [];
     const segments = session.segments;
+    let captionIndex = 0;
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
-      const index = i + 1;
       const start = formatSrtTimestamp(seg.startTimeMs);
       const end = formatSrtTimestamp(seg.endTimeMs);
-      const text = seg.draftNarration || seg.cueText || seg.eventSummary || '';
+      const text = seg.draftNarration || seg.cueText || '';
 
       if (text.length === 0) {
         continue;
       }
 
-      lines.push(String(index));
+      captionIndex++;
+      lines.push(String(captionIndex));
       lines.push(`${start} --> ${end}`);
       lines.push(wrapText(text, 42));
       lines.push('');
