@@ -1,143 +1,55 @@
 1
 00:00:00,000 --> 00:00:03,500
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:08,500
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Revealed fragment 3
 
 4
 00:00:08,500 --> 00:00:11,000
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Revealed fragment 4
 
 5
 00:00:11,000 --> 00:00:13,500
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Revealed fragment 5
 
 6
 00:00:13,500 --> 00:00:16,000
-Scenes & Navigation Scenes let you jump to
-named checkpoints without navigating slide
-by slide. Keyboard shortcuts: - `Ctrl+G` /
-`Cmd+G` — open the slide picker -
-`Alt+Left` — go back to the previous slide
-- Type a slide number + `Enter` — jump
-directly
+Revealed fragment 6
 
 7
 00:00:16,000 --> 00:00:18,500
-Breadcrumb Trail The breadcrumb bar at the
-bottom shows your navigation history. Each
-entry shows the slide number and how you
-arrived: | Symbol | Meaning | |---|---| |
-`→` | Sequential (arrow keys) | | `⤳` |
-Jump (number or picker) | | `←` | Go back
-| | `📌` | Scene restore | Click any
-breadcrumb to jump back to that slide.
+Entered slide 2
 
 8
 00:00:18,500 --> 00:00:21,000
-Breadcrumb Trail The breadcrumb bar at the
-bottom shows your navigation history. Each
-entry shows the slide number and how you
-arrived: | Symbol | Meaning | |---|---| |
-`→` | Sequential (arrow keys) | | `⤳` |
-Jump (number or picker) | | `←` | Go back
-| | `📌` | Scene restore | Click any
-breadcrumb to jump back to that slide.
+Revealed fragment 2
 
 9
 00:00:21,000 --> 00:00:23,500
-Breadcrumb Trail The breadcrumb bar at the
-bottom shows your navigation history. Each
-entry shows the slide number and how you
-arrived: | Symbol | Meaning | |---|---| |
-`→` | Sequential (arrow keys) | | `⤳` |
-Jump (number or picker) | | `←` | Go back
-| | `📌` | Scene restore | Click any
-breadcrumb to jump back to that slide.
+Revealed fragment 3
 
 10
 00:00:23,500 --> 00:00:26,000
-Breadcrumb Trail The breadcrumb bar at the
-bottom shows your navigation history. Each
-entry shows the slide number and how you
-arrived: | Symbol | Meaning | |---|---| |
-`→` | Sequential (arrow keys) | | `⤳` |
-Jump (number or picker) | | `←` | Go back
-| | `📌` | Scene restore | Click any
-breadcrumb to jump back to that slide.
+Revealed fragment 4
 
 11
 00:00:26,000 --> 00:00:28,500
-Named Scenes in Frontmatter Define scenes
-in deck frontmatter — each `name` becomes
-an entry in the scene picker. This deck
-has two scenes: start (slide 1) and demo
-(this slide). Open the scene picker
-(`Ctrl+R` / `Cmd+R`) and select start to
-jump back.
+Entered slide 3
 
 12
 00:00:28,500 --> 00:00:31,000
-Named Scenes in Frontmatter Define scenes
-in deck frontmatter — each `name` becomes
-an entry in the scene picker. This deck
-has two scenes: start (slide 1) and demo
-(this slide). Open the scene picker
-(`Ctrl+R` / `Cmd+R`) and select start to
-jump back.
+Revealed fragment 2
 
 13
 00:00:31,000 --> 00:00:33,500
-Named Scenes in Frontmatter Define scenes
-in deck frontmatter — each `name` becomes
-an entry in the scene picker. This deck
-has two scenes: start (slide 1) and demo
-(this slide). Open the scene picker
-(`Ctrl+R` / `Cmd+R`) and select start to
-jump back.
+Revealed fragment 3
 
 14
 00:00:33,500 --> 00:00:38,000
-Named Scenes in Frontmatter Define scenes
-in deck frontmatter — each `name` becomes
-an entry in the scene picker. This deck
-has two scenes: start (slide 1) and demo
-(this slide). Open the scene picker
-(`Ctrl+R` / `Cmd+R`) and select start to
-jump back.
+Revealed fragment 4

@@ -1,82 +1,39 @@
 1
-00:00:00,000 --> 00:00:03,500
-Cross-Platform Commands Use a map instead
-of a single string to run the right
-command per OS. The current platform's key
-is selected at execution time.
+00:00:00,000 --> 00:00:06,500
+Entered slide 1
 
 2
-00:00:03,500 --> 00:00:09,000
-Cross-Platform Commands Use a map instead
-of a single string to run the right
-command per OS. The current platform's key
-is selected at execution time.
+00:00:06,500 --> 00:00:09,000
+Revealed fragment 2
 
 3
 00:00:09,000 --> 00:00:11,500
-Cross-Platform Commands Use a map instead
-of a single string to run the right
-command per OS. The current platform's key
-is selected at execution time.
+Revealed fragment 3
 
 4
-00:00:11,500 --> 00:00:14,000
-Path Placeholders Use built-in
-placeholders that resolve per platform: |
-Placeholder | macOS/Linux | Windows |
-|---|---|---| | `${pathSep}` | `/` | `\` |
-| `${home}` | `/Users/you` |
-`C:\Users\you` | | `${shell}` | `/bin/zsh`
-| `cmd.exe` | | `${pathDelimiter}` | `:` |
-`;` |
+00:00:11,500 --> 00:00:17,000
+Entered slide 2
 
 5
-00:00:14,000 --> 00:00:19,500
-Path Placeholders Use built-in
-placeholders that resolve per platform: |
-Placeholder | macOS/Linux | Windows |
-|---|---|---| | `${pathSep}` | `/` | `\` |
-| `${home}` | `/Users/you` |
-`C:\Users\you` | | `${shell}` | `/bin/zsh`
-| `cmd.exe` | | `${pathDelimiter}` | `:` |
-`;` |
+00:00:17,000 --> 00:00:19,500
+Revealed fragment 2
 
 6
 00:00:19,500 --> 00:00:22,000
-Path Placeholders Use built-in
-placeholders that resolve per platform: |
-Placeholder | macOS/Linux | Windows |
-|---|---|---| | `${pathSep}` | `/` | `\` |
-| `${home}` | `/Users/you` |
-`C:\Users\you` | | `${shell}` | `/bin/zsh`
-| `cmd.exe` | | `${pathDelimiter}` | `:` |
-`;` |
+Revealed fragment 3
 
 7
 00:00:22,000 --> 00:00:24,500
-Path Placeholders Use built-in
-placeholders that resolve per platform: |
-Placeholder | macOS/Linux | Windows |
-|---|---|---| | `${pathSep}` | `/` | `\` |
-| `${home}` | `/Users/you` |
-`C:\Users\you` | | `${shell}` | `/bin/zsh`
-| `cmd.exe` | | `${pathDelimiter}` | `:` |
-`;` |
+Revealed fragment 4
 
 8
-00:00:24,500 --> 00:00:27,000
-`default` Fallback Add a `default` key to
-handle unknown or unlisted platforms
-gracefully:
+00:00:24,500 --> 00:00:30,000
+Entered slide 3
 
 9
-00:00:27,000 --> 00:00:32,500
-`default` Fallback Add a `default` key to
-handle unknown or unlisted platforms
-gracefully:
+00:00:30,000 --> 00:00:32,500
+Revealed fragment 2
 
 10
 00:00:32,500 --> 00:00:37,000
-`default` Fallback Add a `default` key to
-handle unknown or unlisted platforms
-gracefully:
+Revealed fragment 3

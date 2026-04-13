@@ -1,47 +1,31 @@
 1
 00:00:00,000 --> 00:00:03,500
-`vscode.command` Execute any VS Code
-command from a slide. Find command IDs in
-the Command Palette (`Cmd+Shift+P`) —
-hover any entry to copy its ID.
+Entered slide 1
 
 2
 00:00:03,500 --> 00:00:06,000
-`vscode.command` Execute any VS Code
-command from a slide. Find command IDs in
-the Command Palette (`Cmd+Shift+P`) —
-hover any entry to copy its ID.
+Revealed fragment 2
 
 3
 00:00:06,000 --> 00:00:08,500
-`vscode.command` Execute any VS Code
-command from a slide. Find command IDs in
-the Command Palette (`Cmd+Shift+P`) —
-hover any entry to copy its ID.
+Revealed fragment 3
 
 4
 00:00:08,500 --> 00:00:11,000
-`vscode.command` Execute any VS Code
-command from a slide. Find command IDs in
-the Command Palette (`Cmd+Shift+P`) —
-hover any entry to copy its ID.
+Revealed fragment 4
 
 5
 00:00:11,000 --> 00:00:13,500
-`vscode.command` — With Arguments Pass
-arguments using the `args` param:
+Entered slide 2
 
 6
 00:00:13,500 --> 00:00:16,000
-`vscode.command` — With Arguments Pass
-arguments using the `args` param:
+Revealed fragment 2
 
 7
 00:00:16,000 --> 00:00:18,500
-`vscode.command` — With Arguments Pass
-arguments using the `args` param:
+Revealed fragment 3
 
 8
 00:00:18,500 --> 00:00:23,000
-`vscode.command` — With Arguments Pass
-arguments using the `args` param:
+Revealed fragment 4
