@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:03,500
+`debug.start` Launch a debug session
+defined in `.vscode/launch.json`. Requires
+Workspace Trust. The `configName` value
+must exactly match the `"name"` field in
+your `launch.json` configuration.
+
+2
+00:00:03,500 --> 00:00:06,000
+`debug.start` Launch a debug session
+defined in `.vscode/launch.json`. Requires
+Workspace Trust. The `configName` value
+must exactly match the `"name"` field in
+your `launch.json` configuration.
+
+3
+00:00:06,000 --> 00:00:08,500
+`debug.start` Launch a debug session
+defined in `.vscode/launch.json`. Requires
+Workspace Trust. The `configName` value
+must exactly match the `"name"` field in
+your `launch.json` configuration.
+
+4
+00:00:08,500 --> 00:00:11,000
+`debug.start` Launch a debug session
+defined in `.vscode/launch.json`. Requires
+Workspace Trust. The `configName` value
+must exactly match the `"name"` field in
+your `launch.json` configuration.
+
+5
+00:00:11,000 --> 00:00:13,500
+`debug.start` — Typical Setup
+
+6
+00:00:13,500 --> 00:00:18,000
+`debug.start` — Typical Setup

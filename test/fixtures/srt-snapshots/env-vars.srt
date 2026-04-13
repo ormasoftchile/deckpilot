@@ -1,0 +1,106 @@
+1
+00:00:00,000 --> 00:00:03,500
+`{{VAR}}` — Environment Variable
+Interpolation Define variables in a `.env`
+file at the deck's `basePath`. Use
+`{{VAR}}` anywhere in slide content or
+action params. If `MYAPP=production` is
+set: > Deploying to {{MYAPP}} The resolved
+value appears in the slide for the
+audience to see.
+
+2
+00:00:03,500 --> 00:00:06,000
+`{{VAR}}` — Environment Variable
+Interpolation Define variables in a `.env`
+file at the deck's `basePath`. Use
+`{{VAR}}` anywhere in slide content or
+action params. If `MYAPP=production` is
+set: > Deploying to {{MYAPP}} The resolved
+value appears in the slide for the
+audience to see.
+
+3
+00:00:06,000 --> 00:00:08,500
+`{{VAR}}` — Environment Variable
+Interpolation Define variables in a `.env`
+file at the deck's `basePath`. Use
+`{{VAR}}` anywhere in slide content or
+action params. If `MYAPP=production` is
+set: > Deploying to {{MYAPP}} The resolved
+value appears in the slide for the
+audience to see.
+
+4
+00:00:08,500 --> 00:00:11,000
+`{{VAR}}` — Environment Variable
+Interpolation Define variables in a `.env`
+file at the deck's `basePath`. Use
+`{{VAR}}` anywhere in slide content or
+action params. If `MYAPP=production` is
+set: > Deploying to {{MYAPP}} The resolved
+value appears in the slide for the
+audience to see.
+
+5
+00:00:11,000 --> 00:00:13,500
+`{{VAR}}` — Environment Variable
+Interpolation Define variables in a `.env`
+file at the deck's `basePath`. Use
+`{{VAR}}` anywhere in slide content or
+action params. If `MYAPP=production` is
+set: > Deploying to {{MYAPP}} The resolved
+value appears in the slide for the
+audience to see.
+
+6
+00:00:13,500 --> 00:00:16,000
+`{{VAR}}` in Action Params Variables in
+action params are resolved at execution
+time: Secrets stay masked — non-secret
+vars get their value substituted.
+
+7
+00:00:16,000 --> 00:00:21,500
+`{{VAR}}` in Action Params Variables in
+action params are resolved at execution
+time: Secrets stay masked — non-secret
+vars get their value substituted.
+
+8
+00:00:21,500 --> 00:00:24,000
+`{{VAR}}` in Action Params Variables in
+action params are resolved at execution
+time: Secrets stay masked — non-secret
+vars get their value substituted.
+
+9
+00:00:24,000 --> 00:00:26,500
+`{{VAR}}` in Action Params Variables in
+action params are resolved at execution
+time: Secrets stay masked — non-secret
+vars get their value substituted.
+
+10
+00:00:26,500 --> 00:00:29,000
+`showCommand: true` Render a code preview
+next to the button so the audience sees
+what will run before clicking:
+
+11
+00:00:29,000 --> 00:00:34,500
+`showCommand: true` Render a code preview
+next to the button so the audience sees
+what will run before clicking:
+
+12
+00:00:34,500 --> 00:00:40,000
+`showCommand: true` Render a code preview
+next to the button so the audience sees
+what will run before clicking:
+
+13
+00:00:40,000 --> 00:00:44,500
+`showCommand: true` Render a code preview
+next to the button so the audience sees
+what will run before clicking:

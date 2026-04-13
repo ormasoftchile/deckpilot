@@ -1,0 +1,199 @@
+1
+00:00:00,000 --> 00:00:03,500
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+2
+00:00:03,500 --> 00:00:06,000
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+3
+00:00:06,000 --> 00:00:08,500
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+4
+00:00:08,500 --> 00:00:11,000
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+5
+00:00:11,000 --> 00:00:13,500
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+6
+00:00:13,500 --> 00:00:16,000
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+7
+00:00:16,000 --> 00:00:18,500
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+8
+00:00:18,500 --> 00:00:21,000
+Fragments — What Auto-Fragments Every
+block-level element reveals on its own
+step automatically. Press → to advance:
+Paragraph one steps in first. Paragraph
+two steps in second. - List item A - List
+item B - List item C > Blockquotes step in
+too.
+
+9
+00:00:21,000 --> 00:00:23,500
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+10
+00:00:23,500 --> 00:00:29,000
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+11
+00:00:29,000 --> 00:00:31,500
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+12
+00:00:31,500 --> 00:00:34,000
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+13
+00:00:34,000 --> 00:00:36,500
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+14
+00:00:36,500 --> 00:00:39,000
+Fragments — What Does NOT Fragment Fenced
+code blocks ( action type:
+editor.highlight path: src/extension.ts
+lines: 1-10 label: Highlight the imports
+```
+
+15
+00:00:39,000 --> 00:00:41,500
+Fragments — `:::group` Use `:::group` to
+reveal multiple items together as a single
+step: :::group - Item A - Item B reveals
+at the same time as A ::: - Item C is its
+own step - Item D is its own step
+
+16
+00:00:41,500 --> 00:00:44,000
+Fragments — `:::group` Use `:::group` to
+reveal multiple items together as a single
+step: :::group - Item A - Item B reveals
+at the same time as A ::: - Item C is its
+own step - Item D is its own step
+
+17
+00:00:44,000 --> 00:00:46,500
+Fragments — `:::group` Use `:::group` to
+reveal multiple items together as a single
+step: :::group - Item A - Item B reveals
+at the same time as A ::: - Item C is its
+own step - Item D is its own step
+
+18
+00:00:46,500 --> 00:00:49,000
+Fragments — `:::group` Use `:::group` to
+reveal multiple items together as a single
+step: :::group - Item A - Item B reveals
+at the same time as A ::: - Item C is its
+own step - Item D is its own step
+
+19
+00:00:49,000 --> 00:00:51,500
+Fragments — `:::group` Use `:::group` to
+reveal multiple items together as a single
+step: :::group - Item A - Item B reveals
+at the same time as A ::: - Item C is its
+own step - Item D is its own step
+
+20
+00:00:51,500 --> 00:00:54,000
+Fragments — `fragment: false` Set
+`fragment: false` on an action button to
+keep it always visible — useful for a
+reference action the audience might need
+at any point:
+
+21
+00:00:54,000 --> 00:00:59,500
+Fragments — `fragment: false` Set
+`fragment: false` on an action button to
+keep it always visible — useful for a
+reference action the audience might need
+at any point:
+
+22
+00:00:59,500 --> 00:01:05,000
+Fragments — `fragment: false` Set
+`fragment: false` on an action button to
+keep it always visible — useful for a
+reference action the audience might need
+at any point:
+
+23
+00:01:05,000 --> 00:01:09,500
+Fragments — `fragment: false` Set
+`fragment: false` on an action button to
+keep it always visible — useful for a
+reference action the audience might need
+at any point:

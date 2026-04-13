@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:03,500
+`file.open` — Inline Link Open a file
+using a Markdown action link: Open
+package.json Open extension entry point
+
+2
+00:00:03,500 --> 00:00:09,000
+`file.open` — Inline Link Open a file
+using a Markdown action link: Open
+package.json Open extension entry point
+
+3
+00:00:09,000 --> 00:00:14,500
+`file.open` — Inline Link Open a file
+using a Markdown action link: Open
+package.json Open extension entry point
+
+4
+00:00:14,500 --> 00:00:17,000
+`file.open` — Inline Link Open a file
+using a Markdown action link: Open
+package.json Open extension entry point
+
+5
+00:00:17,000 --> 00:00:19,500
+`file.open` — YAML Block The YAML form is
+cleaner for complex params:
+
+6
+00:00:19,500 --> 00:00:25,000
+`file.open` — YAML Block The YAML form is
+cleaner for complex params:
+
+7
+00:00:25,000 --> 00:00:30,500
+`file.open` — YAML Block The YAML form is
+cleaner for complex params:
+
+8
+00:00:30,500 --> 00:00:35,000
+`file.open` — YAML Block The YAML form is
+cleaner for complex params:

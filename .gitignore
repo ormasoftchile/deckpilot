@@ -45,6 +45,8 @@ test-results/
 # Recording binaries and transcripts
 *.mp4
 *.srt
+# Allow committed snapshot fixtures
+!test/fixtures/**/*.srt
 
 # AI tooling — never commit
 .squad/

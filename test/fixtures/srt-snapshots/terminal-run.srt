@@ -1,0 +1,51 @@
+1
+00:00:00,000 --> 00:00:03,500
+`terminal.run` — Inline Link Run a command
+using an inline action link: Check Node
+version Show git status
+
+2
+00:00:03,500 --> 00:00:09,000
+`terminal.run` — Inline Link Run a command
+using an inline action link: Check Node
+version Show git status
+
+3
+00:00:09,000 --> 00:00:14,500
+`terminal.run` — Inline Link Run a command
+using an inline action link: Check Node
+version Show git status
+
+4
+00:00:14,500 --> 00:00:17,000
+`terminal.run` — Inline Link Run a command
+using an inline action link: Check Node
+version Show git status
+
+5
+00:00:17,000 --> 00:00:19,500
+`terminal.run` — YAML Block
+
+6
+00:00:19,500 --> 00:00:25,000
+`terminal.run` — YAML Block
+
+7
+00:00:25,000 --> 00:00:27,500
+`terminal.run` — Cross-Platform One block,
+the right command on every OS:
+
+8
+00:00:27,500 --> 00:00:33,000
+`terminal.run` — Cross-Platform One block,
+the right command on every OS:
+
+9
+00:00:33,000 --> 00:00:38,500
+`terminal.run` — Cross-Platform One block,
+the right command on every OS:
+
+10
+00:00:38,500 --> 00:00:43,000
+`terminal.run` — Cross-Platform One block,
+the right command on every OS:

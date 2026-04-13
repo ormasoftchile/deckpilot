@@ -1,0 +1,49 @@
+1
+00:00:00,000 --> 00:00:03,500
+`editor.highlight` — Line Range Highlight
+a span of lines in a file:
+
+2
+00:00:03,500 --> 00:00:09,000
+`editor.highlight` — Line Range Highlight
+a span of lines in a file:
+
+3
+00:00:09,000 --> 00:00:11,500
+`editor.highlight` — Line Range Highlight
+a span of lines in a file:
+
+4
+00:00:11,500 --> 00:00:14,000
+`editor.highlight` — Single Line Highlight
+exactly one line:
+
+5
+00:00:14,000 --> 00:00:19,500
+`editor.highlight` — Single Line Highlight
+exactly one line:
+
+6
+00:00:19,500 --> 00:00:22,000
+`editor.highlight` — Single Line Highlight
+exactly one line:
+
+7
+00:00:22,000 --> 00:00:24,500
+`editor.highlight` — Multiple Regions Step
+through different parts of the same file:
+
+8
+00:00:24,500 --> 00:00:30,000
+`editor.highlight` — Multiple Regions Step
+through different parts of the same file:
+
+9
+00:00:30,000 --> 00:00:35,500
+`editor.highlight` — Multiple Regions Step
+through different parts of the same file:
+
+10
+00:00:35,500 --> 00:00:40,000
+`editor.highlight` — Multiple Regions Step
+through different parts of the same file:

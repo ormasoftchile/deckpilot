@@ -1,0 +1,190 @@
+1
+00:00:00,000 --> 00:00:03,500
+`showCommand` Feature When an action block
+sets `showCommand: true`, a code snippet
+appears next to the button showing the
+audience exactly what command will
+execute. No more "trust me, it won't
+destroy anything" moments.
+
+2
+00:00:03,500 --> 00:00:06,000
+`showCommand` Feature When an action block
+sets `showCommand: true`, a code snippet
+appears next to the button showing the
+audience exactly what command will
+execute. No more "trust me, it won't
+destroy anything" moments.
+
+3
+00:00:06,000 --> 00:00:08,500
+`showCommand` Feature When an action block
+sets `showCommand: true`, a code snippet
+appears next to the button showing the
+audience exactly what command will
+execute. No more "trust me, it won't
+destroy anything" moments.
+
+4
+00:00:08,500 --> 00:00:11,000
+Basic Example — Terminal Command The
+snippet below the button shows the exact
+command: Compare with a button that has no
+preview:
+
+5
+00:00:11,000 --> 00:00:16,500
+Basic Example — Terminal Command The
+snippet below the button shows the exact
+command: Compare with a button that has no
+preview:
+
+6
+00:00:16,500 --> 00:00:22,000
+Basic Example — Terminal Command The
+snippet below the button shows the exact
+command: Compare with a button that has no
+preview:
+
+7
+00:00:22,000 --> 00:00:24,500
+Basic Example — Terminal Command The
+snippet below the button shows the exact
+command: Compare with a button that has no
+preview:
+
+8
+00:00:24,500 --> 00:00:27,000
+Basic Example — Terminal Command The
+snippet below the button shows the exact
+command: Compare with a button that has no
+preview:
+
+9
+00:00:27,000 --> 00:00:29,500
+File Open Preview For `file.open`, the
+snippet shows the file path:
+
+10
+00:00:29,500 --> 00:00:35,000
+File Open Preview For `file.open`, the
+snippet shows the file path:
+
+11
+00:00:35,000 --> 00:00:40,500
+File Open Preview For `file.open`, the
+snippet shows the file path:
+
+12
+00:00:40,500 --> 00:00:43,000
+File Open Preview For `file.open`, the
+snippet shows the file path:
+
+13
+00:00:43,000 --> 00:00:45,500
+Editor Highlight Preview For
+`editor.highlight`, the snippet shows
+`path:lines`:
+
+14
+00:00:45,500 --> 00:00:51,000
+Editor Highlight Preview For
+`editor.highlight`, the snippet shows
+`path:lines`:
+
+15
+00:00:51,000 --> 00:00:56,500
+Editor Highlight Preview For
+`editor.highlight`, the snippet shows
+`path:lines`:
+
+16
+00:00:56,500 --> 00:00:59,000
+Editor Highlight Preview For
+`editor.highlight`, the snippet shows
+`path:lines`:
+
+17
+00:00:59,000 --> 00:01:01,500
+Multi-Step Demo Flow Walk an audience
+through a build-deploy cycle — they can
+read what each step does before it runs:
+
+18
+00:01:01,500 --> 00:01:07,000
+Multi-Step Demo Flow Walk an audience
+through a build-deploy cycle — they can
+read what each step does before it runs:
+
+19
+00:01:07,000 --> 00:01:12,500
+Multi-Step Demo Flow Walk an audience
+through a build-deploy cycle — they can
+read what each step does before it runs:
+
+20
+00:01:12,500 --> 00:01:18,000
+Multi-Step Demo Flow Walk an audience
+through a build-deploy cycle — they can
+read what each step does before it runs:
+
+21
+00:01:18,000 --> 00:01:20,500
+Multi-Step Demo Flow Walk an audience
+through a build-deploy cycle — they can
+read what each step does before it runs:
+
+22
+00:01:20,500 --> 00:01:23,000
+How It Works Add `showCommand: true` to
+any action block: (wrap the above in a `
+```action ` fence) The preview renders as
+a `<pre>` element right below the button —
+no interaction needed, always visible.
+Pairs naturally with `{{VAR}}`
+interpolation so the audience sees
+resolved values, not raw variable names.
+
+23
+00:01:23,000 --> 00:01:25,500
+How It Works Add `showCommand: true` to
+any action block: (wrap the above in a `
+```action ` fence) The preview renders as
+a `<pre>` element right below the button —
+no interaction needed, always visible.
+Pairs naturally with `{{VAR}}`
+interpolation so the audience sees
+resolved values, not raw variable names.
+
+24
+00:01:25,500 --> 00:01:28,000
+How It Works Add `showCommand: true` to
+any action block: (wrap the above in a `
+```action ` fence) The preview renders as
+a `<pre>` element right below the button —
+no interaction needed, always visible.
+Pairs naturally with `{{VAR}}`
+interpolation so the audience sees
+resolved values, not raw variable names.
+
+25
+00:01:28,000 --> 00:01:30,500
+How It Works Add `showCommand: true` to
+any action block: (wrap the above in a `
+```action ` fence) The preview renders as
+a `<pre>` element right below the button —
+no interaction needed, always visible.
+Pairs naturally with `{{VAR}}`
+interpolation so the audience sees
+resolved values, not raw variable names.
+
+26
+00:01:30,500 --> 00:01:35,000
+How It Works Add `showCommand: true` to
+any action block: (wrap the above in a `
+```action ` fence) The preview renders as
+a `<pre>` element right below the button —
+no interaction needed, always visible.
+Pairs naturally with `{{VAR}}`
+interpolation so the audience sees
+resolved values, not raw variable names.
