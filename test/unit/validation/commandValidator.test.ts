@@ -58,6 +58,9 @@ function makeSlideWithCommandDirective(cmd: string, index = 0): Slide {
 describe('CommandAvailabilityValidator', () => {
   let validator: CommandAvailabilityValidator;
 
+  // where.exe on cold Windows CI runners can take several seconds
+  before(function () { this.timeout(10000); });
+
   beforeEach(() => {
     validator = new CommandAvailabilityValidator();
   });
@@ -66,7 +69,8 @@ describe('CommandAvailabilityValidator', () => {
     expect(validator.description).to.be.a('string').and.not.be.empty;
   });
 
-  it('should pass for a found command (node)', async () => {
+  it('should pass for a found command (node)', async function () {
+    this.timeout(8000);
     const slide = makeSlideWithTerminal('node --version');
     const context = makeContext([slide]);
 
@@ -76,7 +80,8 @@ describe('CommandAvailabilityValidator', () => {
     expect(warnings).to.have.length(0);
   });
 
-  it('should return warning severity for missing command', async () => {
+  it('should return warning severity for missing command', async function () {
+    this.timeout(8000);
     const slide = makeSlideWithTerminal('totally_nonexistent_command_xyz arg1 arg2');
     const context = makeContext([slide]);
 
