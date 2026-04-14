@@ -6,7 +6,7 @@
   ],
   "displayName": "Executable Talk — Markdown Developer Presentations",
   "description": "Transform Markdown presentations into executable narratives with interactive code demonstrations and environment variable support",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "publisher": "focus-space",
   "license": "MIT",
   "repository": {
