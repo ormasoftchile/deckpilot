@@ -10,12 +10,12 @@ Introduce the slide topic here. This plays
 when the slide first appears.
 
 3
-00:00:23,800 --> 00:00:26,600
+00:00:28,800 --> 00:00:31,600
 Mention this when the first fragment
 appears.
 
 4
-00:00:26,600 --> 00:00:29,100
+00:00:31,600 --> 00:00:34,100
 Now explain the second point.
 
 5
@@ -24,11 +24,11 @@ Open the extension entry point and walk
 through the activation function.
 
 6
-00:00:41,000 --> 00:00:49,200
+00:00:41,000 --> 00:00:46,200
 The imports at the top pull in the
 Conductor and all the providers.
 
 7
-00:00:49,200 --> 00:00:57,400
+00:00:49,400 --> 00:00:52,600
 The activate function registers all
 commands and providers.

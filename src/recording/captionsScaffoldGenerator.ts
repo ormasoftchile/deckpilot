@@ -22,9 +22,9 @@ export class CaptionsScaffoldGenerator {
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
-      const start = formatSrtTimestamp(seg.startTimeMs);
-      const end = formatSrtTimestamp(seg.endTimeMs);
       const text = seg.draftNarration || seg.cueText || '';
+      const start = formatSrtTimestamp(seg.startTimeMs);
+      const end = formatSrtTimestamp(seg.startTimeMs + readingTimeMs(text));
 
       if (text.length === 0) {
         continue;
@@ -60,6 +60,16 @@ export class CaptionsScaffoldGenerator {
     await fs.promises.writeFile(srtPath, content, 'utf-8');
     return srtPath;
   }
+}
+
+/**
+ * Calculate how long a caption should be displayed based on word count.
+ * 150 wpm, minimum 2500 ms.
+ */
+function readingTimeMs(text: string): number {
+  if (!text || text.trim().length === 0) { return 2500; }
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(Math.round((words / 150) * 60 * 1000), 2500);
 }
 
 /**

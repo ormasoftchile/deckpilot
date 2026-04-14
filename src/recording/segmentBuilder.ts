@@ -11,10 +11,31 @@
 import { Slide } from '../models/slide';
 import { RecordingEvent, RecordingSegment, VoiceOverCue, IgnoredInterval } from '../models/recording';
 
+/**
+ * Event types that are "notable" for segment boundary and voice cue matching:
+ * fragment reveals and action result events.  voice[N] is paired with the
+ * Nth notable event on a slide in time order, so authors can annotate both
+ * fragment reveals and action executions with the same syntax.
+ */
+const NOTABLE_EVENT_TYPES = new Set([
+  'fragment.revealed',
+  'file.opened',
+  'editor.highlighted',
+  'terminal.command.started',
+  'scene.restored',
+]);
+
 let segmentCounter = 0;
 
 function nextSegmentId(): string {
   return `seg-${++segmentCounter}`;
+}
+
+/** Reading time in ms for text: 150 wpm, minimum 2500 ms. */
+function readingTimeMs(text: string): number {
+  if (!text || text.trim().length === 0) { return 2500; }
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(Math.round((words / 150) * 60 * 1000), 2500);
 }
 
 /**
@@ -71,14 +92,14 @@ export function buildSegments(
 }
 
 /**
- * Build a map from fragment.revealed event ID → the VoiceOverCue that should
- * narrate that moment.
+ * Build a map from notable event ID → the VoiceOverCue that should narrate
+ * that moment.
  *
- * Matching is ORDINAL: <!-- voice[1]: --> is paired with the 1st
- * fragment.revealed event on that slide, <!-- voice[2]: --> with the 2nd,
- * etc.  This matches how authors write cues — next to the content they're
- * introducing in document order — rather than requiring them to know the
- * absolute data-fragment index assigned by the fragment processor.
+ * Matching is ORDINAL: <!-- voice[1]: --> is paired with the 1st notable
+ * event on that slide (fragment reveal OR action result), <!-- voice[2]: -->
+ * with the 2nd, etc.  This lets authors annotate both fragment reveals and
+ * action executions (file.opened, editor.highlighted, terminal.command.started)
+ * with the same voice cue syntax, without knowing internal ordering.
  */
 function buildCueForEventMap(
   sorted: RecordingEvent[],
@@ -96,14 +117,44 @@ function buildCueForEventMap(
       .filter(c => c.slideIndex === slideIndex && c.fragmentIndex !== undefined)
       .sort((a, b) => (a.fragmentIndex ?? 0) - (b.fragmentIndex ?? 0));
 
-    // Get all fragment.revealed events on this slide in chronological order
-    const fragEvents = sorted.filter(
-      e => e.slideIndex === slideIndex && e.type === 'fragment.revealed',
+    // Get all notable events on this slide in chronological order:
+    // fragment reveals and action result events.
+    const notableEvents = sorted.filter(
+      e => e.slideIndex === slideIndex && NOTABLE_EVENT_TYPES.has(e.type),
     );
 
-    // Pair Nth cue with Nth event
-    for (let i = 0; i < fragCues.length && i < fragEvents.length; i++) {
-      map.set(fragEvents[i].id, fragCues[i]);
+    // Match each cue to the fragment.revealed event whose fragmentIndex equals
+    // the cue's resolved data-fragment index.  This is correct now that the
+    // slide parser resolves voice[N] to actual data-fragment indices rather than
+    // storing the literal [N] ordinal.
+    // Any cue that cannot be matched this way (e.g. annotating an action result
+    // event that has no fragmentIndex) falls through to ordinal matching below.
+    const matchedEventIds = new Set<string>();
+    const unmatchedCues: typeof fragCues = [];
+
+    for (const cue of fragCues) {
+      const match = notableEvents.find(
+        e =>
+          e.type === 'fragment.revealed' &&
+          e.fragmentIndex === cue.fragmentIndex &&
+          !matchedEventIds.has(e.id),
+      );
+      if (match) {
+        map.set(match.id, cue);
+        matchedEventIds.add(match.id);
+      } else {
+        unmatchedCues.push(cue);
+      }
+    }
+
+    // Ordinal fallback for cues that didn't match a fragment.revealed event
+    // (e.g. voice cues placed next to action result events).
+    if (unmatchedCues.length > 0) {
+      const unmatchedEvents = notableEvents.filter(e => !matchedEventIds.has(e.id));
+      for (let i = 0; i < unmatchedCues.length && i < unmatchedEvents.length; i++) {
+        map.set(unmatchedEvents[i].id, unmatchedCues[i]);
+        matchedEventIds.add(unmatchedEvents[i].id);
+      }
     }
   }
 
@@ -144,9 +195,9 @@ function identifyBoundaries(
     }
   }
 
-  // Priority 2: fragment reveals
+  // Priority 2: uncued notable events (fragment reveals and action results)
   for (const e of sorted) {
-    if (e.type === 'fragment.revealed' && !seen.has(e.id)) {
+    if (NOTABLE_EVENT_TYPES.has(e.type) && !seen.has(e.id)) {
       seen.add(e.id);
       boundaries.push(e);
     }
@@ -200,18 +251,22 @@ function createSegment(
     ?? eventSummary
     ?? '';
 
-  const rawDuration = endEvent.relativeTimeMs - startEvent.relativeTimeMs;
-  const ignoredMs = computeIgnoredOverlap(
-    startEvent.relativeTimeMs,
-    endEvent.relativeTimeMs,
-    ignoredIntervals,
-  );
+  // When there's narration text, end the segment after the reading time rather
+  // than at the next event boundary — the next event time is arbitrary and can
+  // be far too short or far too long relative to the cue length.
+  const startMs = startEvent.relativeTimeMs;
+  const nextEventMs = endEvent.relativeTimeMs;
+  const endMs = draftNarration.length > 0
+    ? Math.min(startMs + readingTimeMs(draftNarration), nextEventMs)
+    : nextEventMs;
+
+  const ignoredMs = computeIgnoredOverlap(startMs, endMs, ignoredIntervals);
 
   return {
     segmentId: nextSegmentId(),
-    startTimeMs: startEvent.relativeTimeMs,
-    endTimeMs: endEvent.relativeTimeMs,
-    durationMs: rawDuration - ignoredMs,
+    startTimeMs: startMs,
+    endTimeMs: endMs,
+    durationMs: endMs - startMs - ignoredMs,
     slideIndex,
     fragmentIndex: startEvent.fragmentIndex,
     slideTitle,

@@ -100,6 +100,11 @@ export function buildAutoPilotPlan(
         : `Slide ${si + 1}: display`,
     });
 
+    // Track ordinal of notable events on this slide (fragment reveals and
+    // action result events), matching the same ordinal scheme used by
+    // segmentBuilder so that voice[N] cues time both correctly.
+    let notableOrdinal = 0;
+
     if (slide.fragmentCount > 0) {
       // Slide has fragments — advance through them one at a time.
       // Use the rendered HTML to determine each interactive element's exact
@@ -117,11 +122,14 @@ export function buildAutoPilotPlan(
       // Elements not enclosed in any fragment → fire after slide-level wait
       const entryElements = allElements.filter(el => !fragMap.has(el.action.id));
       for (const el of entryElements) {
-        addActionSteps(steps, el, si, undefined, cfg);
+        notableOrdinal++;
+        const actionCue = findCue(cues, si, notableOrdinal);
+        addActionSteps(steps, el, si, undefined, cfg, actionCue?.text);
       }
 
       for (let fi = 1; fi <= slide.fragmentCount; fi++) {
-        // Advance (reveals next fragment)
+        // Advance (reveals next fragment) — counts as a notable event
+        notableOrdinal++;
         steps.push({
           type: 'advance',
           durationMs: 0,
@@ -130,8 +138,8 @@ export function buildAutoPilotPlan(
           label: `Reveal fragment ${fi} on slide ${si + 1}`,
         });
 
-        // Fragment cue wait
-        const fragCue = findCue(cues, si, fi);
+        // Fragment cue wait — looked up by ordinal, not by fi
+        const fragCue = findCue(cues, si, notableOrdinal);
         const fragWait = calculateDisplayTime(fragCue?.text, cfg);
         steps.push({
           type: 'wait',
@@ -146,13 +154,17 @@ export function buildAutoPilotPlan(
         // Fire all elements whose button is inside this specific fragment
         const fragElements = allElements.filter(el => fragMap.get(el.action.id) === fi);
         for (const el of fragElements) {
-          addActionSteps(steps, el, si, fi, cfg);
+          notableOrdinal++;
+          const actionCue = findCue(cues, si, notableOrdinal);
+          addActionSteps(steps, el, si, fi, cfg, actionCue?.text);
         }
       }
     } else {
       // No fragments — trigger all interactive elements on slide load
       for (const el of slide.interactiveElements) {
-        addActionSteps(steps, el, si, undefined, cfg);
+        notableOrdinal++;
+        const actionCue = findCue(cues, si, notableOrdinal);
+        addActionSteps(steps, el, si, undefined, cfg, actionCue?.text);
       }
     }
   }
@@ -214,6 +226,7 @@ function addActionSteps(
   slideIndex: number,
   fragmentIndex: number | undefined,
   cfg: AutoPilotConfig,
+  cueText?: string,
 ): void {
   steps.push({
     type: 'trigger-action',
@@ -224,11 +237,16 @@ function addActionSteps(
     label: `Execute action: ${el.label}`,
   });
 
+  // Wait at least as long as it takes to read the voice cue.
+  // For actions that open a panel or file, also respect fileViewMs.
+  const cueMs = calculateDisplayTime(cueText, cfg);
+  const viewMs = Math.max(cfg.fileViewMs, cueMs);
+
   if (el.action.type === 'terminal.run') {
     // Let the terminal command execute and output be visible
     steps.push({
       type: 'wait',
-      durationMs: cfg.fileViewMs,
+      durationMs: viewMs,
       slideIndex,
       label: `View terminal output (${el.label})`,
     });
@@ -238,14 +256,21 @@ function addActionSteps(
       slideIndex,
       label: 'Close terminal panel',
     });
-  }
-
-  if (el.action.type === 'file.open' || el.action.type === 'editor.highlight') {
+  } else if (el.action.type === 'file.open' || el.action.type === 'editor.highlight') {
     steps.push({
       type: 'refocus',
-      durationMs: cfg.fileViewMs,
+      durationMs: viewMs,
       slideIndex,
       label: `View file (${el.label}) then return to deck`,
+    });
+  } else {
+    // debug.start, vscode.command, sequence, etc. — no panel to view,
+    // but still wait for the voice cue to finish before advancing.
+    steps.push({
+      type: 'wait',
+      durationMs: cueMs,
+      slideIndex,
+      label: `Post-action pause (${el.label})`,
     });
   }
 }

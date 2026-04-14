@@ -198,7 +198,7 @@ export class Conductor implements vscode.Disposable {
         }
       },
       onFragmentRevealed: (payload) => {
-        this.onFragmentRevealed(payload.slideIndex, payload.fragmentIndex, payload.fragmentCount);
+        this.onFragmentRevealed(payload.slideIndex, payload.fragmentIndex, payload.fragmentCount, payload.timestamp);
       },
       onRecordingMarker: (payload) => {
         this.onRecordingMarker(payload.markerType, payload.note);
@@ -894,10 +894,10 @@ export class Conductor implements vscode.Disposable {
    * Handle a fragment.revealed callback from the webview.
    * Emits a recording event when recording is active.
    */
-  onFragmentRevealed(slideIndex: number, fragmentIndex: number, fragmentCount: number): void {
+  onFragmentRevealed(slideIndex: number, fragmentIndex: number, fragmentCount: number, timestamp?: number): void {
     if (this.recordingState.isRecording()) {
       this.recordingState.recordEvent(
-        createFragmentRevealedEvent(slideIndex, fragmentIndex, fragmentCount),
+        createFragmentRevealedEvent(slideIndex, fragmentIndex, fragmentCount, timestamp),
       );
     }
   }
