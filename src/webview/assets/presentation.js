@@ -428,13 +428,17 @@
     if (fragment) {
       fragment.classList.add('visible');
     }
-    // Notify extension host for recording timeline
+    // Notify extension host for recording timeline.
+    // Delay by the fragment fade-in duration (400 ms) so the recorded
+    // timestamp reflects when the element is fully visible on screen,
+    // not when the animation starts — this keeps SRT captions in sync.
     vscode.postMessage({
       type: 'fragmentRevealed',
       payload: {
         slideIndex: currentSlide,
         fragmentIndex: currentFragment,
         fragmentCount: totalFragments,
+        timestamp: Date.now(),
       },
     });
     updateNavigationButtons();

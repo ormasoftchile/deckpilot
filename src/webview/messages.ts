@@ -151,6 +151,8 @@ export interface FragmentRevealedMessage {
     slideIndex: number;
     fragmentIndex: number;
     fragmentCount: number;
+    /** Wall-clock ms at the moment the fragment became visible (from the webview). */
+    timestamp?: number;
   };
 }
 

@@ -3,5 +3,5 @@
     "executableTalk.recording.stopCommand": "",
     "executableTalk.recording.outputDir": "./recordings",
     "executableTalk.recording.outputExtension": "mp4",
-    "executableTalk.recording.screenDevice": "0:none"
+    "executableTalk.recording.screenDevice": "2:none"
 }

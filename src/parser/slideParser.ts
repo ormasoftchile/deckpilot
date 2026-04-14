@@ -195,9 +195,30 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   // can still find them after slide.content no longer contains the comments.
   const voiceCues = extractVoiceCues(content);
 
-  // Strip voice-over cue comments — they are for recording mode only
-  // and must not appear in the rendered presentation HTML
-  content = content.replace(/<!--\s*voice(?:\[\d+\])?:[\s\S]*?-->/gi, '').trim();
+  // Replace fragment voice cues (voice[N]) with position markers so we can
+  // resolve the actual data-fragment index each cue precedes after rendering.
+  // Slide-level cues (no [N]) are stripped immediately.
+  // Markers are numbered in source order: <!-- __vcm-0 -->, <!-- __vcm-1 -->, ...
+  const fragmentCueVcIndices: number[] = []; // marker index → voiceCues array index
+  let vcmCount = 0;
+  let nonEmptyMatchCursor = 0;
+  content = content.replace(
+    /<!--\s*voice(?:\[(\d+)\])?:\s*([\s\S]*?)\s*-->/gi,
+    (_, nStr, text) => {
+      if ((text as string).trim().length === 0) {
+        return ''; // empty cue — just strip
+      }
+      const cueIdx = nonEmptyMatchCursor++;
+      if (nStr !== undefined) {
+        // Fragment cue — insert position marker; resolve data-fragment after rendering
+        fragmentCueVcIndices.push(cueIdx);
+        return `<!-- __vcm-${vcmCount++} -->`;
+      }
+      // Slide-level cue — strip
+      return '';
+    },
+  );
+  content = content.trim();
 
   // Step 2: Parse action blocks (NEW — extracts elements + cleans content)
   const actionBlockResult = parseActionBlocks(content, index);
@@ -223,6 +244,25 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   // Step 5: Process fragments and get count
   const { html: fragmentHtml, fragmentCount } = processFragments(html);
   html = fragmentHtml;
+
+  // Resolve each fragment-cue position marker to the data-fragment index of
+  // the nearest following fragment in the rendered HTML.  This corrects the
+  // fragmentIndex stored in voiceCues from the literal [N] ordinal (which the
+  // author wrote) to the actual data-fragment index (which may be higher when
+  // there are intro paragraphs or other fragments before the annotated element).
+  for (let mi = 0; mi < fragmentCueVcIndices.length; mi++) {
+    const marker = `<!-- __vcm-${mi} -->`;
+    const markerPos = html.indexOf(marker);
+    if (markerPos !== -1) {
+      const afterMarker = html.slice(markerPos + marker.length);
+      const fragMatch = afterMarker.match(/data-fragment="(\d+)"/);
+      if (fragMatch) {
+        voiceCues[fragmentCueVcIndices[mi]].fragmentIndex = parseInt(fragMatch[1], 10);
+      }
+    }
+  }
+  // Strip position markers — they must not appear in the final slide HTML
+  html = html.replace(/<!--\s*__vcm-\d+\s*-->/g, '');
   
   // Create base slide
   const slide = createSlide(index, content, html, frontmatter, checkpoint);

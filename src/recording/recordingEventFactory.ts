@@ -75,11 +75,18 @@ export function createFragmentRevealedEvent(
   slideIndex: number,
   fragmentIndex: number,
   fragmentCount: number,
+  timestamp?: number,
 ): RecordingEvent {
-  return {
+  const event = {
     ...baseEvent('fragment.revealed', slideIndex, { fragmentCount }),
     fragmentIndex,
   };
+  // Use the webview-supplied timestamp if available — it is captured at the
+  // exact moment the fragment became visible, before postMessage round-trip.
+  if (timestamp !== undefined) {
+    event.timestamp = timestamp;
+  }
+  return event;
 }
 
 /**

@@ -99,15 +99,17 @@ export class RecorderOrchestrator {
         `[Recorder] Output path: ${this.outputPath}`,
       );
 
-      // Parse command into executable + args so stdin goes directly to the process
-      const cmdParts = parseCommand(this.resolvedStartCmd);
       this.outputChannel.appendLine(
-        `[Recorder] Spawning: ${cmdParts.exe} ${cmdParts.args.join(' ')}`,
+        `[Recorder] Spawning: ${this.resolvedStartCmd}`,
       );
 
-      // Spawn the process — pipe stdin (for graceful stop) and stderr (for diagnostics)
-      this.process = cp.spawn(cmdParts.exe, cmdParts.args, {
-        shell: false,
+      // Spawn via shell so the process runs in the user's shell context.
+      // On macOS this ensures TCC screen-recording permission is evaluated
+      // against the shell (which inherits the user session) rather than
+      // Code Helper (Plugin) directly.  The shell execs into ffmpeg, so
+      // stdin still reaches the recorder process for graceful quit.
+      this.process = cp.spawn(this.resolvedStartCmd, [], {
+        shell: true,
         detached: false,
         stdio: ['pipe', 'ignore', 'pipe'],
       });
@@ -425,40 +427,3 @@ export class RecorderOrchestrator {
   }
 }
 
-/**
- * Parse a shell command string into executable and arguments.
- * Handles quoted arguments (e.g. paths with spaces).
- */
-function parseCommand(cmd: string): { exe: string; args: string[] } {
-  const tokens: string[] = [];
-  let current = '';
-  let inQuote: string | null = null;
-
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i];
-    if (inQuote) {
-      if (ch === inQuote) {
-        inQuote = null;
-      } else {
-        current += ch;
-      }
-    } else if (ch === '"' || ch === "'") {
-      inQuote = ch;
-    } else if (ch === ' ' || ch === '\t') {
-      if (current.length > 0) {
-        tokens.push(current);
-        current = '';
-      }
-    } else {
-      current += ch;
-    }
-  }
-  if (current.length > 0) {
-    tokens.push(current);
-  }
-
-  return {
-    exe: tokens[0] ?? '',
-    args: tokens.slice(1),
-  };
-}
