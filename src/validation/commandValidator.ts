@@ -9,7 +9,7 @@ import { execFile } from 'child_process';
 import { ValidationCheck, ValidationContext, ValidationIssue } from './types';
 
 /** Timeout per command check in milliseconds */
-const COMMAND_CHECK_TIMEOUT_MS = 2000;
+const COMMAND_CHECK_TIMEOUT_MS = 5000;
 
 /**
  * Validator that checks command availability on the system PATH.
