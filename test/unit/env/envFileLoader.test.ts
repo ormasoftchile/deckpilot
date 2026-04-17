@@ -170,6 +170,113 @@ describe('EnvFileLoader', () => {
   });
 
   // ========================================================================
+  // OS environment variable expansion
+  // ========================================================================
+
+  describe('OS environment variable expansion', () => {
+    // Save and restore process.env
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = {
+        ...originalEnv,
+        TEST_VAR: '/test/path',
+        USER_NAME: 'testuser',
+        APP_HOME: 'C:\\Program Files\\MyApp',
+      };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('should expand PowerShell $env:VAR syntax in values', async () => {
+      const deckPath = writeDeckFile('INSTALL_DIR=$env:APP_HOME\\bin');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('INSTALL_DIR')).to.equal('C:\\Program Files\\MyApp\\bin');
+    });
+
+    it('should expand cmd %VAR% syntax in values', async () => {
+      const deckPath = writeDeckFile('WORK_DIR=C:\\Users\\%USER_NAME%\\projects');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('WORK_DIR')).to.equal('C:\\Users\\testuser\\projects');
+    });
+
+    it('should expand both syntaxes in same value', async () => {
+      const deckPath = writeDeckFile('PATH=$env:TEST_VAR/%USER_NAME%');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('PATH')).to.equal('/test/path/testuser');
+    });
+
+    it('should leave unknown variables as-is (not remove them)', async () => {
+      const deckPath = writeDeckFile('CONFIG=$env:UNDEFINED_VAR/config');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('CONFIG')).to.equal('$env:UNDEFINED_VAR/config');
+    });
+
+    it('should leave unknown cmd vars as-is', async () => {
+      const deckPath = writeDeckFile('CONFIG=C:\\%NONEXISTENT%\\data');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('CONFIG')).to.equal('C:\\%NONEXISTENT%\\data');
+    });
+
+    it('should mix expanded and unexpanded variables', async () => {
+      const deckPath = writeDeckFile('PATH=$env:TEST_VAR:$env:MISSING:/usr/bin');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('PATH')).to.equal('/test/path:$env:MISSING:/usr/bin');
+    });
+
+    it('should work with quoted values', async () => {
+      const deckPath = writeDeckFile('QUOTED="$env:APP_HOME\\tools"');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('QUOTED')).to.equal('C:\\Program Files\\MyApp\\tools');
+    });
+
+    it('should work with single-quoted values', async () => {
+      const deckPath = writeDeckFile("QUOTED='$env:TEST_VAR/bin'");
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('QUOTED')).to.equal('/test/path/bin');
+    });
+
+    it('should expand multiple occurrences of same variable', async () => {
+      const deckPath = writeDeckFile('DUP=$env:TEST_VAR:$env:TEST_VAR');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('DUP')).to.equal('/test/path:/test/path');
+    });
+
+    it('should handle empty values gracefully', async () => {
+      const deckPath = writeDeckFile('EMPTY=');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('EMPTY')).to.equal('');
+    });
+
+    it('should not affect comment lines', async () => {
+      const deckPath = writeDeckFile('# This has $env:TEST_VAR in comment\nVAR=$env:TEST_VAR');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.size).to.equal(1);
+      expect(result.values.get('VAR')).to.equal('/test/path');
+    });
+
+    it('should work with values containing = (split on first =)', async () => {
+      const deckPath = writeDeckFile('CONNECTION=host=$env:TEST_VAR;user=%USER_NAME%');
+      const result = await loader.loadEnvFile(deckPath);
+
+      expect(result.values.get('CONNECTION')).to.equal('host=/test/path;user=testuser');
+    });
+  });
+
+  // ========================================================================
   // generateTemplate
   // ========================================================================
 

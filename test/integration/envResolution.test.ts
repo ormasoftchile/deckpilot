@@ -187,4 +187,121 @@ env:
 
     expect(result.path).to.equal('${home}/projects/myapp/README.md');
   });
+
+  it('should expand OS environment variables from .deck.env into {{VAR}} placeholders', async () => {
+    // Save and restore process.env
+    const originalEnv = process.env;
+    process.env = {
+      ...originalEnv,
+      INSTALL_DIR: 'C:\\Program Files\\MyApp',
+      USERNAME: 'alice',
+      PROJECT_ROOT: '/home/alice/projects',
+    };
+
+    try {
+      const deckContent = `---
+title: OS Env Expansion Test
+env:
+  - name: TOOLS_DIR
+    description: Installation directory
+    required: true
+  - name: WORK_PATH
+    description: Working directory
+    required: true
+---
+
+# Slide 1
+
+[Deploy](action:terminal.run?command={{TOOLS_DIR}}\\deploy.bat)
+
+---
+
+# Slide 2
+
+[Build](action:terminal.run?command=cd+{{WORK_PATH}}%26%26make)
+`;
+      const deckFilePath = path.join(tmpDir, 'osenv.deck.md');
+      fs.writeFileSync(deckFilePath, deckContent);
+
+      // 2. Create .deck.env with OS environment variable references
+      const envContent = `# Use OS environment variables
+TOOLS_DIR=$env:INSTALL_DIR\\tools
+WORK_PATH=%PROJECT_ROOT%/workspace
+`;
+      const envFilePath = path.join(tmpDir, 'osenv.deck.env');
+      fs.writeFileSync(envFilePath, envContent);
+
+      // 3. Parse and load
+      const parser = new EnvDeclarationParser();
+      const { data: meta } = matter(deckContent);
+      const declarations = parser.parseEnvDeclarations(meta as Record<string, unknown>);
+
+      const loader = new EnvFileLoader();
+      const envFile = await loader.loadEnvFile(deckFilePath);
+
+      // 4. Verify OS vars were expanded during load
+      expect(envFile.values.get('TOOLS_DIR')).to.equal('C:\\Program Files\\MyApp\\tools');
+      expect(envFile.values.get('WORK_PATH')).to.equal('/home/alice/projects/workspace');
+
+      // 5. Resolve and interpolate
+      const resolver = new EnvResolver();
+      const resolved = resolver.resolveDeclarations(declarations, envFile);
+
+      expect(resolved.isComplete).to.be.true;
+      expect(resolved.variables.get('TOOLS_DIR')!.resolvedValue).to.equal('C:\\Program Files\\MyApp\\tools');
+      expect(resolved.variables.get('WORK_PATH')!.resolvedValue).to.equal('/home/alice/projects/workspace');
+
+      // 6. Verify {{VAR}} placeholders are replaced with expanded values
+      const execParams = resolver.interpolateForExecution(
+        { command: '{{TOOLS_DIR}}\\deploy.bat && cd {{WORK_PATH}} && make' },
+        resolved,
+      );
+
+      expect(execParams.command).to.equal(
+        'C:\\Program Files\\MyApp\\tools\\deploy.bat && cd /home/alice/projects/workspace && make'
+      );
+    } finally {
+      // Restore original environment
+      process.env = originalEnv;
+    }
+  });
+
+  it('should handle unknown OS variables gracefully (leave as-is)', async () => {
+    const originalEnv = process.env;
+    process.env = {
+      ...originalEnv,
+      EXIST_VAR: '/exists',
+    };
+
+    try {
+      const deckContent = `---
+title: Unknown Var Test
+env:
+  - name: PATH_VAR
+    required: true
+---
+
+# Slide 1
+
+[Test](action:terminal.run?command={{PATH_VAR}})
+`;
+      const deckFilePath = path.join(tmpDir, 'unknown.deck.md');
+      fs.writeFileSync(deckFilePath, deckContent);
+
+      // .deck.env with mix of known and unknown variables
+      const envContent = `PATH_VAR=$env:EXIST_VAR:$env:NONEXISTENT_VAR
+`;
+      const envFilePath = path.join(tmpDir, 'unknown.deck.env');
+      fs.writeFileSync(envFilePath, envContent);
+
+      const loader = new EnvFileLoader();
+      const envFile = await loader.loadEnvFile(deckFilePath);
+
+      // Unknown vars should be left as-is, not removed or errored
+      expect(envFile.values.get('PATH_VAR')).to.equal('/exists:$env:NONEXISTENT_VAR');
+      expect(envFile.errors).to.have.length(0);
+    } finally {
+      process.env = originalEnv;
+    }
+  });
 });

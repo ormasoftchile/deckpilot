@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import { EnvDeclaration, EnvFile, EnvFileError } from '../models/env';
+import { expandEnvVarsInMap } from './envVarExpander';
 
 /** Regex for a valid env key */
 const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -117,9 +118,12 @@ export class EnvFileLoader {
       values.set(key, value);
     }
 
+    // Expand OS environment variables in all values (PowerShell $env:VAR and cmd %VAR%)
+    const expandedValues = expandEnvVarsInMap(values);
+
     return {
       filePath,
-      values,
+      values: expandedValues,
       errors,
       exists: true,
     };

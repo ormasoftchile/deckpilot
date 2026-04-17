@@ -6,3 +6,4 @@ export { EnvDeclarationParser } from './envDeclarationParser';
 export { EnvResolver } from './envResolver';
 export type { EnvRuleValidatorLike } from './envResolver';
 export { SecretScrubber } from './secretScrubber';
+export { expandEnvVars, expandEnvVarsInMap } from './envVarExpander';
