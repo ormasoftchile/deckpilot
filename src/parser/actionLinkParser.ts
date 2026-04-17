@@ -22,6 +22,7 @@ const VALID_ACTION_TYPES: ActionType[] = [
   'debug.start',
   'sequence',
   'vscode.command',
+  'wait.condition',
 ];
 
 /**

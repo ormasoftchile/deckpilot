@@ -24,6 +24,7 @@ Transform your Markdown presentations into live coding demonstrations with VS Co
 - **Slide Transitions**: Configurable fade or slide animations between slides
 - **Onboarding Mode**: Step-by-step guided experiences with checkpoints, validation, and retry/reset
 - **Validation Actions**: Verify setup with `validate.command`, `validate.fileExists`, and `validate.port`
+- **Wait Gates**: Block slide progression until a condition is true with `wait.condition` (great for installers and startup readiness)
 - **Progressive Disclosure**: Collapsible `:::advanced` sections and `:::optional` non-blocking content
 - **Recording Mode**: Capture a live presentation session with timestamped events and export voice-over scripts
 - **Voice-Over Cues**: `<!-- voice: -->` and `<!-- voice[N]: -->` annotations for narration scripting
@@ -226,6 +227,40 @@ Executes any VS Code command. **Requires Workspace Trust.**
 | `id` | VS Code command ID | Yes |
 | `args` | URL-encoded JSON arguments | No |
 
+### `wait.condition`
+
+Waits until a condition is satisfied, then continues. This is useful for Auto-Pilot scenarios where an installer or service startup can take variable time.
+
+````markdown
+```action
+type: wait.condition
+condition: file.exists
+path: C:\Program Files\Contoso\contoso.exe
+message: Waiting for installation to complete...
+timeoutMs: 300000
+pollIntervalMs: 2000
+label: Wait for installer
+```
+````
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `condition` | Condition to poll. Allowed values: `file.exists`, `port.open` | Yes |
+| `path` | File path to check when `condition=file.exists` | Required for `file.exists` |
+| `port` | Port to check when `condition=port.open` | Required for `port.open` |
+| `host` | Host to check when `condition=port.open` | No (default: `localhost`) |
+| `message` | Progress message shown in output while waiting | No |
+| `timeoutMs` | Maximum wait duration in ms | No (default: `120000`) |
+| `pollIntervalMs` | Poll interval in ms | No (default: `3000`) |
+
+**Inline link examples:**
+
+```markdown
+[Wait For Installer](action:wait.condition?condition=file.exists&path=C%3A%5CProgram%20Files%5CContoso%5Ccontoso.exe&message=Waiting%20for%20installation%20to%20complete...&timeoutMs=300000)
+
+[Wait For Web App](action:wait.condition?condition=port.open&host=localhost&port=3000&message=Waiting%20for%20dev%20server...)
+```
+
 **Examples:**
 
 ```markdown
@@ -357,6 +392,16 @@ label: Run Tests
 
 ````markdown
 ```action
+type: wait.condition
+condition: file.exists
+path: ./dist/app.exe
+message: Waiting for build artifact...
+timeoutMs: 180000
+```
+````
+
+````markdown
+```action
 type: sequence
 label: Full Demo
 steps:
@@ -393,7 +438,7 @@ Results appear as:
 
 When an action fails during a live presentation, a toast notification appears in the bottom-right corner showing:
 
-- **Action type icon** (📄 file, 🔍 highlight, ▶ terminal, 🐛 debug, 🔗 sequence)
+- **Action type icon** (📄 file, 🔍 highlight, ▶ terminal, 🐛 debug, 🔗 sequence, ⏳ wait)
 - **Target** (which file, command, or config failed)
 - **Error message** (what went wrong)
 - **Step breakdown** (for sequences: ✅ success, ❌ failed, ⏭ skipped)

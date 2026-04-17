@@ -1,6 +1,6 @@
 /**
  * Action schema definitions for authoring providers and validation
- * Provides static metadata for all 9 action types: required/optional params,
+ * Provides static metadata for all action types: required/optional params,
  * types, descriptions, and completionKind hints.
  *
  * Per data-model.md entity schema and spec.md US4.
@@ -46,7 +46,7 @@ export interface ActionSchema {
 }
 
 /**
- * Static metadata map for all 9 action types.
+ * Static metadata map for all action types.
  * Built once at module load time; used by completion, hover, diagnostic providers
  * and by the action block parser for type/param validation.
  */
@@ -269,6 +269,61 @@ export const ACTION_SCHEMAS: ReadonlyMap<ActionType, ActionSchema> = new Map<Act
           type: 'array',
           required: false,
           description: 'Arguments to pass to the command.',
+        },
+      ],
+    },
+  ],
+  [
+    'wait.condition',
+    {
+      type: 'wait.condition',
+      description: 'Waits until a condition is satisfied or timeout expires. Useful for installer and startup gates in auto-pilot flows.',
+      requiresTrust: false,
+      parameters: [
+        {
+          name: 'condition',
+          type: 'string',
+          required: true,
+          description: 'Condition to poll until true.',
+          enum: ['file.exists', 'port.open'],
+          completionKind: 'enum',
+        },
+        {
+          name: 'path',
+          type: 'string',
+          required: false,
+          description: 'File path to check when condition=file.exists. Can be relative to workspace/basePath or absolute.',
+          completionKind: 'file',
+        },
+        {
+          name: 'port',
+          type: 'number',
+          required: false,
+          description: 'TCP port to check when condition=port.open.',
+        },
+        {
+          name: 'host',
+          type: 'string',
+          required: false,
+          description: 'Host to check when condition=port.open (default: localhost).',
+        },
+        {
+          name: 'message',
+          type: 'string',
+          required: false,
+          description: 'Progress message logged while waiting.',
+        },
+        {
+          name: 'timeoutMs',
+          type: 'number',
+          required: false,
+          description: 'Maximum wait time in milliseconds (default: 120000).',
+        },
+        {
+          name: 'pollIntervalMs',
+          type: 'number',
+          required: false,
+          description: 'Polling interval in milliseconds (default: 3000).',
         },
       ],
     },
