@@ -14,6 +14,7 @@ export { TerminalRunExecutor, disposeAllTerminals } from './terminalRunExecutor'
 export { DebugStartExecutor } from './debugStartExecutor';
 export { SequenceExecutor } from './sequenceExecutor';
 export { VscodeCommandExecutor } from './vscodeCommandExecutor';
+export { WaitConditionExecutor } from './waitConditionExecutor';
 export { ValidateCommandExecutor } from './validateCommandExecutor';
 export { ValidateFileExistsExecutor } from './validateFileExistsExecutor';
 export { ValidatePortExecutor } from './validatePortExecutor';
@@ -32,6 +33,7 @@ import { TerminalRunExecutor } from './terminalRunExecutor';
 import { DebugStartExecutor } from './debugStartExecutor';
 import { SequenceExecutor } from './sequenceExecutor';
 import { VscodeCommandExecutor } from './vscodeCommandExecutor';
+import { WaitConditionExecutor } from './waitConditionExecutor';
 import { ValidateCommandExecutor } from './validateCommandExecutor';
 import { ValidateFileExistsExecutor } from './validateFileExistsExecutor';
 import { ValidatePortExecutor } from './validatePortExecutor';
@@ -48,6 +50,7 @@ export function registerAllExecutors(): void {
   registry.register(new DebugStartExecutor());
   registry.register(new SequenceExecutor());
   registry.register(new VscodeCommandExecutor());
+  registry.register(new WaitConditionExecutor());
   registry.register(new ValidateCommandExecutor());
   registry.register(new ValidateFileExistsExecutor());
   registry.register(new ValidatePortExecutor());

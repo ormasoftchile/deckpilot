@@ -672,6 +672,7 @@
     'debug.start': '🐛',
     'sequence': '🔗',
     'vscode.command': '⚙️',
+    'wait.condition': '⏳',
   };
 
   /**

@@ -13,6 +13,7 @@ export type ActionType =
   | 'debug.start'
   | 'sequence'
   | 'vscode.command'
+  | 'wait.condition'
   | 'validate.command'
   | 'validate.fileExists'
   | 'validate.port';
@@ -120,6 +121,26 @@ export interface VscodeCommandParams {
 }
 
 /**
+ * Parameters for wait.condition action
+ */
+export interface WaitConditionParams {
+  /** Condition to poll until satisfied */
+  condition: 'file.exists' | 'port.open';
+  /** File path to check when condition=file.exists */
+  path?: string;
+  /** TCP port to check when condition=port.open */
+  port?: number;
+  /** Host to check when condition=port.open */
+  host?: string;
+  /** Message shown while waiting */
+  message?: string;
+  /** Maximum wait time in ms */
+  timeoutMs?: number;
+  /** Polling interval in ms */
+  pollIntervalMs?: number;
+}
+
+/**
  * Action parameters union type
  */
 export type ActionParams =
@@ -128,7 +149,8 @@ export type ActionParams =
   | TerminalRunParams
   | DebugStartParams
   | SequenceParams
-  | VscodeCommandParams;
+  | VscodeCommandParams
+  | WaitConditionParams;
 
 /**
  * Action definition as it appears in YAML frontmatter
