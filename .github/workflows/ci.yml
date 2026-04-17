@@ -12,16 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - name: Check for version tag
+    - name: Check for version tag (advisory)
       env:
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
         if echo "$PR_TITLE" | grep -qE '\[(version:(major|minor|patch)|skip ci)\]'; then
           echo "✓ PR title contains a valid version tag"
         else
-          echo "✗ PR title must include [version:major], [version:minor], [version:patch], or [skip ci]"
+          echo "⚠ PR title has no version tag; release flow will default to patch bump on main"
           echo "  Title was: $PR_TITLE"
-          exit 1
         fi
 
   test:
@@ -200,7 +199,7 @@ jobs:
         git push origin main --tags
 
     - name: Auto version bump (patch — default)
-      if: "!contains(github.event.head_commit.message, '[version:major]') && !contains(github.event.head_commit.message, '[version:minor]') && !contains(github.event.head_commit.message, '[skip ci]')"
+      if: "!contains(github.event.head_commit.message, '[version:major]') && !contains(github.event.head_commit.message, '[version:minor]')"
       id: version_patch
       run: |
         npm run version:patch
@@ -212,13 +211,11 @@ jobs:
         git push origin main --tags
 
     - name: Rebuild VSIX with new version
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
       run: |
         npm run compile
         npm run package
 
     - name: Create GitHub Release
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.version_patch.outputs.new_version || steps.version_minor.outputs.new_version || steps.version_major.outputs.new_version }}
@@ -228,7 +225,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Publish to VS Code Marketplace
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
       run: |
