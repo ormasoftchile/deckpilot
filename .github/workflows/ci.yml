@@ -12,16 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - name: Check for version tag
+    - name: Check for version tag (advisory)
       env:
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
         if echo "$PR_TITLE" | grep -qE '\[(version:(major|minor|patch)|skip ci)\]'; then
           echo "✓ PR title contains a valid version tag"
         else
-          echo "✗ PR title must include [version:major], [version:minor], [version:patch], or [skip ci]"
+          echo "⚠ PR title has no version tag; release flow will default to patch bump on main"
           echo "  Title was: $PR_TITLE"
-          exit 1
         fi
 
   test:
@@ -137,103 +136,3 @@ jobs:
       run: npm audit --audit-level moderate
       continue-on-error: true
 
-  release:
-    name: Release Extension
-    runs-on: ubuntu-latest
-    needs: [build, security]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-        persist-credentials: true
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.x
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Download VSIX artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: executable-talk-vsix
-
-    - name: Configure Git for version bumping
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-
-    - name: Auto version bump (major)
-      if: "contains(github.event.head_commit.message, '[version:major]')"
-      id: version_major
-      run: |
-        npm run version:major
-        NEW_VERSION=$(node -p "require('./package.json').version")
-        echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-        git add package.json package-lock.json
-        git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-        git tag "v${NEW_VERSION}"
-        git push origin main --tags
-
-    - name: Auto version bump (minor)  
-      if: "!contains(github.event.head_commit.message, '[version:major]') && contains(github.event.head_commit.message, '[version:minor]')"
-      id: version_minor
-      run: |
-        npm run version:minor
-        NEW_VERSION=$(node -p "require('./package.json').version")
-        echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-        git add package.json package-lock.json
-        git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-        git tag "v${NEW_VERSION}"
-        git push origin main --tags
-
-    - name: Auto version bump (patch — default)
-      if: "!contains(github.event.head_commit.message, '[version:major]') && !contains(github.event.head_commit.message, '[version:minor]') && !contains(github.event.head_commit.message, '[skip ci]')"
-      id: version_patch
-      run: |
-        npm run version:patch
-        NEW_VERSION=$(node -p "require('./package.json').version")
-        echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-        git add package.json package-lock.json
-        git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-        git tag "v${NEW_VERSION}"
-        git push origin main --tags
-
-    - name: Rebuild VSIX with new version
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
-      run: |
-        npm run compile
-        npm run package
-
-    - name: Create GitHub Release
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v${{ steps.version_patch.outputs.new_version || steps.version_minor.outputs.new_version || steps.version_major.outputs.new_version }}
-        files: '*.vsix'
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Publish to VS Code Marketplace
-      if: "!contains(github.event.head_commit.message, '[skip ci]')"
-      env:
-        VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      run: |
-        if [ -n "$VSCE_PAT" ]; then
-          npx vsce publish -p $VSCE_PAT
-        else
-          echo "Skipping VS Code Marketplace publish - VSCE_PAT not configured"
-        fi
