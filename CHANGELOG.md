@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - README now clarifies that marketplace/package identifiers still use `executable-talk` for compatibility after the Deckpilot rename
+- Release pipeline trigger note: patch release requested via `[version:patch]` commit token
 
 ## [0.7.0] - 2026-04-10
 
