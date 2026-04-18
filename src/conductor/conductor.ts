@@ -391,6 +391,12 @@ export class Conductor implements vscode.Disposable {
     // Cancel any running auto-pilot so its loop and delays stop immediately
     this.cancelAutoPilot();
 
+    // Auto-stop any active recording session (Feature: Recording Mode — Auto-stop on presentation exit)
+    if (this.recordingState.isRecording()) {
+      this.outputChannel.appendLine('[Recording] Auto-stopping recording due to presentation close');
+      await this.stopRecording();
+    }
+
     // Exit Zen Mode
     await exitZenMode();
 
