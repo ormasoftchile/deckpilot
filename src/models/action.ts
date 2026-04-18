@@ -1,5 +1,5 @@
 /**
- * Action types and interfaces for Executable Talk
+ * Action types and interfaces for Deckpilot
  * Per data-model.md and contracts/action-executor.md
  */
 
