@@ -2,6 +2,8 @@
 
 _Formerly Executable Talk._
 
+Marketplace listing and command IDs still use the `executable-talk` identifier for backward compatibility.
+
 Executable markdown presentations: transform your slides into live coding demonstrations with VS Code integration. Perfect for demos, onboarding, and hands-on teaching.
 
 ## Features
