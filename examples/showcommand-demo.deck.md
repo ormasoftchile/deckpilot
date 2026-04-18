@@ -1,6 +1,6 @@
 ---
 title: "showCommand Demo"
-author: Executable Talk
+author: Deckpilot
 description: Shows how showCommand:true renders a command preview next to an action button so the audience can see what will run before it runs.
 basePath: ..
 ---

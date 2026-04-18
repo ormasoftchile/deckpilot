@@ -1,5 +1,5 @@
 ---
-title: "Executable Talk — Web Showcase"
+title: "Deckpilot — Web Showcase"
 basePath: ..
 scenes:
   - name: intro
@@ -13,7 +13,7 @@ scenes:
 ---
 
 :::center
-# Executable Talk
+# Deckpilot
 
 ### Markdown presentations with live code — in your browser
 

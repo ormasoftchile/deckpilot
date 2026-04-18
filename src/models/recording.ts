@@ -1,5 +1,5 @@
 /**
- * Recording mode types and interfaces for Executable Talk.
+ * Recording mode types and interfaces for Deckpilot.
  * Captures timeline events during a presentation session for
  * post-production narration scripting and export.
  *

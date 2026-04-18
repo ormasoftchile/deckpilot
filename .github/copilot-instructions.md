@@ -1,8 +1,8 @@
-# Executable Talk - GitHub Copilot Instructions
+# Deckpilot - GitHub Copilot Instructions
 
 ## Project Overview
 
-Executable Talk is a VS Code extension that transforms Markdown-based presentations (`.deck.md` files) into executable narratives with interactive code demonstrations.
+Deckpilot is a VS Code extension that transforms Markdown-based presentations (`.deck.md` files) into executable narratives with interactive code demonstrations.
 
 ## Technology Stack
 

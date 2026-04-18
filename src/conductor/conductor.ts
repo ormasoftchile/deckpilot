@@ -80,9 +80,9 @@ export class Conductor implements vscode.Disposable {
     this.webviewProvider = new WebviewProvider(extensionUri);
     this.presenterViewProvider = new PresenterViewProvider(extensionUri);
 
-    this.outputChannel = vscode.window.createOutputChannel('Executable Talk');
-    this.validationOutputChannel = vscode.window.createOutputChannel('Executable Talk Validation');
-    this.validationDiagnostics = vscode.languages.createDiagnosticCollection('Executable Talk: Validation');
+    this.outputChannel = vscode.window.createOutputChannel('Deckpilot');
+    this.validationOutputChannel = vscode.window.createOutputChannel('Deckpilot Validation');
+    this.validationDiagnostics = vscode.languages.createDiagnosticCollection('Deckpilot: Validation');
     this.disposables.push(this.outputChannel, this.validationOutputChannel, this.validationDiagnostics);
 
     // Env resolution dependencies (Feature 006)
@@ -502,7 +502,7 @@ export class Conductor implements vscode.Disposable {
           : vscode.DiagnosticSeverity.Information;
 
       const diag = new vscode.Diagnostic(range, issue.message, severity);
-      diag.source = 'Executable Talk';
+      diag.source = 'Deckpilot';
       return diag;
     });
 
@@ -515,7 +515,7 @@ export class Conductor implements vscode.Disposable {
   private writeValidationLog(report: ValidationReport): void {
     const ch = this.validationOutputChannel;
     ch.appendLine('═══════════════════════════════════════════');
-    ch.appendLine('Executable Talk: Validate Deck');
+    ch.appendLine('Deckpilot: Validate Deck');
     ch.appendLine('═══════════════════════════════════════════');
     ch.appendLine(`File: ${report.deckFilePath}`);
     ch.appendLine(`Time: ${new Date(report.timestamp).toISOString()} (${report.durationMs}ms)`);

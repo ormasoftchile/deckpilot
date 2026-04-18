@@ -47,7 +47,7 @@ export interface DiagnosticResult {
  * ActionDiagnosticProvider for deck-markdown documents.
  */
 export class ActionDiagnosticProvider {
-  private readonly _source = 'Executable Talk';
+  private readonly _source = 'Deckpilot';
   private _disposed = false;
 
   /**

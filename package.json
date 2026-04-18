@@ -4,8 +4,8 @@
   "workspaces": [
     "packages/*"
   ],
-  "displayName": "Executable Talk — Markdown Developer Presentations",
-  "description": "Transform Markdown presentations into executable narratives with interactive code demonstrations and environment variable support",
+  "displayName": "Deckpilot — Executable Markdown Presentations",
+  "description": "Executable markdown presentations with live code demonstrations, recording, onboarding flows, and automated narration scripting. Formerly Executable Talk.",
   "version": "0.9.10",
   "publisher": "focus-space",
   "license": "MIT",
@@ -56,79 +56,79 @@
     "commands": [
       {
         "command": "executableTalk.openPresentation",
-        "title": "Executable Talk: Start Presentation"
+        "title": "Deckpilot: Start Presentation"
       },
       {
         "command": "executableTalk.closePresentation",
-        "title": "Executable Talk: Stop Presentation"
+        "title": "Deckpilot: Stop Presentation"
       },
       {
         "command": "executableTalk.resetPresentation",
-        "title": "Executable Talk: Reset Presentation"
+        "title": "Deckpilot: Reset Presentation"
       },
       {
         "command": "executableTalk.nextSlide",
-        "title": "Executable Talk: Next Slide"
+        "title": "Deckpilot: Next Slide"
       },
       {
         "command": "executableTalk.previousSlide",
-        "title": "Executable Talk: Previous Slide"
+        "title": "Deckpilot: Previous Slide"
       },
       {
         "command": "executableTalk.openPresenterView",
-        "title": "Executable Talk: Open Presenter View"
+        "title": "Deckpilot: Open Presenter View"
       },
       {
         "command": "executableTalk.validateDeck",
-        "title": "Executable Talk: Validate Deck"
+        "title": "Deckpilot: Validate Deck"
       },
       {
         "command": "executableTalk.goToSlide",
-        "title": "Executable Talk: Go to Slide"
+        "title": "Deckpilot: Go to Slide"
       },
       {
         "command": "executableTalk.saveScene",
-        "title": "Executable Talk: Save Scene"
+        "title": "Deckpilot: Save Scene"
       },
       {
         "command": "executableTalk.restoreScene",
-        "title": "Executable Talk: Restore Scene"
+        "title": "Deckpilot: Restore Scene"
       },
       {
         "command": "executableTalk.startRecording",
-        "title": "Executable Talk: Start Recording Session"
+        "title": "Deckpilot: Start Recording Session"
       },
       {
         "command": "executableTalk.stopRecording",
-        "title": "Executable Talk: Stop Recording Session"
+        "title": "Deckpilot: Stop Recording Session"
       },
       {
         "command": "executableTalk.pauseRecordingTiming",
-        "title": "Executable Talk: Pause Recording Timing"
+        "title": "Deckpilot: Pause Recording Timing"
       },
       {
         "command": "executableTalk.resumeRecordingTiming",
-        "title": "Executable Talk: Resume Recording Timing"
+        "title": "Deckpilot: Resume Recording Timing"
       },
       {
         "command": "executableTalk.toggleRecordingPause",
-        "title": "Executable Talk: Toggle Recording Pause"
+        "title": "Deckpilot: Toggle Recording Pause"
       },
       {
         "command": "executableTalk.markRetake",
-        "title": "Executable Talk: Mark Retake Point"
+        "title": "Deckpilot: Mark Retake Point"
       },
       {
         "command": "executableTalk.insertNarrationMarker",
-        "title": "Executable Talk: Insert Narration Marker"
+        "title": "Deckpilot: Insert Narration Marker"
       },
       {
         "command": "executableTalk.autoRecord",
-        "title": "Executable Talk: Auto-Record Deck"
+        "title": "Deckpilot: Auto-Record Deck"
       },
       {
         "command": "executableTalk.cancelAutoRecord",
-        "title": "Executable Talk: Cancel Auto-Record"
+        "title": "Deckpilot: Cancel Auto-Record"
       }
     ],
     "keybindings": [
@@ -174,7 +174,7 @@
         "id": "executableTalk.deck",
         "fullName": "Deck Creator",
         "name": "deck",
-        "description": "Create and convert Markdown presentations into interactive Executable Talk decks",
+        "description": "Create and convert Markdown presentations into interactive Deckpilot decks",
         "isSticky": true,
         "commands": [
           {
@@ -213,7 +213,7 @@
       }
     ],
     "configuration": {
-      "title": "Executable Talk",
+      "title": "Deckpilot",
       "properties": {
         "executableTalk.recording.startCommand": {
           "type": "string",

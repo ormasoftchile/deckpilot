@@ -1,7 +1,7 @@
-# Design Specification: Executable Talk
+# Design Specification: Deckpilot
 
 ## 1. Vision
-**Executable Talk** is a VS Code extension that transforms technical presentations from static slides into **executable narratives**. Instead of switching between slides and the IDE, the presentation *is* the controller for the IDE. Slides running in a Webview orchestrate the editor, terminal, and debugger to create an immersive, live-coding experience.
+**Deckpilot** is a VS Code extension that transforms technical presentations from static slides into **executable narratives**. Instead of switching between slides and the IDE, the presentation *is* the controller for the IDE. Slides running in a Webview orchestrate the editor, terminal, and debugger to create an immersive, live-coding experience.
 
 ---
 
@@ -68,18 +68,18 @@ To ensure the presenter never gets "lost," the extension maintains a **Snapshot 
 
 ----
 
-Competitive Analysis: Executable Talk Extension
-Executable Talk operates in a 'Blue Ocean' between traditional presentation tools and development environments. While many tools touch on code presentation, none currently bridge the gap between narrative storytelling and native IDE orchestration.
+Competitive Analysis: Deckpilot Extension
+Deckpilot operates in a 'Blue Ocean' between traditional presentation tools and development environments. While many tools touch on code presentation, none currently bridge the gap between narrative storytelling and native IDE orchestration.
 
 1. The Competitive Landscape: Strategic Mapping
-We can categorize the competition into four distinct tiers based on their proximity to the 'Executable Talk' vision:
+We can categorize the competition into four distinct tiers based on their proximity to the 'Deckpilot' vision:
 
 Tier 1: Presentation-First (The 'Sandbox Illusion')
 Competitors: Slidev, Marp, Reveal.js.
 The Gap: These tools are excellent for rendering slides but treat code as static text or sandboxed simulations. Slidev's 'interactive' elements are often iframe-based Monaco editors disconnected from your actual local environment. They cannot open a real file in your VS Code sidebar or run a command in your native Zsh shell.
 Tier 2: IDE-First (The 'Guided Tour')
 Competitors: VS Code CodeTour, GitHub Codespaces Walkthroughs.
-The Gap: CodeTour is designed for asynchronous documentation. It lacks a presentation UI (speaker notes, slide transitions, full-screen mode). It is a 'museum audio guide,' whereas Executable Talk is a 'live cooking show.'
+The Gap: CodeTour is designed for asynchronous documentation. It lacks a presentation UI (speaker notes, slide transitions, full-screen mode). It is a 'museum audio guide,' whereas Deckpilot is a 'live cooking show.'
 Tier 3: Interactive Notebooks (The 'Data Story')
 Competitors: Jupyter Notebooks, Observable, Quarto.
 The Gap: These are documents, not performance tools. They excel at inline output but don't manipulate the IDE workspace (layout, file navigation, terminal focus) and aren't optimized for the 'talk circuit' (conferences/workshops).
@@ -87,7 +87,7 @@ Tier 4: Cloud Sandboxes (The 'Destination')
 Competitors: StackBlitz, CodeSandbox, Replit.
 The Gap: These are isolated destinations. They don't allow you to present your local project with your specific setup and tools. They lack the narrative 'deck' structure required for a keynote talk.
 2. Feature Comparison Matrix
-Feature	Executable Talk	Slidev	CodeTour	Jupyter
+Feature	Deckpilot	Slidev	CodeTour	Jupyter
 Narrative Format	Slide-based	Slide-based	Code Comments	Notebook Cells
 IDE Control	Native (Full)	Sandboxed	Native (Partial)	Kernel-only
 State Snapshots/Undo	✅ Yes	❌ No	❌ No	⚠️ Cell-level
@@ -98,4 +98,4 @@ Escape the Sandbox: We are the only tool that allows a slide to natively control
 Stateful Demo Management: Our core differentiator is the State Stack. Each slide can snapshot the IDE state. If a live demo goes wrong, the presenter can 'Undo' back to the slide's starting state—killing the 'Demo Effect.'
 The 'Executable Narrative': We move from slides that describe code to presentations that are code execution. This is 'Technical Storytelling 2.0.'
 4. Strategic Positioning
-Executable Talk is not a better slide deck; it is a performance cockpit. While Slidev creates documents and CodeTour creates guides, Executable Talk creates performances. It is the first tool to blend the polish of a keynote with the raw power of a live IDE.
+Deckpilot is not a better slide deck; it is a performance cockpit. While Slidev creates documents and CodeTour creates guides, Deckpilot creates performances. It is the first tool to blend the polish of a keynote with the raw power of a live IDE.

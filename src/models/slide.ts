@@ -1,5 +1,5 @@
 /**
- * Slide types and interfaces for Executable Talk
+ * Slide types and interfaces for Deckpilot
  * Per data-model.md
  */
 

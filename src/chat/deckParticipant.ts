@@ -15,7 +15,7 @@ const PARTICIPANT_ID = 'executableTalk.deck';
 /**
  * System prompt that teaches the LLM the .deck.md format.
  */
-const DECK_SYSTEM_PROMPT = `You are an expert at creating Executable Talk presentations (.deck.md files).
+const DECK_SYSTEM_PROMPT = `You are an expert at creating Deckpilot presentations (.deck.md files).
 
 ## Format Rules
 
@@ -309,7 +309,7 @@ async function handleCreate(
     stream.markdown(chunk);
   }
 
-  stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Executable Talk: Start Presentation`.*');
+  stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
 
   return { command: 'create' };
 }

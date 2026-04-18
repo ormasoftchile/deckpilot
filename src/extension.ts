@@ -11,7 +11,7 @@ import { registerDeckParticipant } from './chat/deckParticipant';
 let conductor: Conductor | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-    console.log('Executable Talk extension is now active');
+    console.log('Deckpilot extension is now active');
 
     // Register all action executors
     registerAllExecutors();
@@ -492,7 +492,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-    console.log('Executable Talk extension is now deactivated');
+    console.log('Deckpilot extension is now deactivated');
     conductor?.dispose();
     conductor = undefined;
 }

@@ -72,7 +72,7 @@ export class TerminalRunExecutor extends BaseActionExecutor implements ActionExe
         : context.basePath;
 
       // Create or reuse terminal
-      const terminalName = params.name ?? 'Executable Talk';
+      const terminalName = params.name ?? 'Deckpilot';
       let terminal = presentationTerminals.get(terminalName);
 
       if (!terminal || terminal.exitStatus !== undefined) {

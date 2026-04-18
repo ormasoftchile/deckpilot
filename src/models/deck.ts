@@ -1,5 +1,5 @@
 /**
- * Deck types and interfaces for Executable Talk
+ * Deck types and interfaces for Deckpilot
  * Per data-model.md and contracts/navigation-protocol.md
  */
 

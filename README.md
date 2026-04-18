@@ -1,6 +1,8 @@
-# Executable Talk
+# Deckpilot
 
-Transform your Markdown presentations into live coding demonstrations with VS Code integration.
+_Formerly Executable Talk._
+
+Executable markdown presentations: transform your slides into live coding demonstrations with VS Code integration. Perfect for demos, onboarding, and hands-on teaching.
 
 ## Features
 
@@ -48,7 +50,7 @@ title: My First Presentation
 author: Your Name
 ---
 
-# Welcome to Executable Talk
+# Welcome to Deckpilot
 
 This is your first slide!
 
@@ -92,7 +94,7 @@ Start a debug session:
 
 1. Open a `.deck.md` file in VS Code
 2. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-3. Run `Executable Talk: Start Presentation`
+3. Run `Deckpilot: Start Presentation`
 
 ### Keyboard Shortcuts
 
@@ -131,25 +133,25 @@ A floating toolbar appears in the bottom-right corner when you hover over the pr
 
 | Command | Description |
 |---------|-------------|
-| `Executable Talk: Start Presentation` | Open the current `.deck.md` file as a presentation |
-| `Executable Talk: Stop Presentation` | Close the presentation and restore IDE state |
-| `Executable Talk: Reset Presentation` | Reset to the first slide and clear all changes |
-| `Executable Talk: Next Slide` | Navigate to the next slide |
-| `Executable Talk: Previous Slide` | Navigate to the previous slide |
-| `Executable Talk: Go to Slide` | Open the slide picker to jump to any slide |
-| `Executable Talk: Save Scene` | Save current IDE state as a named scene |
-| `Executable Talk: Restore Scene` | Open the scene picker to restore a saved scene |
-| `Executable Talk: Open Presenter View` | Show speaker notes and next slide preview |
-| `Executable Talk: Validate Deck` | Run preflight checks on the current `.deck.md` file |
-| `Executable Talk: Start Recording Session` | Begin recording timeline events during presentation |
-| `Executable Talk: Stop Recording Session` | Stop recording and export session artifacts |
-| `Executable Talk: Pause Recording Timing` | Pause narration timing (excluded from pacing) |
-| `Executable Talk: Resume Recording Timing` | Resume narration timing |
-| `Executable Talk: Toggle Recording Pause` | Toggle pause/resume (`Ctrl+Shift+Space`) |
-| `Executable Talk: Mark Retake Point` | Flag current position for re-recording (`Ctrl+Shift+R`) |
-| `Executable Talk: Insert Narration Marker` | Add a narration cue (`Ctrl+Shift+M`) |
-| `Executable Talk: Auto-Record Deck` | Hands-free: drive presentation + record at calculated pace |
-| `Executable Talk: Cancel Auto-Record` | Stop a running auto-pilot session |
+| `Deckpilot: Start Presentation` | Open the current `.deck.md` file as a presentation |
+| `Deckpilot: Stop Presentation` | Close the presentation and restore IDE state |
+| `Deckpilot: Reset Presentation` | Reset to the first slide and clear all changes |
+| `Deckpilot: Next Slide` | Navigate to the next slide |
+| `Deckpilot: Previous Slide` | Navigate to the previous slide |
+| `Deckpilot: Go to Slide` | Open the slide picker to jump to any slide |
+| `Deckpilot: Save Scene` | Save current IDE state as a named scene |
+| `Deckpilot: Restore Scene` | Open the scene picker to restore a saved scene |
+| `Deckpilot: Open Presenter View` | Show speaker notes and next slide preview |
+| `Deckpilot: Validate Deck` | Run preflight checks on the current `.deck.md` file |
+| `Deckpilot: Start Recording Session` | Begin recording timeline events during presentation |
+| `Deckpilot: Stop Recording Session` | Stop recording and export session artifacts |
+| `Deckpilot: Pause Recording Timing` | Pause narration timing (excluded from pacing) |
+| `Deckpilot: Resume Recording Timing` | Resume narration timing |
+| `Deckpilot: Toggle Recording Pause` | Toggle pause/resume (`Ctrl+Shift+Space`) |
+| `Deckpilot: Mark Retake Point` | Flag current position for re-recording (`Ctrl+Shift+R`) |
+| `Deckpilot: Insert Narration Marker` | Add a narration cue (`Ctrl+Shift+M`) |
+| `Deckpilot: Auto-Record Deck` | Hands-free: drive presentation + record at calculated pace |
+| `Deckpilot: Cancel Auto-Record` | Stop a running auto-pilot session |
 
 ## Action Reference
 
@@ -420,7 +422,7 @@ steps:
 Before presenting, validate your deck to catch common errors:
 
 1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`
-2. Run **Executable Talk: Validate Deck**
+2. Run **Deckpilot: Validate Deck**
 
 The command checks for:
 - **Missing files** — referenced file paths that don't exist
@@ -431,7 +433,7 @@ The command checks for:
 
 Results appear as:
 - **Inline diagnostics** (squiggly underlines) in the `.deck.md` file
-- **Output channel** (Executable Talk Validation) with a detailed log
+- **Output channel** (Deckpilot Validation) with a detailed log
 - **Summary notification** with a link to the Problems panel
 
 ### Error Notifications During Presentation
@@ -647,7 +649,7 @@ Use platform-aware placeholders in any terminal command:
 
 ### Preflight Platform Validation
 
-Run **Executable Talk: Validate Deck** to check cross-platform coverage. The validator warns if any `terminal.run` action with a platform command map doesn't cover the current OS and has no `default` fallback.
+Run **Deckpilot: Validate Deck** to check cross-platform coverage. The validator warns if any `terminal.run` action with a platform command map doesn't cover the current OS and has no `default` fallback.
 
 ## Dynamic Content Rendering (Render Directives)
 
@@ -869,7 +871,7 @@ env:
     validate: "regex:^\\d+\\.\\d+\\.\\d+$"  # Must match semver pattern
 ```
 
-Validation runs during **preflight check** (`Executable Talk: Validate Deck`). Issues appear in the Problems panel.
+Validation runs during **preflight check** (`Deckpilot: Validate Deck`). Issues appear in the Problems panel.
 
 ### Guided Setup
 
@@ -995,7 +997,7 @@ notes: |
 Slide content goes here...
 ```
 
-View speaker notes by running `Executable Talk: Open Presenter View`.
+View speaker notes by running `Deckpilot: Open Presenter View`.
 
 ## Presentation Options
 

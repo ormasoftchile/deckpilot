@@ -12,7 +12,7 @@ tsconfig.json
 specs/**
 *.deck.md
 .github/**
-# Design Specification: Executable Talk.md
+# Design Specification: Deckpilot.md
 
 # Include production dependencies
 !node_modules

@@ -1,5 +1,5 @@
 ---
-title: "Executable Talk — Feature Showcase"
+title: "Deckpilot — Feature Showcase"
 basePath: ..
 scenes:
   - name: intro
@@ -15,7 +15,7 @@ scenes:
 ---
 
 :::center
-# Executable Talk
+# Deckpilot
 
 ### Live-code presentations inside VS Code
 
