@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable `message`, `timeoutMs`, and `pollIntervalMs`
   - Designed for Auto-Pilot and onboarding flows that need to pause until external setup is complete
 
+### Changed
+
+- README now clarifies that marketplace/package identifiers still use `executable-talk` for compatibility after the Deckpilot rename
+
 ## [0.7.0] - 2026-04-10
 
 ### Added
