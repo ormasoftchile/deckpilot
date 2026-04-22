@@ -197,7 +197,19 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 
 
 
-### 2026-06-12 — DA-23: Extract Metadata to Sidecar command
+### 2026-06-12 — pre elements added to fragment-eligible set
+
+**Bug:** `<pre>` (code block) elements were not in the fragment-eligible set in `tagEligibleElements()`. On slides with both explanatory text and a code block, the `<pre>` appeared immediately on slide entry (before pressing space), while the `<p>` text revealing after — backwards reveal order.
+
+**Fix:** Added `<pre>` to `tagEligibleElements()` in `src/parser/fragmentProcessor.ts` (between the `li` block and the `render-block` div block), and added `pre` to the Phase 2 regex alternation group so the `__frag` sentinel is consumed and replaced with real fragment attributes.
+
+**Key implementation notes:**
+- Phase 1 inserts `__frag` right after the tag name: `<pre __frag="fade">`. Any existing class on `<pre>` would end up in the `post` capture group in Phase 2, not the `pre` group — so the existing class-merge logic would NOT fire. This is a known limitation for all non-slide-group elements but is not a real-world issue: markdown-it always puts the language class on `<code>`, not `<pre>`. 
+- Three SRT snapshots were affected and regenerated (`showcase`, `showcase-web`, `sidecar-demo`) — timing shifted because fragment counts increased for slides with code blocks.
+- 5 new tests added to `test/unit/parser/fragmentProcessor.test.ts` covering: bare pre, reveal-after-paragraph ordering, data attributes, multiple pre blocks, fade animation default.
+- Test baseline: 831 → 867 passing (+5 new tests, +3 snapshot regenerations counted separately), 0 failing.
+
+
 
 **New file:** `src/commands/extractMetadata.ts`  
 **New test file:** `test/unit/commands/extractMetadata.test.ts` (17 tests)  

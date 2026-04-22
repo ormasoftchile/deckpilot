@@ -4,7 +4,7 @@
  *
  * All block-level elements fragment by default:
  *   - <h1> is always visible (slide title)
- *   - <h2>–<h6>, <p>, <blockquote>, <table>, <li>, render-blocks → each a separate step
+ *   - <h2>–<h6>, <p>, <blockquote>, <table>, <li>, <pre>, render-blocks → each a separate step
  *   - <div class="slide-group"> → the whole group appears as one step
  *   - <!-- .fragment --> comments are still honoured for backward compat but no
  *     longer necessary — everything is already a fragment by default
@@ -59,7 +59,7 @@ function splitOnGroups(html: string): Array<{ text: string; isGroup: boolean }> 
  * Add __frag sentinel to all eligible block elements in an HTML segment
  * that should each be their own fragment step.
  *
- * Eligible: p, h2–h6, blockquote, table, li, div.render-block
+ * Eligible: p, h2–h6, blockquote, table, li, pre, div.render-block
  * NOT eligible: h1 (always visible), ul/ol containers (their li children fragment)
  */
 function tagEligibleElements(seg: string): string {
@@ -89,6 +89,11 @@ function tagEligibleElements(seg: string): string {
   // li
   seg = seg.replace(
     /(<li\b)(?![^>]*__frag)([^>]*>)/g,
+    (_m, start, rest) => `${start} __frag="fade"${rest}`,
+  );
+  // pre (code blocks — reveal after explanatory text)
+  seg = seg.replace(
+    /(<pre\b)(?![^>]*__frag)([^>]*>)/g,
     (_m, start, rest) => `${start} __frag="fade"${rest}`,
   );
   // render-block divs (but not slide-group)
@@ -138,7 +143,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   // Phase 2 — assign sequential fragment indices in document order
   let fragmentIndex = 0;
   const result = tagged.replace(
-    /(<(?:li|p|h[2-6]|blockquote|table|div)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    /(<(?:li|p|h[2-6]|blockquote|table|div|pre)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
     (_m, pre: string, animation, post) => {
       fragmentIndex++;
       // Merge fragment into an existing class attribute to avoid duplicate class= attributes
