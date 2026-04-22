@@ -73,6 +73,8 @@ export class Conductor implements vscode.Disposable {
   private recordingState: RecordingState;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
   private autoPilotRunning = false;
+  /** Pending slide render callback — resolved when webview confirms render complete */
+  private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.stateStack = new StateStack();
@@ -208,6 +210,9 @@ export class Conductor implements vscode.Disposable {
       onRecordingMarker: (payload) => {
         this.onRecordingMarker(payload.markerType, payload.note);
       },
+      onSlideRendered: (payload) => {
+        this.handleSlideRendered(payload.slideIndex);
+      },
     };
 
     // Show presentation
@@ -293,8 +298,9 @@ export class Conductor implements vscode.Disposable {
       }
     }
 
-    // Execute onEnter actions if any
+    // Execute onEnter actions AFTER the slide is rendered and visible
     if (slide.onEnterActions && slide.onEnterActions.length > 0) {
+      await this.waitForSlideRender(targetIndex);
       await this.executeSlideActions(slide);
     }
   }
@@ -1346,6 +1352,36 @@ export class Conductor implements vscode.Disposable {
   private async executeSlideActions(slide: Slide): Promise<void> {
     for (const action of slide.onEnterActions) {
       await this.executeAction(action, action.id);
+    }
+  }
+
+  /**
+   * Wait for the webview to confirm that the slide has been rendered.
+   * Uses a promise that is resolved when handleSlideRendered is called.
+   * Times out after 2 seconds to avoid blocking forever if webview doesn't respond.
+   */
+  private waitForSlideRender(slideIndex: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.pendingSlideRender = { slideIndex, resolve };
+      // Safety timeout — don't block forever if webview doesn't respond
+      setTimeout(() => {
+        if (this.pendingSlideRender?.slideIndex === slideIndex) {
+          this.pendingSlideRender = undefined;
+          resolve();
+        }
+      }, 2000);
+    });
+  }
+
+  /**
+   * Handle slideRendered message from webview.
+   * Resolves the pending promise so onEnterActions can execute.
+   */
+  private handleSlideRendered(slideIndex: number): void {
+    if (this.pendingSlideRender && this.pendingSlideRender.slideIndex === slideIndex) {
+      const { resolve } = this.pendingSlideRender;
+      this.pendingSlideRender = undefined;
+      resolve();
     }
   }
 

@@ -605,6 +605,9 @@
 
     // Update breadcrumb trail (T040)
     updateBreadcrumbTrail(payload.navigationHistory, payload.canGoBack, payload.totalHistoryEntries);
+
+    // Notify extension that slide rendering is complete
+    vscode.postMessage({ type: 'slideRendered', payload: { slideIndex: currentSlide } });
   }
 
   function handleDeckLoaded(message) {

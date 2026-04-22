@@ -24,6 +24,8 @@ import {
   ResetToCheckpointPayload,
   FragmentRevealedMessage,
   RecordingMarkerMessage,
+  SlideRenderedMessage,
+  SlideRenderedPayload,
 } from './messages';
 
 // ============================================================================
@@ -143,6 +145,13 @@ export function isRecordingMarkerMessage(msg: unknown): msg is RecordingMarkerMe
 }
 
 /**
+ * Check if message is a slide rendered message
+ */
+export function isSlideRenderedMessage(msg: unknown): msg is SlideRenderedMessage {
+  return isMessage(msg) && msg.type === 'slideRendered';
+}
+
+/**
  * Base message type check
  */
 function isMessage(msg: unknown): msg is { type: string } {
@@ -187,6 +196,7 @@ export interface MessageHandlers {
   onResetToCheckpoint?: (payload: ResetToCheckpointPayload) => Promise<void>;
   onFragmentRevealed?: (message: FragmentRevealedMessage) => void | Promise<void>;
   onRecordingMarker?: (message: RecordingMarkerMessage) => void | Promise<void>;
+  onSlideRendered?: (payload: SlideRenderedPayload) => void | Promise<void>;
 }
 
 /**
@@ -232,6 +242,8 @@ export function createMessageDispatcher(handlers: MessageHandlers) {
         await handlers.onFragmentRevealed(message);
       } else if (isRecordingMarkerMessage(message) && handlers.onRecordingMarker) {
         await handlers.onRecordingMarker(message);
+      } else if (isSlideRenderedMessage(message) && handlers.onSlideRendered) {
+        await handlers.onSlideRendered(message.payload);
       } else {
         console.warn('Unhandled message type:', (message as WebviewToHostMessage).type);
       }
@@ -253,6 +265,7 @@ export function parseMessage(data: unknown): WebviewToHostMessage | null {
     'navigate', 'executeAction', 'undo', 'redo', 'close', 'ready', 'vscodeCommand',
     'goBack', 'saveScene', 'restoreScene', 'deleteScene', 'envSetupRequest',
     'retryStep', 'resetToCheckpoint', 'fragmentRevealed', 'recordingMarker',
+    'slideRendered',
   ];
   if (!validTypes.includes(data.type)) {
     return null;

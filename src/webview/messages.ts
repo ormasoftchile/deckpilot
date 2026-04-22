@@ -168,6 +168,17 @@ export interface RecordingMarkerMessage {
 }
 
 /**
+ * Webview confirms that a slide has finished rendering and is visible.
+ * Sent after handleSlideChanged completes DOM updates.
+ */
+export interface SlideRenderedMessage {
+  type: 'slideRendered';
+  payload: {
+    slideIndex: number;
+  };
+}
+
+/**
  * Union of all Webview → Host messages
  */
 export type WebviewToHostMessage =
@@ -186,7 +197,8 @@ export type WebviewToHostMessage =
   | RetryStepMessage
   | ResetToCheckpointMessage
   | FragmentRevealedMessage
-  | RecordingMarkerMessage;
+  | RecordingMarkerMessage
+  | SlideRenderedMessage;
 
 // ============================================================================
 // Extension Host → Webview Messages
@@ -490,6 +502,7 @@ export type ResetToCheckpointPayload = ResetToCheckpointMessage['payload'];
 export type FragmentRevealedPayload = FragmentRevealedMessage['payload'];
 export type RecordingMarkerPayload = RecordingMarkerMessage['payload'];
 export type RecordingStatusPayload = RecordingStatusMessage['payload'];
+export type SlideRenderedPayload = SlideRenderedMessage['payload'];
 
 // ============================================================================
 // Error Codes

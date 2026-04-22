@@ -33,6 +33,7 @@ import {
   RecordingMarkerMessage,
   RecordingMarkerPayload,
   RecordingStatusPayload,
+  SlideRenderedPayload,
 } from './messages';
 import { isWebviewMessage, createMessageDispatcher, MessageHandlers } from './messageHandler';
 import { Deck } from '../models/deck';
@@ -60,6 +61,7 @@ export interface WebviewCallbacks {
   onResetToCheckpoint?(payload: ResetToCheckpointPayload): Promise<void>;
   onFragmentRevealed?(payload: FragmentRevealedPayload): void;
   onRecordingMarker?(payload: RecordingMarkerPayload): void;
+  onSlideRendered?(payload: SlideRenderedPayload): void;
 }
 
 /**
@@ -394,6 +396,9 @@ export class WebviewProvider implements vscode.Disposable {
       },
       onRecordingMarker: (msg: RecordingMarkerMessage) => {
         this.callbacks?.onRecordingMarker?.(msg.payload);
+      },
+      onSlideRendered: (payload: SlideRenderedPayload) => {
+        this.callbacks?.onSlideRendered?.(payload);
       },
     };
 
