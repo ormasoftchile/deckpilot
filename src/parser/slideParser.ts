@@ -13,6 +13,7 @@ import { transformLayoutDirectives } from './layoutDirectivePlugin';
 import { injectBlockElementsFromParsed } from '../renderer/blockElementRenderer';
 import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
+import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
 
 // Initialize markdown-it renderer
 const md = new MarkdownIt({
@@ -128,6 +129,17 @@ export function parseSlides(content: string): Slide[] {
     slide.index = slides.length;
     slides.push(slide);
   }
+
+  // Assign IDs for slides that had no <!-- id: --> comment (priorities 2-4).
+  // Done here so pending-frontmatter merging above is already reflected.
+  for (const slide of slides) {
+    if (slide.id === undefined) {
+      slide.id = generateSlideId(slide.content, slide.frontmatter, slide.index);
+    }
+  }
+
+  // Ensure all IDs are unique within this deck
+  resolveUniqueIds(slides);
   
   return slides;
 }
@@ -190,6 +202,16 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   // Step 1.5: Extract checkpoint before any rendering
   const { checkpoint, cleanedContent: contentAfterCheckpoint } = extractCheckpoint(content);
   content = contentAfterCheckpoint;
+
+  // Step 1.55: Strip any <!-- id: xxx --> comment from content before rendering.
+  // The id value is stored immediately; heading/frontmatter fallbacks run in
+  // parseSlides after pending-frontmatter merging.
+  const { commentId, cleanedContent: contentAfterId } = extractIdComment(content);
+  content = contentAfterId;
+  if (commentId !== undefined) {
+    // Assign now; parseSlides won't overwrite an already-set id.
+    // (stored as a local; set on slide after createSlide below)
+  }
 
   // Step 1.6: Extract voice-over cues BEFORE stripping them, so parseCues()
   // can still find them after slide.content no longer contains the comments.
@@ -266,6 +288,10 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   
   // Create base slide
   const slide = createSlide(index, content, html, frontmatter, checkpoint);
+  // Set id from comment if found (prevents parseSlides from overwriting it)
+  if (commentId !== undefined) {
+    slide.id = commentId;
+  }
   slide.fragmentCount = fragmentCount;
   if (voiceCues.length > 0) {
     slide.voiceCues = voiceCues;
