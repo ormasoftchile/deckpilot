@@ -104,6 +104,25 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 
 **Pattern:** Always check for parallel-agent edits before assuming a file is in the committed state. Even untracked files may have been modified by a stash cycle.
 
+### 2026-04-22 — DA-13 Sidecar file watcher (.deck.yaml live reload)
+
+**Changed files:** `src/conductor/conductor.ts`, `src/extension.ts`
+
+**Pattern used:** Exact mirror of the `.deck.env` watcher in Conductor.
+- `startSidecarFileWatcher(deck)` — scoped `RelativePattern` to deck directory, `*.deck.yaml` glob, 500ms debounce, all three events (change/create/delete) routed to same `onChange` handler
+- `disposeSidecarFileWatcher()` — clears debounce timer, calls `dispose()` on watcher object, nulls both references
+- `reloadDeckFromDisk(filePath)` — reads `.deck.md` with `fs.promises.readFile`, calls `parseDeck()` (which auto-loads `.deck.yaml` since DA-06), then calls `openDeck()` with the new deck
+- Watcher pushed to `this.disposables` for extension deactivation cleanup
+- `disposeSidecarFileWatcher()` called in `close()` alongside `disposeEnvFileWatcher()`
+
+**Key difference from env watcher:** Env watcher only re-resolves env variables and sends `envStatusChanged`. Sidecar watcher does a full deck reload (`openDeck()`) because sidecar changes affect slide content, cues, speaker notes, and slide IDs — not just env resolution.
+
+**Graceful degradation on delete:** `parseDeck()` calls `sidecarExists()` first. If sidecar is deleted, `loadSidecar()` returns null, merge engine skips the merge, deck renders from inline frontmatter alone. Zero special-case code needed.
+
+**extension.ts:** Added `**/*.deck.yaml` `FileSystemWatcher` for diagnostics refresh — reuses `refreshDiagnosticsOnEnvChange` handler and is added to `context.subscriptions`.
+
+**Test suite:** 745 tests, all passing. No regressions.
+
 ### 2026-04-22 — DA-11 Duplicate explicit slide ID validation
 
 **New field:** `idExplicit?: boolean` on `Slide` model (`src/models/slide.ts`)  

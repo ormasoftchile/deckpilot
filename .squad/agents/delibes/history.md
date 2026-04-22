@@ -13,6 +13,29 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### 2026-06-12 — Sidecar Integration Round-Trip: DA-18
+
+**File:** `test/unit/parser/sidecarIntegration.test.ts` (31 tests, all passing)
+
+**Context:** DA-06 completed the async `parseDeck` pipeline wiring (Markdown parse → sidecarLoader → mergeEngine → Deck model). DA-18 adds full end-to-end integration tests using real `.deck.md` and `.deck.yaml` files written to `os.tmpdir()`.
+
+**Scenarios covered (6 describe blocks, 31 tests):**
+1. Happy path — 3-slide deck, full sidecar: IDs, cues, `terminal.run` action on setup, checkpoint on demo, untouched extra slides
+2. Sidecar absent: valid Deck returned, auto-generated IDs all non-empty, no merge artefacts
+3. Sidecar added after parse: two consecutive parses of the same `.deck.md` differ correctly when sidecar is written between calls
+4. Deck metadata: `deck.title` + `deck.theme` from sidecar reach `deck.metadata`; inline frontmatter takes precedence
+5. Unknown slide ID: `parseDeck` completes safely, slides unaffected; `validateSidecarSlideIds` (called separately) produces a Warning diagnostic for the ghost ID
+6. Malformed YAML: `loadSidecar` returns `null` silently, deck loads clean with no sidecar data; `validateSidecarSchema` produces an Error diagnostic when called directly
+
+**Critical API behaviour confirmed:**
+- `loadSidecar` returns `null` for malformed YAML (no throw) — sidecar error handling moved to `validateSidecarSchema` (deckValidator.ts). Pre-DA-06 tests in `sidecarLoader.test.ts` were already updated to reflect this.
+- `parseDeck` does **not** call `validateSidecarSlideIds` or `validateSidecarSchema` — diagnostics for unknown IDs and malformed YAML are not surfaced in `ParseResult.warnings`. Callers (extension.ts) must invoke the validators separately to surface editor diagnostics.
+- `mergeSidecarIntoSlides` silently skips sidecar entries whose `id` has no matching slide — no panic, no warning in the Deck.
+
+**Full suite: 745 → 776 passing (31 new), 0 failing.**
+
+---
+
 ### 2026-06-12 — Merge Engine Tests: DA-16
 
 **File:** `test/unit/parser/mergeEngine.test.ts` (30 tests, all passing)
