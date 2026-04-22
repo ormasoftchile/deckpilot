@@ -8,6 +8,7 @@ export interface SidecarAction {
   type: string;
   cmd?: string;
   file?: string;
+  label?: string;
   [key: string]: unknown;
 }
 

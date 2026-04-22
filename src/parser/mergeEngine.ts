@@ -10,7 +10,7 @@
 import type { Slide } from '../models/slide';
 import type { DeckMetadata } from '../models/deck';
 import type { SidecarFile, SidecarSlide } from '../models/sidecar';
-import { mapSidecarActions } from './sidecarActionMapper';
+import { mapSidecarActionsToInteractiveElements } from './sidecarActionMapper';
 
 /**
  * Merge sidecar slide entries into a parsed Slide array.
@@ -55,14 +55,15 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
       merged.checkpoint = sidecarSlide.checkpoint;
     }
 
-    // sidecarActions: store raw entries for reference, then map to onEnterActions (DA-07).
-    // Inline onEnterActions take precedence — sidecar actions are added only when the
-    // slide has no existing entry-time actions.
+    // sidecarActions: store raw entries, then render as clickable interactive elements
+    // (source='sidecar') appended after slide content. This ensures the presenter
+    // controls when actions fire — never auto-executed on slide entry.
     if (sidecarSlide.actions !== undefined) {
       merged.sidecarActions = sidecarSlide.actions;
 
-      if (merged.onEnterActions.length === 0) {
-        merged.onEnterActions = mapSidecarActions(sidecarSlide.actions, slide.index);
+      const sidecarElements = mapSidecarActionsToInteractiveElements(sidecarSlide.actions, slide.index);
+      if (sidecarElements.length > 0) {
+        merged.interactiveElements = [...merged.interactiveElements, ...sidecarElements];
       }
     }
 

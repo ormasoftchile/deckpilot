@@ -4,7 +4,8 @@
  * Inline action links (`[label](action:...)`) are already present in `slide.html`
  * because markdown-it renders them as `<a>` tags. Block elements (from ` ```action `
  * fenced code blocks) are stripped during parsing and need to be injected as HTML
- * wherever slide content is sent to the webview.
+ * wherever slide content is sent to the webview. Sidecar elements (source='sidecar')
+ * are appended after all slide content.
  */
 
 import { Slide, InteractiveElement } from '../models/slide';
@@ -127,6 +128,9 @@ function buildButtonHtml(el: InteractiveElement): string {
  *
  * If a placeholder has no matching element (e.g. parse error), it is
  * removed from the HTML silently.
+ *
+ * Sidecar-sourced elements (source='sidecar') are appended after all
+ * content — they have no placeholder in the markdown HTML.
  */
 export function injectBlockElements(html: string, slide: Slide): string {
   const blockElements = slide.interactiveElements.filter(el => el.source === 'block');
@@ -137,10 +141,18 @@ export function injectBlockElements(html: string, slide: Slide): string {
   }
 
   // Replace each placeholder; remove unmatched ones (from errored blocks)
-  return html.replace(
+  let result = html.replace(
     /<!--ACTION:(block-\d+-\d+)-->/g,
     (_match, id: string) => buttonMap.get(id) ?? '',
   );
+
+  // Append sidecar-sourced action buttons after all content
+  const sidecarElements = slide.interactiveElements.filter(el => el.source === 'sidecar');
+  for (const el of sidecarElements) {
+    result += '\n' + buildButtonHtml(el);
+  }
+
+  return result;
 }
 
 /**

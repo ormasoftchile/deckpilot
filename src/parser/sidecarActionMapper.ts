@@ -16,7 +16,8 @@
  * execution pipeline at dispatch time; no special casing is needed here.
  */
 
-import { Action, ActionType, createAction } from '../models/action';
+import { ActionType, createAction } from '../models/action';
+import type { InteractiveElement } from '../models/slide';
 import type { SidecarAction } from '../models/sidecar';
 
 /**
@@ -76,17 +77,32 @@ function buildParams(sidecar: SidecarAction): Record<string, unknown> {
 }
 
 /**
- * Map an array of SidecarAction entries to fully initialised Action objects.
- *
- * - Entries with a recognised type are mapped to the canonical params shape.
- * - Entries with an unknown type are skipped; a console.warn is emitted.
- * - Returns a new array; the input is not mutated.
+ * Derive a human-readable button label from a SidecarAction.
+ * If the YAML entry has an explicit `label` field, that wins.
  */
-export function mapSidecarActions(
+function deriveLabel(sidecar: SidecarAction): string {
+  if (sidecar.label) return String(sidecar.label);
+  switch (sidecar.type) {
+    case 'terminal.run':   return sidecar.cmd  ? `Run: ${sidecar.cmd}`                          : 'Run command';
+    case 'file.open':      return sidecar.file ? `Open: ${String(sidecar.file).split('/').pop()}` : 'Open file';
+    case 'editor.highlight': return sidecar.file ? `Highlight: ${String(sidecar.file).split('/').pop()}` : 'Highlight';
+    case 'debug.start':    return (sidecar.configName as string | undefined) ? `Debug: ${sidecar.configName}` : 'Start debug';
+    default:               return sidecar.type;
+  }
+}
+
+/**
+ * Map an array of SidecarAction entries to InteractiveElement objects.
+ *
+ * Each element gets source='sidecar' so the renderer appends it after slide
+ * content rather than trying to replace an inline placeholder.
+ * fragment=false ensures the button is always visible (not a fragment step).
+ */
+export function mapSidecarActionsToInteractiveElements(
   sidecarActions: SidecarAction[],
   slideIndex: number,
-): Action[] {
-  const result: Action[] = [];
+): InteractiveElement[] {
+  const result: InteractiveElement[] = [];
 
   for (const sidecar of sidecarActions) {
     if (!KNOWN_ACTION_TYPES.has(sidecar.type)) {
@@ -98,7 +114,23 @@ export function mapSidecarActions(
     }
 
     const params = buildParams(sidecar);
-    result.push(createAction(sidecar.type as ActionType, params, slideIndex));
+    const action = createAction(sidecar.type as ActionType, params, slideIndex);
+    const label = deriveLabel(sidecar);
+    const simpleParams = Object.entries(params)
+      .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+    const href = simpleParams ? `action:${sidecar.type}?${simpleParams}` : `action:${sidecar.type}`;
+
+    result.push({
+      id: action.id,
+      label,
+      action,
+      position: { line: 9999, column: 0 },
+      rawLink: `[${label}](${href})`,
+      source: 'sidecar',
+      fragment: false,
+    });
   }
 
   return result;

@@ -119,3 +119,11 @@
 - **Platform key names confirmed:** `darwin`, `linux`, `win32` — exact Node.js `process.platform` values. No normalization needed at the type layer; consumers can use `process.platform` directly as the lookup key.
 - **`common` section:** flat `Record<string, string>` — applies across all platforms before platform-specific overrides. Merge order (common first, platform second) is a DA-22 concern.
 - **Test count at DA-21:** 788 passing, 0 failing.
+
+### 2025-07-24 — onEnterActions Timing Bug Fix
+
+- **Root cause:** `Conductor.goToSlide()` called `executeSlideActions()` immediately after `sendSlideChanged()`, without waiting for the webview to finish rendering. The actions fired before the slide was visible.
+- **Fix pattern:** Added `slideRendered` acknowledgment message. Webview sends it at the end of `handleSlideChanged()`. Conductor awaits `waitForSlideRender()` before executing `onEnterActions`.
+- **Safety timeout:** 2-second timeout in `waitForSlideRender()` prevents infinite blocking if webview doesn't respond.
+- **Files changed:** `messages.ts`, `messageHandler.ts`, `webviewProvider.ts`, `conductor.ts`, `presentation.js`
+- **Test count after fix:** 857 passing, 0 failing.

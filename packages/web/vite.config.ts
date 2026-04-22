@@ -11,9 +11,24 @@ export default defineConfig({
       child_process: path.resolve(__dirname, 'src/stubs/child_process.ts'),
       path: path.resolve(__dirname, 'src/stubs/path.ts'),
       'gray-matter': path.resolve(__dirname, 'src/stubs/gray-matter.ts'),
+      fs: path.resolve(__dirname, 'src/stubs/fs.ts'),
     },
   },
   plugins: [
+    {
+      name: 'inject-workspace-paths',
+      transformIndexHtml(html) {
+        return html
+          .replace(
+            /\/@fs\/[^"]+\/src\/webview\/assets\/presentation\.css/g,
+            `/@fs${workspaceRoot}/src/webview/assets/presentation.css`
+          )
+          .replace(
+            /\/@fs\/[^"]+\/src\/webview\/assets\/presentation\.js/g,
+            `/@fs${workspaceRoot}/src/webview/assets/presentation.js`
+          );
+      },
+    },
     {
       // All imports from renderDirectiveParser.ts are TypeScript interfaces/types.
       // esbuild strips them, but Vite dev server (native ESM) still tries to resolve
@@ -34,7 +49,7 @@ export default defineConfig({
     {
       name: 'deck-api',
       configureServer(server) {
-        // Serve file contents for the parser
+        // Serve file contents for the parser (GET returns content; HEAD checks existence)
         server.middlewares.use('/api/file', (req, res) => {
           const url = new URL(req.url!, `http://localhost`);
           const filePath = url.searchParams.get('path');
@@ -51,6 +66,17 @@ export default defineConfig({
             return;
           }
           try {
+            const exists = fs.existsSync(resolved);
+            if (!exists) {
+              res.statusCode = 404;
+              res.end('File not found');
+              return;
+            }
+            if (req.method === 'HEAD') {
+              res.statusCode = 200;
+              res.end();
+              return;
+            }
             const content = fs.readFileSync(resolved, 'utf-8');
             res.setHeader('Content-Type', 'text/plain; charset=utf-8');
             res.end(content);

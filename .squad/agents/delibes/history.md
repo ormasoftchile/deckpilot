@@ -206,3 +206,31 @@ All three detection methods are `private` on `RecorderOrchestrator`. Accessed vi
 
 **Suite count after DA-14:** 788 passing (was 724 after all pre-existing untracked tests included).
 
+
+---
+
+### 2026-06-12 — P2 Test Coverage: DA-25
+
+**Files modified/created:**
+- `src/commands/showResolvedModel.ts` — refactored: extracted `serializeDeck()` as exported pure function
+- `test/unit/commands/showResolvedModel.test.ts` — NEW: 8 tests (circular refs, function stripping, valid serialization)
+- `test/unit/parser/mergeEngine.test.ts` — extended: +6 tests (recording/export edge cases, environment-only no-op, falsy number preservation)
+- `test/unit/env/envMerger.test.ts` — extended: +6 tests (multi-key common, process.env override, cross-platform isolation, empty object handling)
+- `test/unit/commands/extractMetadata.test.ts` — extended: +5 tests (empty slides array, all-fields slide, ordering, multiple actions, full round-trip)
+
+**Suite count:** 831 → 856 passing, 0 failing.
+
+**Pattern — task stale on arrival:**
+When a DA test task is issued, part of the implementation may have already landed (DA-22/23/24 included tests from the feature authors). Always run `npm run test:unit` first to establish the true baseline before counting gaps. The target count (856) was still the right anchor even though areas 1–3 were already partially addressed by Wave 3 implementors.
+
+**Refactor for testability:**
+`showResolvedModel.ts` embedded its circular-reference JSON replacer inline in the VS Code command. To test it without VS Code, extracted it as `export function serializeDeck(value: unknown): string`. The command now delegates to this function. This is the established pattern for DA-25 testability (mirrors `buildSidecarContent` in `extractMetadata.ts`).
+
+**Genuine gaps found across all four areas:**
+1. `mergeSidecarDeckMetadata` returned same reference for `{ slides: [...] }` but not for `{ environment: {...} }` (same condition, different key — now tested).
+2. `framerate: 0` (falsy number in recording) — not previously verified as preserved.
+3. `serializeDeck` — entirely untested (function was VS Code-entangled until refactored).
+4. `envMerger` — common→process.env override not explicitly tested (object spread behavior).
+5. `buildSidecarContent` — no test for `deck.slides = []` (makeDeck helper silently added a default slide).
+
+**No bugs found** in the P2 pipeline during this audit. All edge-case tests passed on first run.

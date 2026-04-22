@@ -44,9 +44,9 @@ export interface InteractiveElement {
   position: ContentPosition;
   /** Original markdown link text */
   rawLink: string;
-  /** Whether this element came from an inline link or a fenced block.
+  /** Whether this element came from an inline link, a fenced block, or a sidecar action.
    *  Defaults to 'inline' for backward compatibility. */
-  source?: 'inline' | 'block';
+  source?: 'inline' | 'block' | 'sidecar';
   /** Fragment animation for this element.
    *  - `true` or `'fade'` = default fade animation
    *  - A string like `'slide-up'` = specific animation type

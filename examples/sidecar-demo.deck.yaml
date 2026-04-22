@@ -1,0 +1,41 @@
+# sidecar-demo.deck.yaml
+# Companion metadata for sidecar-demo.deck.md
+# This file stores operational metadata (actions, cues, timing) separately from content.
+# See: https://github.com/ormasoftchile/deckpilot
+
+deck:
+  title: Sidecar Demo
+  theme: dark
+
+slides:
+  - id: intro
+    cues:
+      - Welcome the audience and explain the dual authoring model
+    duration: 8s
+
+  - id: setup
+    actions:
+      - type: terminal.run
+        cmd: npm install
+    cues:
+      - Walk through the dependency installation output
+    checkpoint: dependencies-installed
+    duration: 12s
+
+  - id: demo
+    actions:
+      - type: terminal.run
+        cmd: npm start
+    cues:
+      - Show the application starting up
+      - Point out the port it binds to
+    duration: 15s
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
+  srtFormat: srt

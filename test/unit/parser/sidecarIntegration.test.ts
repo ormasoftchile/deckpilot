@@ -172,16 +172,17 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
       expect(setup.cues).to.deep.equal(['Walk through the install steps']);
     });
 
-    it('terminal.run action is mapped onto the setup slide onEnterActions', async () => {
+    it('terminal.run action is mapped onto the setup slide interactiveElements', async () => {
       writeDeckMd(THREE_SLIDE_MD);
       writeDeckYaml(buildFullSidecar());
 
       const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
       const setup = deck!.slides[1];
 
-      expect(setup.onEnterActions).to.have.length(1);
-      expect(setup.onEnterActions[0].type).to.equal('terminal.run');
-      expect((setup.onEnterActions[0].params as Record<string, unknown>).command).to.equal(
+      const sidecarEl = setup.interactiveElements.find(el => el.source === 'sidecar');
+      expect(sidecarEl).to.exist;
+      expect(sidecarEl!.action.type).to.equal('terminal.run');
+      expect((sidecarEl!.action.params as Record<string, unknown>).command).to.equal(
         'npm install',
       );
     });
@@ -313,17 +314,18 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
       ]);
     });
 
-    it('first parse has no terminal action; second parse has it', async () => {
+    it('first parse has no terminal action; second parse has it as interactiveElement', async () => {
       writeDeckMd(THREE_SLIDE_MD);
 
       const { deck: deckWithout } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
-      expect(deckWithout!.slides[1].onEnterActions).to.deep.equal([]);
+      expect(deckWithout!.slides[1].interactiveElements.filter(el => el.source === 'sidecar')).to.have.length(0);
 
       writeDeckYaml(buildFullSidecar());
 
       const { deck: deckWith } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
-      expect(deckWith!.slides[1].onEnterActions).to.have.length(1);
-      expect(deckWith!.slides[1].onEnterActions[0].type).to.equal('terminal.run');
+      const sidecarEls = deckWith!.slides[1].interactiveElements.filter(el => el.source === 'sidecar');
+      expect(sidecarEls).to.have.length(1);
+      expect(sidecarEls[0].action.type).to.equal('terminal.run');
     });
 
     it('first parse has no checkpoint on demo; second parse has it', async () => {

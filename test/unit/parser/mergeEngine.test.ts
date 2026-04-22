@@ -175,7 +175,7 @@ describe('mergeSidecarIntoSlides', () => {
       expect(result[0].sidecarActions).to.be.undefined;
     });
 
-    it('populates onEnterActions from sidecar actions (DA-07)', () => {
+    it('populates interactiveElements from sidecar actions (DA-07)', () => {
       const slide = makeSlide({ index: 2, id: 'demo' });
       const sidecar: SidecarFile = {
         slides: [
@@ -189,15 +189,16 @@ describe('mergeSidecarIntoSlides', () => {
         ],
       };
       const result = mergeSidecarIntoSlides([slide], sidecar);
-      const onEnter = result[0].onEnterActions;
-      expect(onEnter).to.have.lengthOf(2);
-      expect(onEnter[0].type).to.equal('terminal.run');
-      expect(onEnter[0].params).to.have.property('command', 'npm install');
-      expect(onEnter[1].type).to.equal('file.open');
-      expect(onEnter[1].params).to.have.property('path', 'src/app.ts');
+      const elements = result[0].interactiveElements;
+      expect(elements).to.have.lengthOf(2);
+      expect(elements[0].action.type).to.equal('terminal.run');
+      expect(elements[0].action.params).to.have.property('command', 'npm install');
+      expect(elements[0].source).to.equal('sidecar');
+      expect(elements[1].action.type).to.equal('file.open');
+      expect(elements[1].action.params).to.have.property('path', 'src/app.ts');
     });
 
-    it('does not overwrite existing onEnterActions with sidecar actions', () => {
+    it('appends sidecar actions to existing interactiveElements', () => {
       const existingAction = {
         id: 'existing',
         type: 'file.open' as const,
@@ -205,29 +206,38 @@ describe('mergeSidecarIntoSlides', () => {
         status: 'pending' as const,
         slideIndex: 0,
       };
-      const slide = makeSlide({ index: 0, id: 'demo', onEnterActions: [existingAction] });
+      const existingElement = {
+        id: 'el-1',
+        label: 'Open inline.ts',
+        action: existingAction,
+        position: { line: 1, column: 0 },
+        rawLink: '[Open inline.ts](action:file.open?path=inline.ts)',
+        source: 'inline' as const,
+      };
+      const slide = makeSlide({ index: 0, id: 'demo', interactiveElements: [existingElement] });
       const sidecar: SidecarFile = {
         slides: [{ id: 'demo', actions: [{ type: 'terminal.run', cmd: 'npm test' }] }],
       };
       const result = mergeSidecarIntoSlides([slide], sidecar);
-      expect(result[0].onEnterActions).to.have.lengthOf(1);
-      expect(result[0].onEnterActions[0].id).to.equal('existing');
+      expect(result[0].interactiveElements).to.have.lengthOf(2);
+      expect(result[0].interactiveElements[0].id).to.equal('el-1');
+      expect(result[0].interactiveElements[1].source).to.equal('sidecar');
     });
 
-    it('assigns the correct slideIndex to mapped actions', () => {
+    it('assigns the correct slideIndex to sidecar interactive elements', () => {
       const slide = makeSlide({ index: 7, id: 'slide-7' });
       const sidecar: SidecarFile = {
         slides: [{ id: 'slide-7', actions: [{ type: 'terminal.run', cmd: 'ls' }] }],
       };
       const result = mergeSidecarIntoSlides([slide], sidecar);
-      expect(result[0].onEnterActions[0].slideIndex).to.equal(7);
+      expect(result[0].interactiveElements[0].action.slideIndex).to.equal(7);
     });
 
-    it('leaves onEnterActions empty when sidecar entry has no actions', () => {
+    it('leaves interactiveElements unchanged when sidecar entry has no actions', () => {
       const slide = makeSlide({ index: 0, id: 'demo' });
       const sidecar: SidecarFile = { slides: [{ id: 'demo' }] };
       const result = mergeSidecarIntoSlides([slide], sidecar);
-      expect(result[0].onEnterActions).to.deep.equal([]);
+      expect(result[0].interactiveElements).to.deep.equal([]);
     });
   });
 
