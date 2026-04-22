@@ -24,8 +24,8 @@
 
 - **Title:** Dual Authoring Model (Inline Deck + Sidecar)
 - **Source:** Inline (pasted 2026-04-22)
-- **Status:** Phase 1 complete (2026-06-12) — 788 tests passing
-- **Summary:** Support two authoring modes — rich single-file `.deck.md` and basic Markdown + `.deck.yaml` sidecar — both compiling into one canonical runtime model. Three-phase MVP. Phase 1 (DA-01 through DA-18) ships the full parser pipeline, ID system, merge engine, validation layer, and file watcher.
+- **Status:** Phase 2 complete (2026-07-23) — 856 tests passing
+- **Summary:** Support two authoring modes — rich single-file `.deck.md` and basic Markdown + `.deck.yaml` sidecar — both compiling into one canonical runtime model. Three-phase MVP. Phase 1 (DA-01 through DA-18) shipped the full parser pipeline, ID system, merge engine, validation layer, and file watcher. Phase 2 (DA-19 through DA-25) added recording/export sidecar settings, environment/platform overrides, four-layer env resolution (`envMerger.ts`), and two authoring-aid commands (`extractMetadataToSidecar`, `showResolvedDeckModel`).
 
 ## Project Context
 

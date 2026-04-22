@@ -127,6 +127,91 @@ See decision inbox file `cervantes-dual-authoring-decomp.md` for complete 25-ite
 
 ---
 
+### Dual Authoring Model — Recording/Export Settings (DA-19, DA-20)
+
+**Authors:** Cervantes (DA-19), De Unamuno (DA-20)
+**Status:** ✅ Implemented
+
+**Extended sidecar types (`SidecarRecording`, `SidecarExport`):**
+
+`SidecarRecording` gains: `outputDir?`, `format?`, `codec?`, `framerate?: number`, `windowScope?: 'focused' | 'screen'`. `SidecarExport` gains: `outputDir?`, `srtFormat?: 'srt' | 'vtt'`, `voiceScript?: boolean`.
+
+**Naming rationale:** `windowScope` mirrors the project lexicon (`windowX/Y/Width/Height`). `srtFormat` avoids collision with the existing `subtitles` field. `format`/`codec` remain plain `string` (not constrained union) — ffmpeg accepts dozens of values; a closed union would require constant maintenance.
+
+**`DeckMetadata.recording` / `.export` use inline types** (not imported from `sidecar.ts`) to keep the core deck model free of sidecar-layer dependencies. The shapes are structural mirrors; if `SidecarRecording` gains new fields, `DeckMetadata.recording` needs a parallel update.
+
+**Merge strategy:** Spread-based field-by-field merge (`{ ...sidecarSection, ...(inlineSection ?? {}) }`). YAML and frontmatter parsers never emit `{ key: undefined }`, so spread correctly overwrites only authored fields. Scalar fields (`title`, `theme`) keep the explicit conditional pattern for readability.
+
+**Early-return guard updated:** Original `if (!sidecar.deck) { return metadata; }` extended to `if (!sidecar.deck && !sidecar.recording && !sidecar.export) { return metadata; }` — preserves the no-copy optimisation while allowing `recording`/`export` sidecars with no `deck:` section (a valid and common authoring pattern).
+
+---
+
+### Dual Authoring Model — Environment/Platform Overrides (DA-21, DA-22)
+
+**Authors:** Cervantes (DA-21), De Unamuno (DA-22)
+**Status:** ✅ Implemented
+
+**`SidecarEnvironment` interface:** `{ common?: Record<string, string>; platform?: Record<'darwin' | 'linux' | 'win32', Record<string, string>> }`. Platform keys are exact `process.platform` values — no aliasing (`macos`, `windows`). `Record<string, string>` matches `process.env` semantics.
+
+**`envMerger.ts` four-layer precedence** (lowest → highest):
+
+| Priority | Source |
+|---|---|
+| 4 (base) | `process.env` — `undefined` values excluded |
+| 3 | `sidecar.environment.common` — cross-platform author defaults |
+| 2 | `sidecar.environment.platform[platform]` — per-OS overrides |
+| 1 (highest) | `.deck.env` file — explicit user-managed values; always wins |
+
+**Injectable platform pattern:** `resolveEnvironment(deckPath, sidecar, platform = process.platform)` — default argument is `process.platform` but injectable for tests. No `process.platform` hardcode.
+
+**Placement:** `src/env/envMerger.ts` (not `src/parser/`) — environment-layer concern consistent with `EnvFileLoader` and `EnvResolver` placement.
+
+**Unknown platform:** If `process.platform` is `freebsd` or any unlisted value, the platform layer is silently skipped. Common and `.deck.env` layers still apply.
+
+**`deck.resolvedEnvironment`:** Optional `Record<string, string>` on `Deck`. If `resolveEnvironment` throws (non-fatal), field is absent. Callers guard with `deck.resolvedEnvironment ?? {}`.
+
+**Validator updated:** `'environment'` added to `KNOWN_SIDECAR_KEYS` in `validateSidecarSchema()` — removes spurious warning for decks with an `environment:` block.
+
+---
+
+### Dual Authoring Model — extractMetadataToSidecar Command (DA-23)
+
+**Author:** De Unamuno
+**Status:** ✅ Implemented
+
+**Command:** `deckpilot.extractMetadataToSidecar` — scaffolds a `.deck.yaml` from the active `.deck.md`.
+
+**Extraction strategy:** Calls `parseDeck()` and extracts from the merged `Deck` object (not raw frontmatter). Captured fields: `deck.metadata.title`, `deck.metadata.theme`, `deck.metadata.recording`, `deck.metadata.export`; per-slide: `id` (required), `cues`, `duration`, `checkpoint`, `sidecarActions` (round-trip preservation for existing sidecars).
+
+**Explicit exclusions:** Inline action links `[Label](action:...)`, `voiceCues` (HTML comment content), `speakerNotes` / frontmatter `notes`, `onEnterActions` (resolved form — `sidecarActions` is the correct round-trip form). Slides with no extractable metadata are omitted from `slides[]` to avoid bloat.
+
+**Overwrite guard:** Non-modal `showWarningMessage` prompt with explicit "Overwrite" confirmation if `.deck.yaml` already exists. Dismiss aborts silently.
+
+**Pure logic separation:** `buildSidecarContent(deck: Deck): string` is exported as a pure function with no VS Code API imports — fully unit-testable. The VS Code I/O wrapper is a thin shell handling editor validation, file existence check, invocation, write, and open.
+
+**Serialization:** `js-yaml` `dump()` with `lineWidth: 120`. No hand-rolled YAML.
+
+---
+
+### Dual Authoring Model — showResolvedDeckModel Command (DA-24)
+
+**Author:** De Vega
+**Status:** ✅ Implemented
+
+**Command:** `deckpilot.showResolvedDeckModel` — opens a read-only, JSON-highlighted virtual document showing the final merged `Deck` object. Authoring aid for debugging merge issues.
+
+**Virtual document pattern:** `vscode.workspace.registerTextDocumentContentProvider('deckpilot-model', provider)`. `DeckModelContentProvider` holds a `Map<string, string>` keyed by URI path. On invocation: parse → JSON-serialize → `provider.update(uri, json)` → `onDidChange.fire(uri)` → `openTextDocument` → `setTextDocumentLanguage(doc, 'json')` → `showTextDocument`.
+
+**Why virtual (not disk):** Faster, no project directory pollution, immediately discardable. Consistent with VS Code conventions (git diff views, TS declaration previews).
+
+**JSON safety:** Circular references caught with a `seen` Set in the replacer function. Functions stripped (`return undefined`). Output guaranteed valid JSON.
+
+**Re-use semantics:** Same URI per filename — calling the command twice updates the existing tab (via `onDidChange`), not a second tab. No auto-refresh on save; command must be re-invoked manually.
+
+**`serializeDeck()` extracted as pure function:** Delibes found during DA-25 test authoring that JSON serialization logic was embedded in the command handler. Extracted to `buildDeckJson(deck: Deck): string` — pure, no vscode imports, unit-testable without the extension host.
+
+---
+
 ### Dual Authoring Model — File Watcher for `.deck.yaml` (DA-13)
 
 **Author:** De Unamuno  
