@@ -174,6 +174,61 @@ describe('mergeSidecarIntoSlides', () => {
       const result = mergeSidecarIntoSlides([slide], sidecar);
       expect(result[0].sidecarActions).to.be.undefined;
     });
+
+    it('populates onEnterActions from sidecar actions (DA-07)', () => {
+      const slide = makeSlide({ index: 2, id: 'demo' });
+      const sidecar: SidecarFile = {
+        slides: [
+          {
+            id: 'demo',
+            actions: [
+              { type: 'terminal.run', cmd: 'npm install' },
+              { type: 'file.open', file: 'src/app.ts' },
+            ],
+          },
+        ],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      const onEnter = result[0].onEnterActions;
+      expect(onEnter).to.have.lengthOf(2);
+      expect(onEnter[0].type).to.equal('terminal.run');
+      expect(onEnter[0].params).to.have.property('command', 'npm install');
+      expect(onEnter[1].type).to.equal('file.open');
+      expect(onEnter[1].params).to.have.property('path', 'src/app.ts');
+    });
+
+    it('does not overwrite existing onEnterActions with sidecar actions', () => {
+      const existingAction = {
+        id: 'existing',
+        type: 'file.open' as const,
+        params: { path: 'inline.ts' },
+        status: 'pending' as const,
+        slideIndex: 0,
+      };
+      const slide = makeSlide({ index: 0, id: 'demo', onEnterActions: [existingAction] });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'demo', actions: [{ type: 'terminal.run', cmd: 'npm test' }] }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].onEnterActions).to.have.lengthOf(1);
+      expect(result[0].onEnterActions[0].id).to.equal('existing');
+    });
+
+    it('assigns the correct slideIndex to mapped actions', () => {
+      const slide = makeSlide({ index: 7, id: 'slide-7' });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'slide-7', actions: [{ type: 'terminal.run', cmd: 'ls' }] }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].onEnterActions[0].slideIndex).to.equal(7);
+    });
+
+    it('leaves onEnterActions empty when sidecar entry has no actions', () => {
+      const slide = makeSlide({ index: 0, id: 'demo' });
+      const sidecar: SidecarFile = { slides: [{ id: 'demo' }] };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].onEnterActions).to.deep.equal([]);
+    });
   });
 
   describe('immutability', () => {

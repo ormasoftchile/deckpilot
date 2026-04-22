@@ -10,6 +10,7 @@
 import type { Slide } from '../models/slide';
 import type { DeckMetadata } from '../models/deck';
 import type { SidecarFile, SidecarSlide } from '../models/sidecar';
+import { mapSidecarActions } from './sidecarActionMapper';
 
 /**
  * Merge sidecar slide entries into a parsed Slide array.
@@ -54,9 +55,15 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
       merged.checkpoint = sidecarSlide.checkpoint;
     }
 
-    // sidecarActions: store directly; DA-07/08 will wire these to the action registry
+    // sidecarActions: store raw entries for reference, then map to onEnterActions (DA-07).
+    // Inline onEnterActions take precedence — sidecar actions are added only when the
+    // slide has no existing entry-time actions.
     if (sidecarSlide.actions !== undefined) {
       merged.sidecarActions = sidecarSlide.actions;
+
+      if (merged.onEnterActions.length === 0) {
+        merged.onEnterActions = mapSidecarActions(sidecarSlide.actions, slide.index);
+      }
     }
 
     return merged;
