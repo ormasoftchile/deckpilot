@@ -110,3 +110,32 @@ All three detection methods are `private` on `RecorderOrchestrator`. Accessed vi
 `execFileSync` is called 2–4 times in sequence inside `tryXdotool()`. Mock keyed on `"cmd:args[0]"` (e.g. `"xdotool:getactivewindow"`) handles the sequential call pattern cleanly. Throw an `Error` from the mock to simulate "command not found" for the wmctrl fallback path.
 
 **25 tests written, 25 passing. Full suite: 497 passing.**
+
+---
+
+### 2026-06-12 — Sidecar Loader Tests: DA-15
+
+**File:** `test/unit/parser/sidecarLoader.test.ts` (28 tests total: 11 pre-existing + 17 new)
+
+**Test file location:** `test/unit/parser/sidecarLoader.test.ts` — follows the same pattern as all other parser unit tests in that directory. Import directly from `../../../src/parser/sidecarLoader`.
+
+**Fixture pattern established:**
+- Use `fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-load-test-'))` for temp directory — same as `sidecarExists` tests above
+- Helper `writeSidecar(name, content)` writes the `.deck.yaml` into `tmpDir`
+- Helper `deckMdPath(name?)` returns the `.deck.md` path within `tmpDir`
+- Multi-line YAML built with `['key:', '  value:', ...].join('\n')` for readability
+- Single-line YAML written as `'key:\n  value: x'` (TypeScript `\n` escape in string literal)
+- Cleanup in `afterEach` with `fs.rmSync(tmpDir, { recursive: true, force: true })`
+
+**Behaviour documented by tests:**
+- Empty YAML file → `loadSidecar` returns `{}` (empty object, NOT null) — implementation returns `{}` when `yaml.load` returns null/undefined
+- Unknown/extra fields on both top-level and slide objects pass through without throwing — extensible schema by design
+- Whitespace-only `id` field throws same error as missing `id` (caught by `slide.id.trim() === ''`)
+
+**Pre-existing issues encountered (all in OTHER test files, not sidecarLoader):**
+- `src/parser/deckValidator.ts` — missing `yaml` import (needed for `validateSidecarSchema`); added it to fix TypeScript compilation
+- `test/unit/parser/deckValidator.test.ts` — imports `getLastValidationDiagnostics` from `slideParser` which doesn't exist (DA-11 integration not yet implemented); pre-existing, left as-is
+- `test/unit/parser/mergeEngine.test.ts` — 2 failing tests for `onEnterActions` population (DA-07 merge not wired up yet); pre-existing
+- `sinon` package was missing from devDependencies (required by `sidecarActionMapper.test.ts`); installed to unblock test compilation
+
+**Suite counts after DA-15:** 743 passing, 2 failing (pre-existing merge engine tests)
