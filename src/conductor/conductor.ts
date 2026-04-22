@@ -446,7 +446,7 @@ export class Conductor implements vscode.Disposable {
     const filePath = document.uri.fsPath;
 
     // Parse the deck first
-    const parseResult = parseDeck(content, filePath);
+    const parseResult = await parseDeck(content, filePath);
     if (!parseResult.deck) {
       void vscode.window.showWarningMessage(
         `Cannot validate: ${parseResult.error || 'Failed to parse deck'}`
@@ -1278,6 +1278,7 @@ export class Conductor implements vscode.Disposable {
       this.webviewProvider.sendDeckLoaded({
         title: this.deck.title,
         author: this.deck.author,
+        theme: this.deck.metadata.theme,
         totalSlides: this.deck.slides.length,
         currentSlideIndex: 0,
         slideHtml: firstSlideHtml,

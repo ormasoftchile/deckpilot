@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
             try {
                 // Parse the deck
                 const content = document.getText();
-                const result = parseDeck(content, document.uri.fsPath);
+                const result = await parseDeck(content, document.uri.fsPath);
 
                 if (result.error || !result.deck) {
                     void vscode.window.showWarningMessage(result.error || 'Failed to parse presentation.');
