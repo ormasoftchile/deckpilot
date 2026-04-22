@@ -298,3 +298,40 @@ describe('processFragments — legacy comment stripping', () => {
     expect(out).to.contain('<p class="fragment"');
   });
 });
+
+describe('processFragments — details (:::advanced)', () => {
+  it('<details> becomes a single fragment step', () => {
+    const html = '<details class="disclosure-advanced"><summary>Advanced</summary><p>Inner content</p></details>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('<details class="disclosure-advanced fragment"');
+    expect(fragmentCount).to.equal(1);
+  });
+
+  it('inner <p> inside <details> is NOT a separate fragment', () => {
+    const html = '<details class="disclosure-advanced"><summary>Advanced</summary><p>Inner</p></details>';
+    const { html: out } = processFragments(html);
+    expect(out).to.not.contain('<p class="fragment"');
+    expect(out).to.contain('<p>Inner</p>');
+  });
+
+  it('<p> before <details> fragments before the details block', () => {
+    const html = '<p>Intro text</p><details class="disclosure-advanced"><summary>Advanced</summary><p>Inner</p></details>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('<p class="fragment" data-fragment="1"');
+    expect(out).to.contain('<details class="disclosure-advanced fragment" data-fragment="2"');
+    expect(fragmentCount).to.equal(2);
+  });
+
+  it('<div class="step-optional"> becomes a single fragment step', () => {
+    const html = '<div class="step-optional"><span class="optional-badge">Optional</span><p>Run lint</p></div>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('class="step-optional fragment"');
+    expect(fragmentCount).to.equal(1);
+  });
+
+  it('inner <p> inside .step-optional is NOT a separate fragment', () => {
+    const html = '<div class="step-optional"><p>Optional action</p></div>';
+    const { html: out } = processFragments(html);
+    expect(out).to.not.contain('<p class="fragment"');
+  });
+});

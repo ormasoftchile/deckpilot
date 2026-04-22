@@ -59,7 +59,7 @@ function splitOnGroups(html: string): Array<{ text: string; isGroup: boolean }> 
  * Add __frag sentinel to all eligible block elements in an HTML segment
  * that should each be their own fragment step.
  *
- * Eligible: p, h2–h6, blockquote, table, li, pre, div.render-block
+ * Eligible: p, h2–h6, blockquote, table, li, pre, div.render-block, details, div.step-optional
  * NOT eligible: h1 (always visible), ul/ol containers (their li children fragment)
  */
 function tagEligibleElements(seg: string): string {
@@ -100,6 +100,27 @@ function tagEligibleElements(seg: string): string {
   seg = seg.replace(
     /(<div\b(?=[^>]*\brender-block\b)[^>]*)(?![^>]*__frag)([^>]*>)/g,
     (_m, start, rest) => `${start} __frag="fade"${rest}`,
+  );
+  // details (:::advanced — whole collapsed block is one fragment unit)
+  seg = seg.replace(
+    /(<details\b[^>]*)(?![^>]*__frag)([^>]*>)/g,
+    (_m, start, rest) => `${start} __frag="fade"${rest}`,
+  );
+  // step-optional divs (:::optional — whole block is one fragment unit)
+  seg = seg.replace(
+    /(<div\b(?=[^>]*\bstep-optional\b)[^>]*)(?![^>]*__frag)([^>]*>)/g,
+    (_m, start, rest) => `${start} __frag="fade"${rest}`,
+  );
+
+  // De-tag all eligible elements inside <details> and .step-optional — the outer
+  // container is the single fragment unit; its children must not each be individual steps.
+  seg = seg.replace(
+    /(<details\b[^>]*>)([\s\S]*?)(<\/details>)/g,
+    (_m, open, inner, close) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
+  );
+  seg = seg.replace(
+    /(<div\b[^>]*\bstep-optional\b[^>]*>)([\s\S]*?)(<\/div>)/g,
+    (_m, open, inner, close) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
   );
 
   // De-tag <p> elements that are direct children of <li> (loose list items).
@@ -143,7 +164,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
   // Phase 2 — assign sequential fragment indices in document order
   let fragmentIndex = 0;
   const result = tagged.replace(
-    /(<(?:li|p|h[2-6]|blockquote|table|div|pre)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    /(<(?:li|p|h[2-6]|blockquote|table|div|pre|details)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
     (_m, pre: string, animation, post) => {
       fragmentIndex++;
       // Merge fragment into an existing class attribute to avoid duplicate class= attributes

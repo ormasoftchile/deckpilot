@@ -115,7 +115,7 @@ describe('slideRenderingPipeline — :::advanced layout', () => {
 
   it('should use the disclosure-advanced class on <details>', () => {
     const html = renderSlide(advancedMarkdown);
-    expect(html).to.contain('class="disclosure-advanced"');
+    expect(html).to.contain('class="disclosure-advanced fragment"');
   });
 
   it('should include a <summary> element', () => {
@@ -148,7 +148,7 @@ describe('slideRenderingPipeline — :::optional layout', () => {
 
   it('should wrap content in a step-optional div', () => {
     const html = renderSlide(optionalMarkdown);
-    expect(html).to.contain('class="step-optional"');
+    expect(html).to.contain('class="step-optional fragment"');
   });
 
   it('should include the optional-badge span', () => {

@@ -284,3 +284,21 @@ Changed three files:
 - Space 3: "Run: npm install" button
 
 **Final test count:** 872 passing, 0 failing (was 867 before this session). Compile: clean.
+
+### 2026-06-12 — Showcase-full sidecar example (model extensions)
+
+**Task:** Create `examples/showcase-full.deck.md` and `examples/showcase-full.deck.yaml` as the canonical reference for the full dual authoring model.
+
+**Model extensions made (non-breaking):**
+
+1. **`SidecarSlide.notes?: string`** — Speaker notes can now be declared in the sidecar under a slide entry. `mergeEngine.ts` maps this to `Slide.speakerNotes` with standard sidecar precedence (inline wins).
+
+2. **`SidecarDeck.basePath?: string`** — Deck-level basePath mirrored from `DeckMetadata.basePath`. Allows sidecar-only decks to resolve relative file references without frontmatter.
+
+3. **`SidecarScene` interface** — New type: `{ name: string; slide: string }`. Sidecar scenes reference slides by their string ID (not the 1-based index used by inline `SceneDefinition`). Added as `SidecarFile.scenes?: SidecarScene[]`.
+
+**Key distinction:** Inline `SceneDefinition.slide` is `number` (1-based). `SidecarScene.slide` is `string` (ID). The merge engine does not yet resolve sidecar scenes to indices — that is a future DA item.
+
+**Field name clarification for terminal.run:** The sidecar mapper reads `cmd` → renames to `command` in params. However, `command` in YAML also works because it passes through `...rest` in `buildParams`. The showcase-full example uses `command` (consistent with inline action blocks). The reference sidecar-demo uses `cmd`. Both are valid.
+
+**What `notes:` in sidecar maps to:** `Slide.speakerNotes` — this is the field the webview presenter panel reads. `SlideFrontmatter.notes` is the raw frontmatter field, mapped to `speakerNotes` by the parser. The merge engine follows the same mapping.

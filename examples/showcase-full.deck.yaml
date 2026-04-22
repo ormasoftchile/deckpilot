@@ -1,0 +1,90 @@
+# showcase-full.deck.yaml
+# Companion sidecar for showcase-full.deck.md
+# Demonstrates the full dual authoring model: Markdown holds content,
+# YAML holds all operational metadata (actions, cues, notes, scenes, recording).
+# See: https://github.com/ormasoftchile/deckpilot
+
+deck:
+  title: "Deckpilot — Feature Showcase (Sidecar Edition)"
+  basePath: ".."
+  theme: dark
+
+scenes:
+  - name: intro
+    slide: intro
+  - name: layouts
+    slide: layouts-columns
+  - name: live-content
+    slide: render-file
+  - name: actions
+    slide: actions-open
+  - name: polish
+    slide: speaker-notes
+
+slides:
+  - id: intro
+    # Title slide — no actions. Content and layout live entirely in the markdown.
+
+  - id: fragments
+    # Fragment reveal is driven by the markdown content order — no sidecar metadata needed.
+
+  - id: layouts-columns
+    # Two-column layout with YAML code block as content — no actions on this slide.
+
+  - id: layouts-advanced
+    actions:
+      - type: terminal.run
+        command: npm run lint
+        label: Also run lint (optional)
+
+  - id: render-file
+    # render:file link stays in markdown — it is content, not metadata.
+
+  - id: render-diff
+    # render:diff link stays in markdown — it is content, not metadata.
+
+  - id: actions-open
+    actions:
+      - type: sequence
+        label: Walk through the Conductor
+        showCommand: true
+        steps:
+          - type: file.open
+            path: src/conductor/conductor.ts
+          - type: editor.highlight
+            path: src/conductor/conductor.ts
+            lines: "1-30"
+
+  - id: actions-terminal
+    actions:
+      - type: terminal.run
+        command: npm run compile
+        label: Compile the extension
+        showCommand: true
+      - type: sequence
+        label: Full build + test
+        showCommand: true
+        steps:
+          - type: terminal.run
+            command: npm run compile
+          - type: terminal.run
+            command: npm run test:unit
+
+  - id: speaker-notes
+    notes: |
+      This slide shows how speaker notes work.
+      Only you see this — the audience sees the slide content.
+      Add notes per-slide in the sidecar using the notes key.
+    cues:
+      - "Introduce how executable talk handles speaker context."
+      - "Voice cues sync the transcript to the fragment that just appeared."
+      - "The recording system uses these to align SRT captions to slide state."
+
+  - id: scenes
+    # Scenes table is content in the markdown — no sidecar metadata needed here.
+
+recording:
+  autoStart: false
+
+export:
+  subtitles: true

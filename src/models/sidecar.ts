@@ -18,11 +18,27 @@ export interface SidecarSlide {
   duration?: string;
   actions?: SidecarAction[];
   checkpoint?: string;
+  /** Speaker notes — merged into Slide.notes; sidecar value used when slide has no inline notes */
+  notes?: string;
 }
 
 export interface SidecarDeck {
   title?: string;
   theme?: string;
+  /** Base path for resolving relative file references in the deck (mirrors DeckMetadata.basePath) */
+  basePath?: string;
+}
+
+/**
+ * A named checkpoint that anchors to a slide by its explicit ID string.
+ * Sidecar-variant of DeckMetadata's SceneDefinition (which uses a 1-based slide index).
+ * The merge engine resolves the ID to a slide index at load time.
+ */
+export interface SidecarScene {
+  /** Human-readable scene name (unique within deck) */
+  name: string;
+  /** Slide ID this scene anchors to (must match a <!-- id: slug --> in the markdown) */
+  slide: string;
 }
 
 export interface SidecarRecording {
@@ -53,6 +69,7 @@ export interface SidecarEnvironment {
 
 export interface SidecarFile {
   deck?: SidecarDeck;
+  scenes?: SidecarScene[];
   slides?: SidecarSlide[];
   recording?: SidecarRecording;
   export?: SidecarExport;

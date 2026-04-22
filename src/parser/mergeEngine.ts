@@ -55,6 +55,11 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
       merged.checkpoint = sidecarSlide.checkpoint;
     }
 
+    // notes: apply sidecar speaker notes only when slide has none
+    if (sidecarSlide.notes !== undefined && merged.speakerNotes === undefined) {
+      merged.speakerNotes = sidecarSlide.notes;
+    }
+
     // sidecarActions: store raw entries, then render as clickable interactive elements
     // (source='sidecar') appended after slide content. This ensures the presenter
     // controls when actions fire — never auto-executed on slide entry.
