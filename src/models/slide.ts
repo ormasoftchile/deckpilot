@@ -61,6 +61,8 @@ export interface InteractiveElement {
 export interface Slide {
   /** Zero-based position in deck */
   index: number;
+  /** Stable author-assigned identifier for sidecar YAML references (DA-01) */
+  id?: string;
   /** Raw Markdown content (without frontmatter) */
   content: string;
   /** Rendered HTML content */
