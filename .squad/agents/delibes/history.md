@@ -13,6 +13,25 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### 2026-06-12 — Validator Tests: DA-17
+
+**File:** `test/unit/parser/deckValidator.test.ts` (56 tests after DA-17; was pre-existing)
+
+**Context:** DA-17 audited all three validators. The test file already existed with ~53 tests (written as part of DA-11/DA-10/DA-12). DA-17 identified three gaps and fixed one bug.
+
+**Bug fixed:**
+`validateSidecarSlideIds(slides, null)` threw `TypeError: Cannot read properties of null (reading 'slides')`. Fixed with a leading `!sidecar` guard. In practice `loadSidecar()` always returns `{}`, but any defensive null-pass in extension code would crash without the guard.
+
+**Gaps addressed:**
+1. Two independent explicit duplicate ID pairs (`[a,a,b,b]`) — distinct from the existing three-same-ID test
+2. null/undefined sidecar — two tests verifying no crash after the guard fix
+3. YAML parse error line number — asserts `range.start.line > 0` for errors on line 3+
+
+**Pattern — when a test file already exists:** Always run `npm run test:unit` first to confirm baseline. Then compare the spec's required cases against the actual tests line by line — do not assume coverage from the presence of the file.
+
+**Suite count after DA-17:** 780 passing (was 745; 35 new across the full suite, 4 directly in deckValidator).
+
+
 ### 2026-06-12 — Sidecar Integration Round-Trip: DA-18
 
 **File:** `test/unit/parser/sidecarIntegration.test.ts` (31 tests, all passing)
@@ -162,3 +181,28 @@ All three detection methods are `private` on `RecorderOrchestrator`. Accessed vi
 - `sinon` package was missing from devDependencies (required by `sidecarActionMapper.test.ts`); installed to unblock test compilation
 
 **Suite counts after DA-15:** 743 passing, 2 failing (pre-existing merge engine tests)
+
+---
+
+### 2026-06-12 — Slide ID Tests: DA-14
+
+**File:** `test/unit/parser/slideIdParser.test.ts` (50 tests total after DA-14; 44 pre-existing from DA-02)
+
+**Context:** DA-02 had already committed 44 unit + integration tests. DA-14 added 6 new tests covering spec cases that weren't in the DA-02 commit.
+
+**New tests added:**
+1. `slugify('Setup & Config')` → `'setup-config'` (ampersand stripped, spacing collapsed)
+2. `slugify('')` → `''` (empty string edge case)
+3. `extractIdComment` mid-content — comment not at line 0 is still extracted correctly
+4. `extractIdComment` malformed `<!-- id: -->` (empty value) → treated as `undefined` (regex requires ≥1 char)
+5. `resolveUniqueIds` — explicit IDs (idExplicit: true) are never auto-suffixed; both keep their author-declared id
+6. `resolveUniqueIds` — auto-generated ID steps aside when it collides with an explicit ID
+7. Integration: two slides with same `<!-- id: -->` both retain that id (duplicate is author error, not auto-fixed)
+8. Integration: explicit id + auto-generated id with same slug — auto-generated gets `-2` suffix, explicit unchanged
+
+**Implementation gap surfaced:** `resolveUniqueIds` in DA-02 took `Array<{ id?: string }>` and applied deduplication to ALL slides regardless of how the id was assigned. DA-14 exposed the missing `idExplicit` distinction. The function was updated to: (a) accept `Array<{ id?: string; idExplicit?: boolean }>`, (b) pre-register explicit IDs in a first pass, (c) skip explicit IDs in the deduplication pass.
+
+**Pattern — test file already exists check:** Always run `npm run test:unit` before any edits to get an accurate baseline count. `deckValidator.test.ts` (untracked) inflated the apparent baseline by 56 tests. The actual new tests from DA-14 were confirmed against the committed DA-02 test file.
+
+**Suite count after DA-14:** 788 passing (was 724 after all pre-existing untracked tests included).
+

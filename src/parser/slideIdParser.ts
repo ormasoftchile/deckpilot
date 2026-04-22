@@ -89,13 +89,32 @@ export function generateSlideId(
 }
 
 /**
- * Ensure every slide ID is unique within the deck.
+ * Ensure every auto-generated slide ID is unique within the deck.
  * Mutates the id field in place.  Duplicates get a numeric suffix: -2, -3, …
+ *
+ * Explicit IDs (idExplicit === true) are author-owned and are never
+ * auto-suffixed — duplicate explicit IDs are a deck authoring error, not
+ * something the parser should silently repair.  They are pre-registered so
+ * that auto-generated IDs avoid colliding with them.
  */
-export function resolveUniqueIds(slides: Array<{ id?: string }>): void {
+export function resolveUniqueIds(
+  slides: Array<{ id?: string; idExplicit?: boolean }>,
+): void {
   const seen = new Map<string, number>();
 
+  // First pass: register all explicit IDs so auto-generated IDs avoid collisions.
   for (const slide of slides) {
+    if (slide.idExplicit && slide.id && slide.id !== '') {
+      seen.set(slide.id, 1);
+    }
+  }
+
+  // Second pass: deduplicate auto-generated IDs only.
+  for (const slide of slides) {
+    if (slide.idExplicit) {
+      continue; // Explicit IDs are author-owned — never auto-suffixed
+    }
+
     const base = slide.id ?? '';
     if (base === '') {
       continue;

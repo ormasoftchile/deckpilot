@@ -18,6 +18,10 @@ describe('slideIdParser — unit', () => {
       expect(slugify('Hello, World!')).to.equal('hello-world');
     });
 
+    it('strips ampersand and adjacent spaces', () => {
+      expect(slugify('Setup & Config')).to.equal('setup-config');
+    });
+
     it('collapses consecutive hyphens', () => {
       expect(slugify('A -- B')).to.equal('a-b');
     });
@@ -28,6 +32,10 @@ describe('slideIdParser — unit', () => {
 
     it('handles code-like headings', () => {
       expect(slugify('Using `npm install`')).to.equal('using-npm-install');
+    });
+
+    it('returns empty string for empty input', () => {
+      expect(slugify('')).to.equal('');
     });
   });
 
@@ -56,6 +64,22 @@ describe('slideIdParser — unit', () => {
       const { commentId, cleanedContent } = extractIdComment('# Hello\nWorld');
       expect(commentId).to.be.undefined;
       expect(cleanedContent).to.equal('# Hello\nWorld');
+    });
+
+    it('extracts comment from mid-content position', () => {
+      const content = '# Setup\n<!-- id: mid-slide -->\nSome body text.';
+      const { commentId, cleanedContent } = extractIdComment(content);
+      expect(commentId).to.equal('mid-slide');
+      expect(cleanedContent).to.not.include('<!-- id:');
+      expect(cleanedContent).to.include('# Setup');
+      expect(cleanedContent).to.include('Some body text.');
+    });
+
+    it('treats malformed <!-- id: --> (empty value) as no comment', () => {
+      const content = '<!-- id: -->\n# Heading\nText.';
+      const { commentId, cleanedContent } = extractIdComment(content);
+      expect(commentId).to.be.undefined;
+      expect(cleanedContent).to.equal(content);
     });
   });
 
@@ -148,6 +172,28 @@ describe('slideIdParser — unit', () => {
       resolveUniqueIds(slides);
       expect(slides[0].id).to.equal('');
       expect(slides[1].id).to.equal('ok');
+    });
+
+    it('does not suffix explicit IDs even when they collide', () => {
+      const slides = [
+        { id: 'setup', idExplicit: true },
+        { id: 'setup', idExplicit: true },
+      ];
+      resolveUniqueIds(slides);
+      // Both retain the author-declared id — duplicate explicit ID is an authoring error
+      expect(slides[0].id).to.equal('setup');
+      expect(slides[1].id).to.equal('setup');
+    });
+
+    it('auto-generated ID defers to an explicit ID with the same base', () => {
+      // Explicit 'setup' is registered first; auto-generated 'setup' must step aside
+      const slides = [
+        { id: 'setup', idExplicit: true },
+        { id: 'setup' }, // auto-generated
+      ];
+      resolveUniqueIds(slides);
+      expect(slides[0].id).to.equal('setup');
+      expect(slides[1].id).to.equal('setup-2');
     });
   });
 });
@@ -259,5 +305,40 @@ Just text.`;
     const slides = parseSlides(deck);
     expect(slides[0].id).to.equal('regular-slide');
     expect(slides[0].interactiveElements.length).to.be.greaterThan(0);
+  });
+
+  it('explicit <!-- id: --> is not deduplicated when the same id appears twice', () => {
+    const deck = `<!-- id: setup -->
+# First Setup
+Content A.
+
+---
+
+<!-- id: setup -->
+# Second Setup
+Content B.`;
+    const slides = parseSlides(deck);
+    // Both retain the author-declared id — duplicate is an authoring error, not auto-fixed
+    expect(slides[0].id).to.equal('setup');
+    expect(slides[0].idExplicit).to.equal(true);
+    expect(slides[1].id).to.equal('setup');
+    expect(slides[1].idExplicit).to.equal(true);
+  });
+
+  it('auto-generated id steps aside when it collides with an explicit id', () => {
+    const deck = `<!-- id: introduction -->
+# Introduction
+Explicit slide.
+
+---
+
+# Introduction
+Auto-generated slug slide.`;
+    const slides = parseSlides(deck);
+    expect(slides[0].id).to.equal('introduction');
+    expect(slides[0].idExplicit).to.equal(true);
+    // Auto-generated 'introduction' must get a suffix to avoid shadowing the explicit one
+    expect(slides[1].id).to.equal('introduction-2');
+    expect(slides[1].idExplicit).to.not.equal(true);
   });
 });
