@@ -6,3 +6,4 @@ export { parseDeck, isValidDeckFile, type ParseResult } from './deckParser';
 export { parseSlides, renderMarkdown, getLastParseWarnings } from './slideParser';
 export { parseActionLinks, parseActionUri } from './actionLinkParser';
 export { parseActionBlocks, type ActionBlockParseResult, type ActionBlockParseError } from './actionBlockParser';
+export { resolveSidecarPath, sidecarExists } from './sidecarLoader';
