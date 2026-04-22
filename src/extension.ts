@@ -460,6 +460,12 @@ export function activate(context: vscode.ExtensionContext): void {
     envFileWatcher.onDidCreate(refreshDiagnosticsOnEnvChange);
     envFileWatcher.onDidDelete(refreshDiagnosticsOnEnvChange);
 
+    // Watch .deck.yaml sidecar files — re-trigger deck-markdown diagnostics on sidecar changes (DA-13)
+    const sidecarFileWatcher = vscode.workspace.createFileSystemWatcher('**/*.deck.yaml');
+    sidecarFileWatcher.onDidChange(refreshDiagnosticsOnEnvChange);
+    sidecarFileWatcher.onDidCreate(refreshDiagnosticsOnEnvChange);
+    sidecarFileWatcher.onDidDelete(refreshDiagnosticsOnEnvChange);
+
     context.subscriptions.push(
         openPresentationDisposable,
         closePresentationDisposable,
@@ -487,6 +493,7 @@ export function activate(context: vscode.ExtensionContext): void {
         onOpenDisposable,
         onCloseDisposable,
         envFileWatcher,
+        sidecarFileWatcher,
         { dispose() { diagnosticProvider.dispose(); } }
     );
 }

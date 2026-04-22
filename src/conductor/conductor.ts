@@ -67,6 +67,8 @@ export class Conductor implements vscode.Disposable {
   private resolvedEnv: ResolvedEnv | undefined;
   private envFileWatcher: vscode.Disposable | undefined;
   private envDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private sidecarFileWatcher: vscode.Disposable | undefined;
+  private sidecarDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   private onboardingSteps: OnboardingStepState[] = [];
   private recordingState: RecordingState;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
@@ -125,6 +127,9 @@ export class Conductor implements vscode.Disposable {
       // Start file watcher for .deck.env (Feature 006 — T039)
       this.startEnvFileWatcher(deck);
     }
+
+    // Start file watcher for .deck.yaml sidecar (DA-13)
+    this.startSidecarFileWatcher(deck);
 
     // Load authored scenes from deck frontmatter (T044 [US5])
     if (deck.metadata?.scenes && deck.metadata.scenes.length > 0) {
@@ -402,6 +407,9 @@ export class Conductor implements vscode.Disposable {
 
     // Dispose env file watcher (Feature 006 — T040)
     this.disposeEnvFileWatcher();
+
+    // Dispose sidecar file watcher (DA-13)
+    this.disposeSidecarFileWatcher();
 
     // Clear state
     this.stateStack.clear();
@@ -1790,6 +1798,73 @@ export class Conductor implements vscode.Disposable {
     if (this.envFileWatcher) {
       this.envFileWatcher.dispose();
       this.envFileWatcher = undefined;
+    }
+  }
+
+  /**
+   * Start watching .deck.yaml sidecar file for changes (DA-13).
+   * 500ms debounce — re-reads .deck.md from disk and re-opens deck so sidecar changes
+   * (create / edit / delete) are immediately reflected in the live presentation.
+   */
+  private startSidecarFileWatcher(deck: Deck): void {
+    this.disposeSidecarFileWatcher();
+
+    const deckDir = path.dirname(deck.filePath);
+    const pattern = new vscode.RelativePattern(deckDir, '*.deck.yaml');
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+    const onChange = () => {
+      if (this.sidecarDebounceTimer) {
+        clearTimeout(this.sidecarDebounceTimer);
+      }
+      this.sidecarDebounceTimer = setTimeout(() => {
+        if (!this.deck) {
+          return;
+        }
+        void this.reloadDeckFromDisk(this.deck.filePath);
+      }, 500);
+    };
+
+    watcher.onDidChange(onChange);
+    watcher.onDidCreate(onChange);
+    watcher.onDidDelete(onChange);
+
+    this.sidecarFileWatcher = watcher;
+    this.disposables.push(watcher);
+  }
+
+  /**
+   * Dispose the sidecar file watcher and debounce timer (DA-13).
+   */
+  private disposeSidecarFileWatcher(): void {
+    if (this.sidecarDebounceTimer) {
+      clearTimeout(this.sidecarDebounceTimer);
+      this.sidecarDebounceTimer = undefined;
+    }
+    if (this.sidecarFileWatcher) {
+      this.sidecarFileWatcher.dispose();
+      this.sidecarFileWatcher = undefined;
+    }
+  }
+
+  /**
+   * Reload deck from disk — re-reads .deck.md, re-parses (picks up new .deck.yaml state),
+   * and re-opens the presentation. Called when sidecar file changes on disk (DA-13).
+   * Graceful degradation: delete of .deck.yaml causes reload with null sidecar (merge engine
+   * already handles null sidecar cleanly).
+   */
+  private async reloadDeckFromDisk(filePath: string): Promise<void> {
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf8');
+      const parseResult = await parseDeck(content, filePath);
+      if (!parseResult.deck) {
+        this.outputChannel.appendLine(`[Sidecar] Reload failed: ${parseResult.error ?? 'parse error'}`);
+        return;
+      }
+      await this.openDeck(parseResult.deck);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.outputChannel.appendLine(`[Sidecar] Watcher reload failed: ${msg}`);
     }
   }
 
