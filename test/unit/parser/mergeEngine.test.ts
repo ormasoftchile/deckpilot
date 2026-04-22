@@ -218,6 +218,55 @@ describe('mergeSidecarIntoSlides', () => {
       expect(result[1].duration).to.equal('3m');
       expect(result[2]).to.equal(slides[2]); // pass-through (no match)
     });
+
+    it('each of multiple sidecar entries matches its own slide independently', () => {
+      const slides = [
+        makeSlide({ index: 0, id: 'slide-1' }),
+        makeSlide({ index: 1, id: 'slide-2' }),
+        makeSlide({ index: 2, id: 'slide-3' }),
+      ];
+      const sidecar: SidecarFile = {
+        slides: [
+          { id: 'slide-1', cues: ['cue-a'], duration: '1m' },
+          { id: 'slide-2', checkpoint: 'mid' },
+          { id: 'slide-3', cues: ['cue-z'], duration: '5m', checkpoint: 'end' },
+        ],
+      };
+      const result = mergeSidecarIntoSlides(slides, sidecar);
+      expect(result).to.have.lengthOf(3);
+
+      expect(result[0].cues).to.deep.equal(['cue-a']);
+      expect(result[0].duration).to.equal('1m');
+      expect(result[0].checkpoint).to.be.undefined;
+
+      expect(result[1].cues).to.be.undefined;
+      expect(result[1].checkpoint).to.equal('mid');
+
+      expect(result[2].cues).to.deep.equal(['cue-z']);
+      expect(result[2].duration).to.equal('5m');
+      expect(result[2].checkpoint).to.equal('end');
+    });
+
+    it('sidecar entry matching only slide-2 leaves slide-1 and slide-3 untouched', () => {
+      const slides = [
+        makeSlide({ index: 0, id: 'slide-1', cues: ['original'], duration: '10m', checkpoint: 'cp1' }),
+        makeSlide({ index: 1, id: 'slide-2' }),
+        makeSlide({ index: 2, id: 'slide-3', cues: ['z'], duration: '2m', checkpoint: 'cp3' }),
+      ];
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'slide-2', cues: ['injected'], duration: '3m', checkpoint: 'mid' }],
+      };
+      const result = mergeSidecarIntoSlides(slides, sidecar);
+
+      // slide-1 and slide-3 are identical references (untouched)
+      expect(result[0]).to.equal(slides[0]);
+      expect(result[2]).to.equal(slides[2]);
+
+      // only slide-2 was merged
+      expect(result[1].cues).to.deep.equal(['injected']);
+      expect(result[1].duration).to.equal('3m');
+      expect(result[1].checkpoint).to.equal('mid');
+    });
   });
 });
 
