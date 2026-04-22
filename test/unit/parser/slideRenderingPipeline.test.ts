@@ -1,7 +1,7 @@
 /**
  * Regression baseline for the slide rendering pipeline.
  *
- * Calls parseSlides() end-to-end (transformLayoutDirectives → markdown-it →
+ * Calls parseSlides() end-to-end (markdown-it → processLayoutComments →
  * injectBlockElements → processFragments) and asserts on the final slide.html
  * string. No VS Code API involved — runs headlessly via `npm run test:unit`.
  *
@@ -26,28 +26,28 @@ function renderSlide(markdown: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// :::center layout
+// <!-- center --> layout
 // ---------------------------------------------------------------------------
 
-describe('slideRenderingPipeline — :::center layout', () => {
+describe('slideRenderingPipeline — <!-- center --> layout', () => {
   it('should wrap content in a layout-center div', () => {
-    const html = renderSlide(':::center\nBig idea\n:::');
+    const html = renderSlide('<!-- center -->\nBig idea\n<!-- /center -->');
     expect(html).to.contain('class="layout-center"');
   });
 
   it('should preserve the inner text inside the layout-center wrapper', () => {
-    const html = renderSlide(':::center\nBig idea\n:::');
+    const html = renderSlide('<!-- center -->\nBig idea\n<!-- /center -->');
     expect(html).to.contain('Big idea');
   });
 
   it('should produce valid open and close div tags', () => {
-    const html = renderSlide(':::center\nBig idea\n:::');
+    const html = renderSlide('<!-- center -->\nBig idea\n<!-- /center -->');
     expect(html).to.contain('<div class="layout-center">');
     expect(html).to.contain('</div>');
   });
 
-  it('should render heading inside :::center correctly', () => {
-    const html = renderSlide(':::center\n# Title\n:::');
+  it('should render heading inside <!-- center --> correctly', () => {
+    const html = renderSlide('<!-- center -->\n# Title\n<!-- /center -->');
     expect(html).to.contain('class="layout-center"');
     expect(html).to.contain('<h1>');
     expect(html).to.contain('Title');
@@ -55,11 +55,11 @@ describe('slideRenderingPipeline — :::center layout', () => {
 });
 
 // ---------------------------------------------------------------------------
-// :::columns layout
+// <!-- columns --> layout
 // ---------------------------------------------------------------------------
 
-describe('slideRenderingPipeline — :::columns layout', () => {
-  const columnsMarkdown = ':::columns\n:::left\nLeft text\n:::\n:::right\nRight text\n:::\n:::';
+describe('slideRenderingPipeline — <!-- columns --> layout', () => {
+  const columnsMarkdown = '<!-- columns -->\n<!-- left -->\nLeft text\n<!-- /left -->\n<!-- right -->\nRight text\n<!-- /right -->\n<!-- /columns -->';
 
   it('should produce a layout-columns wrapper', () => {
     const html = renderSlide(columnsMarkdown);
@@ -102,11 +102,11 @@ describe('slideRenderingPipeline — :::columns layout', () => {
 });
 
 // ---------------------------------------------------------------------------
-// :::advanced layout
+// <!-- advanced --> layout
 // ---------------------------------------------------------------------------
 
-describe('slideRenderingPipeline — :::advanced layout', () => {
-  const advancedMarkdown = ':::advanced\nDeep dive content\n:::';
+describe('slideRenderingPipeline — <!-- advanced --> layout', () => {
+  const advancedMarkdown = '<!-- advanced -->\nDeep dive content\n<!-- /advanced -->';
 
   it('should produce a <details> element', () => {
     const html = renderSlide(advancedMarkdown);
@@ -140,11 +140,11 @@ describe('slideRenderingPipeline — :::advanced layout', () => {
 });
 
 // ---------------------------------------------------------------------------
-// :::optional layout
+// <!-- optional --> layout
 // ---------------------------------------------------------------------------
 
-describe('slideRenderingPipeline — :::optional layout', () => {
-  const optionalMarkdown = ':::optional\nOptional step\n:::';
+describe('slideRenderingPipeline — <!-- optional --> layout', () => {
+  const optionalMarkdown = '<!-- optional -->\nOptional step\n<!-- /optional -->';
 
   it('should wrap content in a step-optional div', () => {
     const html = renderSlide(optionalMarkdown);
@@ -243,7 +243,7 @@ describe('slideRenderingPipeline — multiple slides', () => {
   });
 
   it('should give each slide its own layout wrapper when directives differ', () => {
-    const deck = ':::center\nCentered\n:::\n\n---\n\n:::optional\nSide note\n:::';
+    const deck = '<!-- center -->\nCentered\n<!-- /center -->\n\n---\n\n<!-- optional -->\nSide note\n<!-- /optional -->';
     const slides = parseSlides(deck);
     expect(slides).to.have.lengthOf(2);
     expect(slides[0].html).to.contain('layout-center');
@@ -263,7 +263,7 @@ describe('slideRenderingPipeline — edge cases', () => {
   });
 
   it('should handle a slide with only a layout directive and no body content', () => {
-    const html = renderSlide(':::center\n:::');
+    const html = renderSlide('<!-- center -->\n<!-- /center -->');
     // Should still produce the wrapper without crashing
     expect(html).to.contain('layout-center');
   });
@@ -282,7 +282,7 @@ describe('slideRenderingPipeline — edge cases', () => {
   });
 
   it('should render a slide that mixes a layout directive and a plain heading', () => {
-    const markdown = '# Intro\n\n:::center\nCentered bit\n:::';
+    const markdown = '# Intro\n\n<!-- center -->\nCentered bit\n<!-- /center -->';
     const html = renderSlide(markdown);
     expect(html).to.contain('<h1>Intro</h1>');
     expect(html).to.contain('layout-center');
@@ -290,10 +290,10 @@ describe('slideRenderingPipeline — edge cases', () => {
   });
 
   it('should not inject layout wrappers into a fenced code block containing directives', () => {
-    const markdown = '```\n:::center\nfake directive\n:::\n```';
+    const markdown = '```\n<!-- center -->\nfake directive\n<!-- /center -->\n```';
     const html = renderSlide(markdown);
     // The directive text should be in a <code>/<pre> block, not a layout div
-    expect(html).to.contain(':::center');
+    expect(html).to.contain('&lt;!-- center --&gt;');
     expect(html).not.to.contain('class="layout-center"');
   });
 });

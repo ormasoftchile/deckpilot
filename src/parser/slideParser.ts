@@ -9,7 +9,7 @@ import { Slide, SlideFrontmatter, createSlide } from '../models/slide';
 import { parseActionLinks } from './actionLinkParser';
 import { parseActionBlocks } from './actionBlockParser';
 import { parseRenderDirectives } from '../renderer';
-import { transformLayoutDirectives } from './layoutDirectivePlugin';
+import { processLayoutComments } from './layoutCommentProcessor';
 import { injectBlockElementsFromParsed } from '../renderer/blockElementRenderer';
 import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
@@ -22,48 +22,6 @@ const md = new MarkdownIt({
   linkify: true,
   typographer: true,
 });
-
-// :::group ... ::: plugin — wraps the inner block content in a single
-// <div class="slide-group"> so fragmentProcessor treats it as one step.
-md.block.ruler.before('fence', 'slide_group', (state, startLine, endLine, silent) => {
-  const pos = state.bMarks[startLine] + state.tShift[startLine];
-  const max = state.eMarks[startLine];
-  const line = state.src.slice(pos, max).trim();
-
-  if (line !== ':::group') { return false; }
-  if (silent) { return true; }
-
-  // Find the closing :::
-  let nextLine = startLine + 1;
-  let found = false;
-  while (nextLine < endLine) {
-    const lpos = state.bMarks[nextLine] + state.tShift[nextLine];
-    const lmax = state.eMarks[nextLine];
-    const l = state.src.slice(lpos, lmax).trim();
-    if (l === ':::') { found = true; break; }
-    nextLine++;
-  }
-  if (!found) { return false; }
-
-  const oldParentType = state.parentType;
-  const oldLineMax = state.lineMax;
-  (state.parentType as unknown) = 'blockquote';
-
-  const openToken = state.push('html_block', '', 0);
-  openToken.content = '<div class="slide-group">\n';
-  openToken.map = [startLine, nextLine];
-
-  state.lineMax = nextLine;
-  state.md.block.tokenize(state, startLine + 1, nextLine);
-  state.lineMax = oldLineMax;
-  state.parentType = oldParentType;
-
-  const closeToken = state.push('html_block', '', 0);
-  closeToken.content = '</div>\n';
-
-  state.line = nextLine + 1;
-  return true;
-}, { alt: [] });
 
 /**
  * Slide delimiter pattern: --- on its own line
@@ -280,14 +238,19 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   }
   
   // Step 3: Render markdown to HTML (uses cleaned content — no action blocks in output)
-  const layoutTransformed = transformLayoutDirectives(cleanedContent);
-  let html = md.render(layoutTransformed);
+  let html = md.render(cleanedContent);
   
   // Step 4: Inject block element buttons into HTML (replaces <!--ACTION:--> placeholders)
   // This must happen BEFORE fragment processing so that action buttons with
   // `fragment: true` get fragment indices in document order alongside other
   // fragment-marked elements.
   html = injectBlockElementsFromParsed(html, actionBlockResult.elements);
+
+  // Step 4.5: Convert <!-- layout --> comment markers to HTML wrapper divs.
+  // Must run after markdown-it rendering (so comments are in the HTML string)
+  // but before fragment processing (so slide-group/details/step-optional are
+  // present when processFragments scans for eligible elements).
+  html = processLayoutComments(html);
   
   // Step 5: Process fragments and get count
   const { html: fragmentHtml, fragmentCount } = processFragments(html);

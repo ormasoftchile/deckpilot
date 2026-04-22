@@ -20,6 +20,8 @@ export interface SidecarSlide {
   checkpoint?: string;
   /** Speaker notes — merged into Slide.notes; sidecar value used when slide has no inline notes */
   notes?: string;
+  /** Slide-level layout: 'center' | 'columns' | 'left' | 'right' | 'group'. Applied by wrapping slide HTML. */
+  layout?: string;
 }
 
 export interface SidecarDeck {

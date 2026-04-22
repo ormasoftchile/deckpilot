@@ -14,13 +14,13 @@ scenes:
     slide: 9
 ---
 
-:::center
+<!-- center -->
 # Deckpilot
 
 ### Live-code presentations inside VS Code
 
 Navigate with **→** / **←** &nbsp;·&nbsp; Jump with `Cmd+G` &nbsp;·&nbsp; Scenes with `Cmd+R`
-:::
+<!-- /center -->
 
 ---
 
@@ -34,17 +34,17 @@ Use this to control pacing — walk the audience through each point before movin
 - Highlight the relevant lines
 - Run a command in the terminal
 
-:::group
+<!-- group -->
 > All three goals, one presentation file.
 > No switching apps. No alt-tabbing.
-:::
+<!-- /group -->
 
 ---
 
 # Layouts — Two Columns
 
-:::columns
-:::left
+<!-- columns -->
+<!-- left -->
 ### You write this
 
 ```yaml
@@ -52,13 +52,13 @@ type: terminal.run
 command: npm test
 label: Run tests
 ```
-:::
-:::right
+<!-- /left -->
+<!-- right -->
 ### Audience sees this
 
 A labelled button — one click runs `npm test` in a real terminal inside VS Code.
-:::
-:::
+<!-- /right -->
+<!-- /columns -->
 
 ---
 
@@ -68,22 +68,22 @@ Collapse extra detail so it doesn't overwhelm the audience:
 
 The **advanced** block is collapsed by default — click to expand:
 
-:::advanced
+<!-- advanced -->
 ### Under the Hood
 
 Each action goes through the Action Registry → Conductor → VS Code API.
 Trust-gated actions are blocked in untrusted workspaces.
-:::
+<!-- /advanced -->
 
 Mark steps as optional without breaking the flow:
 
-:::optional
+<!-- optional -->
 ```action
 type: terminal.run
 command: npm run lint
 label: Also run lint (optional)
 ```
-:::
+<!-- /optional -->
 
 ---
 

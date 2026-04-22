@@ -4,13 +4,13 @@ title: "Deckpilot — Feature Showcase (Sidecar Edition)"
 
 <!-- id: intro -->
 
-<!-- center -->
+:::center
 # Deckpilot
 
 ### Live-code presentations inside VS Code
 
 Navigate with **→** / **←** &nbsp;·&nbsp; Jump with `Cmd+G` &nbsp;·&nbsp; Scenes with `Cmd+R`
-<!-- /center -->
+:::
 
 ---
 
@@ -26,10 +26,10 @@ Use this to control pacing — walk the audience through each point before movin
 - Highlight the relevant lines
 - Run a command in the terminal
 
-<!-- group -->
+:::group
 > All three goals, one presentation file.
 > No switching apps. No alt-tabbing.
-<!-- /group -->
+:::
 
 ---
 
@@ -37,8 +37,8 @@ Use this to control pacing — walk the audience through each point before movin
 
 # Layouts — Two Columns
 
-<!-- columns -->
-<!-- left -->
+:::columns
+:::left
 ### You write this
 
 ```yaml
@@ -46,13 +46,13 @@ type: terminal.run
 command: npm test
 label: Run tests
 ```
-<!-- /left -->
-<!-- right -->
+:::
+:::right
 ### Audience sees this
 
 A labelled button — one click runs `npm test` in a real terminal inside VS Code.
-<!-- /right -->
-<!-- /columns -->
+:::
+:::
 
 ---
 
@@ -64,12 +64,12 @@ Collapse extra detail so it doesn't overwhelm the audience:
 
 The **advanced** block is collapsed by default — click to expand:
 
-<!-- advanced -->
+:::advanced
 ### Under the Hood
 
 Each action goes through the Action Registry → Conductor → VS Code API.
 Trust-gated actions are blocked in untrusted workspaces.
-<!-- /advanced -->
+:::
 
 Mark steps as optional without breaking the flow — the lint action appears as a sidecar button.
 

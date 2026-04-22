@@ -12,6 +12,14 @@ import type { DeckMetadata } from '../models/deck';
 import type { SidecarFile, SidecarSlide } from '../models/sidecar';
 import { mapSidecarActionsToInteractiveElements } from './sidecarActionMapper';
 
+const LAYOUT_CLASS_MAP: Record<string, string> = {
+  center: 'layout-center',
+  columns: 'layout-columns',
+  left: 'layout-left',
+  right: 'layout-right',
+  group: 'slide-group',
+};
+
 /**
  * Merge sidecar slide entries into a parsed Slide array.
  *
@@ -58,6 +66,14 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
     // notes: apply sidecar speaker notes only when slide has none
     if (sidecarSlide.notes !== undefined && merged.speakerNotes === undefined) {
       merged.speakerNotes = sidecarSlide.notes;
+    }
+
+    // layout: wrap the slide HTML in the appropriate layout div when specified
+    // in the sidecar. Only applied when sidecar specifies it (inline-first: if
+    // the markdown already wraps content in layout divs, this adds an outer wrapper).
+    if (sidecarSlide.layout !== undefined) {
+      const layoutClass = LAYOUT_CLASS_MAP[sidecarSlide.layout] ?? `layout-${sidecarSlide.layout}`;
+      merged.html = `<div class="${layoutClass}">${merged.html}</div>`;
     }
 
     // sidecarActions: store raw entries, then render as clickable interactive elements
