@@ -302,3 +302,29 @@ Changed three files:
 **Field name clarification for terminal.run:** The sidecar mapper reads `cmd` → renames to `command` in params. However, `command` in YAML also works because it passes through `...rest` in `buildParams`. The showcase-full example uses `command` (consistent with inline action blocks). The reference sidecar-demo uses `cmd`. Both are valid.
 
 **What `notes:` in sidecar maps to:** `Slide.speakerNotes` — this is the field the webview presenter panel reads. `SlideFrontmatter.notes` is the raw frontmatter field, mapped to `speakerNotes` by the parser. The merge engine follows the same mapping.
+
+### 2026-06-12 — Sidecar command routing: .deck.yaml triggers deck commands
+
+**Modified files:** `src/extension.ts`, `src/commands/extractMetadata.ts`, `src/commands/showResolvedModel.ts`
+
+**What was done:**
+- Created `resolveDeckUri(editor)` helper function in `extension.ts` — takes active editor, returns `.deck.md` URI for both `.deck.md` and `.deck.yaml` files
+- Returns `undefined` if no active editor, file is neither type, or paired `.deck.md` doesn't exist
+- Updated three command handlers to use `resolveDeckUri()` instead of direct `.deck.md` checks:
+  1. `executableTalk.openPresentation` — now opens deck from `.deck.yaml` sidecar editor
+  2. `executableTalk.validateDeck` — now validates from `.deck.yaml` sidecar editor
+  3. `deckpilot.extractMetadataToSidecar` — now regenerates sidecar when triggered from existing `.deck.yaml` file
+- Also updated `deckpilot.showResolvedDeckModel` command in `showResolvedModel.ts` — now shows resolved deck model when triggered from `.deck.yaml`
+
+**UX improvements:**
+- All error messages distinguish between "no paired .deck.md file" (when triggered from `.deck.yaml`) vs "open a .deck.md or .deck.yaml file first" (when no deck-related file is active)
+- When `.deck.yaml` is active but no paired `.deck.md` exists, shows: "No paired .deck.md file found. Create a .deck.md file alongside this sidecar."
+- Commands now work seamlessly whether user has the deck or sidecar open — no need to switch editors
+
+**Key architectural notes:**
+- No `package.json` changes needed — no `when` clauses restrict commands to `.deck.md` only (all restrictions were in command handlers)
+- `resolveDeckUri` uses synchronous `fs.existsSync` for `.deck.md` verification — consistent with existing patterns in `extractMetadata.ts` and `showResolvedModel.ts`
+- For commands that load the deck, we use `vscode.workspace.openTextDocument(deckUri)` to get the content — never directly read from disk to respect VS Code's document state (unsaved changes, etc.)
+
+**Test baseline:** 883 tests passing, 0 failing. No regressions.
+

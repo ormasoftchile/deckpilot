@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { parseDeck } from '../parser';
 
 const SCHEME = 'deckpilot-model';
@@ -50,13 +51,34 @@ export class DeckModelContentProvider implements vscode.TextDocumentContentProvi
 export async function showResolvedDeckModel(provider: DeckModelContentProvider): Promise<void> {
     const editor = vscode.window.activeTextEditor;
 
-    if (!editor || !editor.document.fileName.endsWith('.deck.md')) {
-        void vscode.window.showErrorMessage('Open a .deck.md file first to inspect its resolved model.');
+    if (!editor) {
+        void vscode.window.showErrorMessage('Open a .deck.md or .deck.yaml file first to inspect its resolved model.');
         return;
     }
 
-    const filePath = editor.document.uri.fsPath;
-    const content = editor.document.getText();
+    let filePath = editor.document.uri.fsPath;
+
+    // If triggered from a .deck.yaml sidecar, derive the .deck.md path
+    if (filePath.endsWith('.deck.yaml')) {
+        const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        
+        // Use the .deck.md path for parsing (which will also load the sidecar)
+        if (!fs.existsSync(deckMdPath)) {
+            void vscode.window.showErrorMessage(
+                'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+            );
+            return;
+        }
+        
+        filePath = deckMdPath;
+    } else if (!filePath.endsWith('.deck.md')) {
+        void vscode.window.showErrorMessage('Active file is not a .deck.md or .deck.yaml file.');
+        return;
+    }
+
+    // Load the .deck.md content
+    const deckDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+    const content = deckDoc.getText();
 
     let result;
     try {

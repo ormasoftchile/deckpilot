@@ -93,19 +93,32 @@ export function buildSidecarContent(deck: Deck): string {
 /**
  * VS Code command handler: extracts metadata from the active `.deck.md` file
  * and writes a companion `.deck.yaml` sidecar.
+ * 
+ * Can be triggered from either the .deck.md file or its .deck.yaml sidecar.
  */
 export async function extractMetadataToSidecar(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
-        void vscode.window.showErrorMessage('No active editor. Open a .deck.md file first.');
+        void vscode.window.showErrorMessage('No active editor. Open a .deck.md or .deck.yaml file first.');
         return;
     }
 
-    const filePath = editor.document.uri.fsPath;
+    let filePath = editor.document.uri.fsPath;
 
-    if (!filePath.endsWith('.deck.md')) {
-        void vscode.window.showErrorMessage('Active file is not a .deck.md file.');
+    // If triggered from a .deck.yaml sidecar, derive the .deck.md path
+    if (filePath.endsWith('.deck.yaml')) {
+        filePath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        
+        // Verify the .deck.md file exists
+        if (!fs.existsSync(filePath)) {
+            void vscode.window.showErrorMessage(
+                'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+            );
+            return;
+        }
+    } else if (!filePath.endsWith('.deck.md')) {
+        void vscode.window.showErrorMessage('Active file is not a .deck.md or .deck.yaml file.');
         return;
     }
 
