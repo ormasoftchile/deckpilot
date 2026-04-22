@@ -9,6 +9,7 @@ import { parseSlides, getLastParseWarnings } from './slideParser';
 import { EnvDeclarationParser } from '../env/envDeclarationParser';
 import { loadSidecar } from './sidecarLoader';
 import { mergeSidecarIntoSlides, mergeSidecarDeckMetadata } from './mergeEngine';
+import { resolveEnvironment } from '../env/envMerger';
 
 /**
  * Parse result with potential errors
@@ -42,9 +43,11 @@ export async function parseDeck(content: string, filePath: string): Promise<Pars
 
     // Load and merge sidecar (.deck.yaml) if present — zero behavior change when absent
     let mergedMetadata = metadata as DeckMetadata;
+    let loadedSidecar: import('../models/sidecar').SidecarFile | null = null;
     const sidecarWarnings: string[] = [];
     try {
       const sidecar = await loadSidecar(filePath);
+      loadedSidecar = sidecar;
       if (sidecar) {
         slides = mergeSidecarIntoSlides(slides, sidecar);
         mergedMetadata = mergeSidecarDeckMetadata(mergedMetadata, sidecar);
@@ -78,6 +81,13 @@ export async function parseDeck(content: string, filePath: string): Promise<Pars
 
     const deck = createDeck(filePath, slides, enrichedMetadata);
     deck.envDeclarations = envDeclarations;
+
+    // Resolve merged execution environment (DA-22): process.env ← sidecar.common ← sidecar.platform ← .deck.env
+    try {
+      deck.resolvedEnvironment = await resolveEnvironment(filePath, loadedSidecar);
+    } catch {
+      // Non-fatal — deck still loads without resolved environment
+    }
 
     // Collect action block parse warnings (non-fatal)
     const warnings = getLastParseWarnings();

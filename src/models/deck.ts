@@ -125,6 +125,8 @@ export interface Deck {
   error?: string;
   /** Environment variable declarations from frontmatter (Feature 006) */
   envDeclarations: EnvDeclaration[];
+  /** Merged execution environment: process.env ← sidecar.common ← sidecar.platform ← .deck.env (DA-22) */
+  resolvedEnvironment?: Record<string, string>;
 }
 
 /**
