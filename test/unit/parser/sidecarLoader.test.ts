@@ -301,23 +301,16 @@ describe('sidecarLoader', () => {
 
     // ── error cases ───────────────────────────────────────────────────────
 
-    it('throws on malformed YAML (invalid syntax)', async () => {
+    it('returns null for malformed YAML (invalid syntax)', async () => {
       const mdPath = deckMdPath();
       // Unclosed bracket is invalid YAML
       writeSidecar('demo', 'deck:\n  title: Broken\n  theme: [unclosed');
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include('Failed to parse sidecar');
-      expect(caught?.message).to.include('demo.deck.yaml');
+      const result = await loadSidecar(mdPath);
+      expect(result).to.be.null;
     });
 
-    it('throws on a slide entry missing the required id field', async () => {
+    it('returns the sidecar even when a slide entry is missing the required id field (validateSidecarSchema handles this)', async () => {
       const mdPath = deckMdPath();
       writeSidecar('demo', [
         'slides:',
@@ -326,18 +319,14 @@ describe('sidecarLoader', () => {
         '    duration: 10s',
       ].join('\n'));
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include("slides[0]");
-      expect(caught?.message).to.include("missing a required \'id\' field");
+      const result = await loadSidecar(mdPath);
+      // loadSidecar no longer throws for missing ids — it returns the parsed object;
+      // use validateSidecarSchema to surface the missing-id diagnostic.
+      expect(result).to.not.be.null;
+      expect(result).to.have.property('slides');
     });
 
-    it('throws on a slide entry with an empty string id', async () => {
+    it('returns the sidecar for a slide entry with an empty string id', async () => {
       const mdPath = deckMdPath();
       writeSidecar('demo', [
         'slides:',
@@ -345,45 +334,27 @@ describe('sidecarLoader', () => {
         '    duration: 5s',
       ].join('\n'));
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include("slides[0]");
+      const result = await loadSidecar(mdPath);
+      expect(result).to.not.be.null;
     });
 
-    it('throws on a slide entry with a whitespace-only id', async () => {
+    it('returns the sidecar for a slide entry with a whitespace-only id', async () => {
       const mdPath = deckMdPath();
       writeSidecar('demo', 'slides:\n  - id: "   "\n    duration: 5s');
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include("slides[0]");
+      const result = await loadSidecar(mdPath);
+      expect(result).to.not.be.null;
     });
 
-    it('throws on a top-level YAML array (must be a mapping)', async () => {
+    it('returns null for a top-level YAML array (must be a mapping)', async () => {
       const mdPath = deckMdPath();
       writeSidecar('demo', '- id: intro\n- id: setup');
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include('must be a YAML mapping at the top level');
+      const result = await loadSidecar(mdPath);
+      expect(result).to.be.null;
     });
 
-    it('reports the second failing slide index when earlier slides are valid', async () => {
+    it('returns the sidecar when an earlier valid slide precedes a missing-id slide', async () => {
       const mdPath = deckMdPath();
       writeSidecar('demo', [
         'slides:',
@@ -393,14 +364,10 @@ describe('sidecarLoader', () => {
         '  - id: outro',
       ].join('\n'));
 
-      let caught: Error | undefined;
-      try {
-        await loadSidecar(mdPath);
-      } catch (err) {
-        caught = err as Error;
-      }
-      expect(caught).to.be.instanceOf(Error);
-      expect(caught?.message).to.include("slides[1]");
+      const result = await loadSidecar(mdPath);
+      // The parseable sidecar is returned; validateSidecarSchema flags slides[1] missing id.
+      expect(result).to.not.be.null;
+      expect((result as { slides: unknown[] }).slides).to.have.length(3);
     });
   });
 });

@@ -11,7 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import type { SidecarFile, SidecarSlide } from '../models/sidecar';
+import type { SidecarFile } from '../models/sidecar';
 
 /**
  * Resolve the expected sidecar path for a given .deck.md file.
@@ -56,9 +56,13 @@ export async function sidecarExists(deckMdPath: string): Promise<boolean> {
  * Returns `null` if no sidecar file exists alongside the given .deck.md path —
  * this is normal; absence of a sidecar is not an error.
  *
+ * Returns `null` if the YAML cannot be parsed (syntax error) or if the top-level
+ * structure is not a mapping.  Callers that need structured editor diagnostics
+ * should invoke `validateSidecarSchema` from `deckValidator.ts` with the raw
+ * file content separately.
+ *
  * @param deckMdPath Absolute path to the .deck.md file
- * @returns Parsed SidecarFile, or null if no sidecar exists
- * @throws Error on YAML parse failure or structural validation errors
+ * @returns Parsed SidecarFile, or null if no sidecar exists or cannot be parsed
  */
 export async function loadSidecar(deckMdPath: string): Promise<SidecarFile | null> {
   if (!(await sidecarExists(deckMdPath))) {
@@ -71,9 +75,9 @@ export async function loadSidecar(deckMdPath: string): Promise<SidecarFile | nul
   let parsed: unknown;
   try {
     parsed = yaml.load(raw);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse sidecar '${path.basename(sidecarPath)}': ${msg}`);
+  } catch {
+    // YAML syntax error — return null; callers use validateSidecarSchema for diagnostics.
+    return null;
   }
 
   if (parsed === null || parsed === undefined) {
@@ -81,25 +85,10 @@ export async function loadSidecar(deckMdPath: string): Promise<SidecarFile | nul
   }
 
   if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(
-      `Sidecar '${path.basename(sidecarPath)}' must be a YAML mapping at the top level`
-    );
+    // Top-level is not a mapping — unrecoverable, return null.
+    return null;
   }
 
-  const sidecar = parsed as SidecarFile;
-  validateSidecar(sidecar, path.basename(sidecarPath));
-  return sidecar;
+  return parsed as SidecarFile;
 }
 
-function validateSidecar(sidecar: SidecarFile, filename: string): void {
-  if (!sidecar.slides) {
-    return;
-  }
-  sidecar.slides.forEach((slide: SidecarSlide, index: number) => {
-    if (!slide.id || typeof slide.id !== 'string' || slide.id.trim() === '') {
-      throw new Error(
-        `Sidecar '${filename}': slides[${index}] is missing a required 'id' field`
-      );
-    }
-  });
-}
