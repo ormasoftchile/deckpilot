@@ -242,7 +242,7 @@ export function validateSidecarSlideIds(
   slides: Slide[],
   sidecar: SidecarFile,
 ): SlideDiagnosticResult[] {
-  if (!sidecar.slides || sidecar.slides.length === 0) {
+  if (!sidecar || !sidecar.slides || sidecar.slides.length === 0) {
     return [];
   }
 

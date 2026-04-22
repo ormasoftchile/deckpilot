@@ -141,6 +141,21 @@ describe('deckValidator — validateSlideIds() unit', () => {
   it('returns no diagnostics for an empty slide array', () => {
     expect(validateSlideIds([])).to.have.length(0);
   });
+
+  it('returns two errors for two independent sets of duplicate explicit IDs', () => {
+    // [intro, intro, demo, demo] → two separate collisions, two diagnostics
+    const slides = [
+      makeSlide(0, 'intro', true),
+      makeSlide(1, 'intro', true),
+      makeSlide(2, 'demo', true),
+      makeSlide(3, 'demo', true),
+    ] as Slide[];
+    const diags = validateSlideIds(slides);
+    expect(diags).to.have.length(2);
+    const messages = diags.map(d => d.message);
+    expect(messages.some(m => m.includes("'intro'"))).to.be.true;
+    expect(messages.some(m => m.includes("'demo'"))).to.be.true;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +372,14 @@ describe('deckValidator — validateSidecarSlideIds() unit (DA-10)', () => {
     const diags = validateSidecarSlideIds([], sidecar);
     expect(diags).to.have.length(2);
   });
+
+  it('returns no diagnostics for null sidecar (defensive guard)', () => {
+    expect(validateSidecarSlideIds([], null as unknown as SidecarFile)).to.have.length(0);
+  });
+
+  it('returns no diagnostics for undefined sidecar (defensive guard)', () => {
+    expect(validateSidecarSlideIds([], undefined as unknown as SidecarFile)).to.have.length(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -507,5 +530,14 @@ describe('deckValidator — validateSidecarSchema() unit (DA-12)', () => {
   it('sets source to "Deckpilot" on all diagnostic types', () => {
     const diags = validateSidecarSchema('unknown_key: x\nslides:\n  - cues: []');
     expect(diags.every(d => d.source === 'Deckpilot')).to.be.true;
+  });
+
+  it('YAML parse error carries a non-zero line number for errors on later lines', () => {
+    // Error is on line 3 (0-based: line 2 or 3), after two valid lines
+    const content = 'deck:\n  title: ok\nslides: [bad_yaml: unclosed';
+    const diags = validateSidecarSchema(content);
+    expect(diags).to.have.length(1);
+    expect(diags[0].severity).to.equal(SlideDiagnosticSeverity.Error);
+    expect(diags[0].range.start.line).to.be.greaterThan(0);
   });
 });
