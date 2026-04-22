@@ -14,6 +14,7 @@ import { injectBlockElementsFromParsed } from '../renderer/blockElementRenderer'
 import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
 import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
+import { validateSlideIds, SlideDiagnosticResult } from './deckValidator';
 
 // Initialize markdown-it renderer
 const md = new MarkdownIt({
@@ -77,6 +78,12 @@ const SLIDE_DELIMITER = /^---+\s*$/m;
 let _lastParseWarnings: string[] = [];
 
 /**
+ * Validation diagnostics (duplicate explicit IDs) from the last parseSlides() call.
+ * Reset at the start of each parseSlides() invocation.
+ */
+let _lastValidationDiagnostics: SlideDiagnosticResult[] = [];
+
+/**
  * Get warnings from the most recent parseSlides() call.
  * Returns action block parse errors formatted as human-readable strings.
  */
@@ -85,11 +92,21 @@ export function getLastParseWarnings(): string[] {
 }
 
 /**
+ * Get validation diagnostics (e.g. duplicate explicit slide IDs) from the
+ * most recent parseSlides() call.  Results can be forwarded to VS Code's
+ * DiagnosticCollection by mapping them to vscode.Diagnostic in extension.ts.
+ */
+export function getLastValidationDiagnostics(): SlideDiagnosticResult[] {
+  return _lastValidationDiagnostics;
+}
+
+/**
  * Parse content into individual slides
  */
 export function parseSlides(content: string): Slide[] {
-  // Reset warnings
+  // Reset warnings and validation diagnostics
   _lastParseWarnings = [];
+  _lastValidationDiagnostics = [];
   
   // Split content on slide delimiter
   const rawSlides = splitOnDelimiter(content);
@@ -134,9 +151,18 @@ export function parseSlides(content: string): Slide[] {
   // Done here so pending-frontmatter merging above is already reflected.
   for (const slide of slides) {
     if (slide.id === undefined) {
+      const fmId = slide.frontmatter?.id;
       slide.id = generateSlideId(slide.content, slide.frontmatter, slide.index);
+      // Mark as explicit if the frontmatter id field drove the result
+      if (typeof fmId === 'string' && fmId.trim().length > 0) {
+        slide.idExplicit = true;
+      }
     }
   }
+
+  // Validate for duplicate explicit IDs before uniquification renames them.
+  // Results are stored so callers can surface them as editor diagnostics.
+  _lastValidationDiagnostics = validateSlideIds(slides);
 
   // Ensure all IDs are unique within this deck
   resolveUniqueIds(slides);
@@ -291,6 +317,7 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   // Set id from comment if found (prevents parseSlides from overwriting it)
   if (commentId !== undefined) {
     slide.id = commentId;
+    slide.idExplicit = true;
   }
   slide.fragmentCount = fragmentCount;
   if (voiceCues.length > 0) {

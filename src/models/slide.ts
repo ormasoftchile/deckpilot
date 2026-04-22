@@ -64,6 +64,13 @@ export interface Slide {
   index: number;
   /** Stable author-assigned identifier for sidecar YAML references (DA-01) */
   id?: string;
+  /**
+   * True when `id` was explicitly declared by the author (HTML comment or
+   * frontmatter `id:` field).  False/absent means the ID was derived from a
+   * heading slug or assigned as a positional fallback.  Used by the duplicate
+   * ID validator (DA-11) to distinguish author intent from auto-generation.
+   */
+  idExplicit?: boolean;
   /** Raw Markdown content (without frontmatter) */
   content: string;
   /** Rendered HTML content */
