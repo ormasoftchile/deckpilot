@@ -26,11 +26,28 @@ export interface SidecarDeck {
 
 export interface SidecarRecording {
   autoStart?: boolean;
+  outputDir?: string;
+  format?: string;
+  codec?: string;
+  framerate?: number;
+  windowScope?: 'focused' | 'screen';
 }
 
 export interface SidecarExport {
   subtitles?: boolean;
   video?: boolean;
+  outputDir?: string;
+  srtFormat?: 'srt' | 'vtt';
+  voiceScript?: boolean;
+}
+
+export interface SidecarEnvironment {
+  common?: Record<string, string>;
+  platform?: {
+    darwin?: Record<string, string>;
+    linux?: Record<string, string>;
+    win32?: Record<string, string>;
+  };
 }
 
 export interface SidecarFile {
@@ -38,4 +55,5 @@ export interface SidecarFile {
   slides?: SidecarSlide[];
   recording?: SidecarRecording;
   export?: SidecarExport;
+  environment?: SidecarEnvironment;
 }
