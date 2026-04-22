@@ -124,3 +124,43 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 - `deckValidator.ts` and the test file were already committed by prior agents (DA-10, DA-12 setup)
 - The model and slideParser changes were the remaining missing implementation
 - `git stash` operations during this session accidentally truncated `sidecarLoader.test.ts` to its committed state (117 lines); the uncommitted loadSidecar tests (lines 118+) were lost and require a separate DA-04 follow-up
+
+### 2026-04-22 — DA-07 Sidecar actions → ActionRegistry elements
+
+**New file:** `src/parser/sidecarActionMapper.ts`  
+**Modified:** `src/parser/mergeEngine.ts`, `src/parser/index.ts`  
+**Test files:** `test/unit/parser/sidecarActionMapper.test.ts` (18 tests), `test/unit/parser/mergeEngine.test.ts` (+5 tests)
+
+**What was done:**
+- Created `mapSidecarActions(sidecarActions, slideIndex)` — pure function, no VS Code API, no I/O
+- Field-name normalisation at map time:
+  - `terminal.run`: `SidecarAction.cmd` → `TerminalRunParams.command`
+  - `file.open` / `editor.highlight`: `SidecarAction.file` → params `path`
+  - `debug.start` / all others: all index-signature fields pass through unchanged
+- Unknown action types: `console.warn` and skip, never throw
+- `mergeEngine.mergeSidecarIntoSlides()` now calls `mapSidecarActions` and assigns the result to `merged.onEnterActions` — only when `onEnterActions.length === 0` (inline takes precedence)
+- `sidecarActions` field remains on the slide for reference/debugging
+- Trust enforcement requires zero special handling: `terminal.run` and `debug.start` are already in `TRUSTED_ACTION_TYPES` checked by `conductor.executeAction()` at dispatch time
+
+**Architecture note:** The mapper is a pure utility in the parser layer. It doesn't import from `src/actions/` (no executor classes, no registry) — only from `src/models/action.ts` for `createAction` and `ActionType`. This keeps the parser free of executor-layer dependencies.
+
+**Pre-existing test-suite issue (not a regression):** Multiple uncommitted in-progress changes in the working tree (`deckParser.ts` DA-06 wiring, partial `sidecarLoader.test.ts`) cause `noUnusedLocals` failures when running the full `npm run test:unit`. The DA-07 additions compile cleanly (`tsc --noEmit` passes) and all 261 tests in the exercised suites pass.
+
+### 2026-04-22 — DA-12: Malformed sidecar YAML → editor diagnostics
+
+**New function:** `validateSidecarSchema(sidecarContent: string): SlideDiagnosticResult[]` in `src/parser/deckValidator.ts`  
+**Modified:** `src/parser/sidecarLoader.ts` (loadSidecar no longer throws), `test/unit/parser/sidecarLoader.test.ts` (6 tests updated)  
+**Exported via:** `src/parser/index.ts`
+
+**What was done:**
+- `validateSidecarSchema` takes raw YAML string and returns `SlideDiagnosticResult[]` (not `vscode.Diagnostic[]`) — consistent with existing deckValidator pattern; extension.ts lifts to vscode.Diagnostic at call site
+- Three checks in order: (1) YAML syntax error → Error with js-yaml `mark.line` line number; (2) unknown top-level keys → Warning (permissive schema); (3) missing slide id fields → Error
+- Helper `yamlErrorLine(err)` extracts 0-based line from `YAMLException.mark.line` safely
+- `loadSidecar` refactored: returns `null` on YAML parse failure or non-mapping top-level; no longer throws on schema violations (missing ids now handled by validateSidecarSchema not loadSidecar)
+- 6 sidecarLoader tests updated from `expect-throw` to `expect-null/non-null` contracts
+
+**Parallel task note:** DA-10 was committed concurrently and incorporated my `validateSidecarSchema` implementation and test stubs into its commit (`new file` for deckValidator.ts). DA-06 added graceful sidecar error handling in `parseDeck()` (try/catch converting throws to warnings). DA-12 supersedes both: `loadSidecar` no longer throws at all, and `validateSidecarSchema` is the canonical diagnostic channel.
+
+**Key architectural decision preserved:** `deckValidator.ts` has NO vscode import. All validation runs outside the extension host. Extension.ts lifts `SlideDiagnosticResult` → `vscode.Diagnostic` when wiring up a DiagnosticCollection for `.deck.yaml` files (future DA task).
+
+
