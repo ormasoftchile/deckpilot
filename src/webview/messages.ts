@@ -244,6 +244,8 @@ export interface DeckLoadedMessage {
   payload: {
     title?: string;
     author?: string;
+    /** Theme token from deck frontmatter or sidecar deck section (DA-09) */
+    theme?: string;
     totalSlides: number;
     currentSlideIndex: number;
     slideHtml: string;
@@ -255,6 +257,10 @@ export interface DeckLoadedMessage {
     }>;
     /** Environment variable status (Feature 006) */
     envStatus?: EnvStatus;
+    // Note: slide.cues (sidecar voice cues) are NOT forwarded to the Webview
+    // because they belong to the recording pipeline only (parseCues → buildSegments →
+    // VoiceOverScriptGenerator / CaptionsScaffoldGenerator).  The Webview uses
+    // speakerNotes for presenter-view display.
   };
 }
 

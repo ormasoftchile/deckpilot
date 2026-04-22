@@ -217,5 +217,132 @@ describe('CueParser', () => {
       expect(cues).to.have.length(1);
       expect(cues[0].fragmentIndex).to.be.undefined;
     });
+
+    // -----------------------------------------------------------------------
+    // DA-08: sidecar cues wiring
+    // -----------------------------------------------------------------------
+
+    it('should use sidecar cues (slide.cues) when no comment cues exist', () => {
+      const slides = [
+        createMockSlide({
+          content: '# Slide 1\n\nNo voice comments.',
+          cues: ['First talking point', 'Second talking point'],
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(2);
+      expect(cues[0].text).to.equal('First talking point');
+      expect(cues[0].source).to.equal('frontmatter');
+      expect(cues[0].slideIndex).to.equal(0);
+      expect(cues[0].fragmentIndex).to.be.undefined;
+      expect(cues[1].text).to.equal('Second talking point');
+      expect(cues[1].source).to.equal('frontmatter');
+    });
+
+    it('should prefer comment cues over sidecar cues when both are present', () => {
+      const slides = [
+        createMockSlide({
+          content: '<!-- voice: Inline comment wins -->',
+          cues: ['Sidecar cue should be ignored'],
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(1);
+      expect(cues[0].text).to.equal('Inline comment wins');
+      expect(cues[0].source).to.equal('comment');
+    });
+
+    it('should prefer sidecar cues over speaker notes', () => {
+      const slides = [
+        createMockSlide({
+          content: '# Slide',
+          cues: ['Sidecar cue beats notes'],
+          speakerNotes: 'These notes should not appear',
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(1);
+      expect(cues[0].text).to.equal('Sidecar cue beats notes');
+      expect(cues[0].source).to.equal('frontmatter');
+    });
+
+    it('should strip whitespace from sidecar cue strings', () => {
+      const slides = [
+        createMockSlide({
+          content: '# Slide',
+          cues: ['  trimmed on both sides  '],
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(1);
+      expect(cues[0].text).to.equal('trimmed on both sides');
+    });
+
+    it('should skip blank sidecar cue strings', () => {
+      const slides = [
+        createMockSlide({
+          content: '# Slide',
+          cues: ['   ', 'Valid cue', ''],
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(1);
+      expect(cues[0].text).to.equal('Valid cue');
+    });
+
+    it('should handle multiple slides with mixed cue sources', () => {
+      const slides = [
+        createMockSlide({
+          content: '<!-- voice: Comment cue -->',
+          cues: ['Ignored sidecar'],
+          index: 0,
+        }),
+        createMockSlide({
+          content: '# Slide 2',
+          cues: ['Sidecar fills the gap'],
+          index: 1,
+        }),
+        createMockSlide({
+          content: '# Slide 3',
+          speakerNotes: 'Notes as last resort',
+          index: 2,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(3);
+      expect(cues[0].source).to.equal('comment');
+      expect(cues[0].text).to.equal('Comment cue');
+      expect(cues[1].source).to.equal('frontmatter');
+      expect(cues[1].text).to.equal('Sidecar fills the gap');
+      expect(cues[2].source).to.equal('speaker-notes');
+      expect(cues[2].text).to.equal('Notes as last resort');
+    });
+
+    it('should use pre-extracted voiceCues and ignore sidecar cues (inline wins)', () => {
+      const slides = [
+        createMockSlide({
+          content: '# Slide',
+          voiceCues: [{ text: 'Pre-extracted comment cue' }],
+          cues: ['Sidecar ignored when voiceCues present'],
+          index: 0,
+        }),
+      ];
+
+      const cues = parseCues(slides);
+      expect(cues).to.have.length(1);
+      expect(cues[0].text).to.equal('Pre-extracted comment cue');
+      expect(cues[0].source).to.equal('comment');
+    });
   });
 });
