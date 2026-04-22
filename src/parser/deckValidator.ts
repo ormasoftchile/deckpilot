@@ -102,7 +102,7 @@ export function validateSlideIds(slides: Slide[]): SlideDiagnosticResult[] {
 // Sidecar YAML validation (DA-12)
 // ---------------------------------------------------------------------------
 
-const KNOWN_SIDECAR_KEYS = new Set(['deck', 'slides', 'recording', 'export']);
+const KNOWN_SIDECAR_KEYS = new Set(['deck', 'slides', 'recording', 'export', 'environment']);
 
 /**
  * Extract the 0-based line number from a js-yaml YAMLException, if available.
@@ -208,7 +208,7 @@ export function validateSidecarSchema(sidecarContent: string): SlideDiagnosticRe
           start: { line: 0, character: 0 },
           end: { line: 0, character: 0 },
         },
-        message: `Unknown top-level key '${key}' — expected one of: deck, slides, recording, export`,
+        message: `Unknown top-level key '${key}' — expected one of: deck, slides, recording, export, environment`,
         severity: SlideDiagnosticSeverity.Warning,
         source: SOURCE,
       });
