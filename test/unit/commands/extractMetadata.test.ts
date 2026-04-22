@@ -186,3 +186,95 @@ describe('buildSidecarContent — output validity', () => {
         expect(output.trim()).to.have.length.greaterThan(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Additional edge cases (DA-25)
+// ---------------------------------------------------------------------------
+
+describe('buildSidecarContent — edge cases', () => {
+    it('handles a deck with a truly empty slides array without crashing', () => {
+        // Bypass makeDeck helper to get a deck with zero slides
+        const { createDeck } = require('../../../src/models/deck');
+        const deck = createDeck('/test.deck.md', [], { title: 'Empty' }) as Deck;
+        expect(() => buildSidecarContent(deck)).not.to.throw();
+        const result = parse(buildSidecarContent(deck));
+        expect(result.slides).to.be.undefined;
+        expect((result.deck as Record<string, unknown>).title).to.equal('Empty');
+    });
+
+    it('serializes a slide with all four metadata fields correctly', () => {
+        const slide = makeSlide({
+            index: 0,
+            id: 'full-slide',
+            cues: ['cue-a', 'cue-b'],
+            duration: '3m',
+            checkpoint: 'step-done',
+            sidecarActions: [{ type: 'terminal.run', cmd: 'make test' }],
+        });
+        const deck = makeDeck([slide]);
+        const result = parse(buildSidecarContent(deck));
+        const slides = result.slides as Array<Record<string, unknown>>;
+        expect(slides).to.have.length(1);
+        expect(slides[0].id).to.equal('full-slide');
+        expect(slides[0].cues).to.deep.equal(['cue-a', 'cue-b']);
+        expect(slides[0].duration).to.equal('3m');
+        expect(slides[0].checkpoint).to.equal('step-done');
+        const actions = slides[0].actions as Array<Record<string, unknown>>;
+        expect(actions[0].type).to.equal('terminal.run');
+    });
+
+    it('preserves order when multiple slides have metadata', () => {
+        const slideA = makeSlide({ index: 0, id: 'alpha', cues: ['first'] });
+        const slideB = makeSlide({ index: 1, id: 'beta', duration: '2m' });
+        const deck = makeDeck([slideA, slideB]);
+        const result = parse(buildSidecarContent(deck));
+        const slides = result.slides as Array<Record<string, unknown>>;
+        expect(slides).to.have.length(2);
+        expect(slides[0].id).to.equal('alpha');
+        expect(slides[1].id).to.equal('beta');
+    });
+
+    it('preserves multiple sidecarActions in the actions array', () => {
+        const slide = makeSlide({
+            index: 0,
+            id: 'multi-action',
+            sidecarActions: [
+                { type: 'terminal.run', cmd: 'npm install' },
+                { type: 'file.open', file: 'src/index.ts' },
+                { type: 'editor.highlight', file: 'src/index.ts' },
+            ],
+        });
+        const deck = makeDeck([slide]);
+        const result = parse(buildSidecarContent(deck));
+        const slides = result.slides as Array<Record<string, unknown>>;
+        const actions = slides[0].actions as Array<Record<string, unknown>>;
+        expect(actions).to.have.length(3);
+        expect(actions[0].type).to.equal('terminal.run');
+        expect(actions[1].type).to.equal('file.open');
+        expect(actions[2].type).to.equal('editor.highlight');
+    });
+
+    it('produces complete round-trip YAML with all sections present', () => {
+        const slide = makeSlide({
+            index: 0,
+            id: 'demo',
+            cues: ['Welcome'],
+            duration: '5m',
+            checkpoint: 'ready',
+            sidecarActions: [{ type: 'terminal.run', cmd: 'echo hi' }],
+        });
+        const deck = makeDeck([slide], {
+            title: 'Full Talk',
+            theme: 'ocean',
+            recording: { autoStart: true, format: 'mp4' },
+            export: { subtitles: true, srtFormat: 'vtt' },
+        });
+        const result = parse(buildSidecarContent(deck));
+        expect((result.deck as Record<string, unknown>).title).to.equal('Full Talk');
+        expect((result.deck as Record<string, unknown>).theme).to.equal('ocean');
+        expect((result.recording as Record<string, unknown>).autoStart).to.equal(true);
+        expect((result.export as Record<string, unknown>).subtitles).to.equal(true);
+        const slides = result.slides as Array<Record<string, unknown>>;
+        expect(slides[0].id).to.equal('demo');
+    });
+});

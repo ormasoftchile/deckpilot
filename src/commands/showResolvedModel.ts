@@ -4,6 +4,28 @@ import { parseDeck } from '../parser';
 
 const SCHEME = 'deckpilot-model';
 
+/**
+ * Serialize an arbitrary value to indented JSON, handling circular references
+ * by replacing them with the string '[Circular]' and stripping function values.
+ *
+ * Extracted as a pure function so it can be unit-tested without VS Code.
+ */
+export function serializeDeck(value: unknown): string {
+    const seen = new Set<unknown>();
+    return JSON.stringify(value, (_key, v) => {
+        if (typeof v === 'function') {
+            return undefined;
+        }
+        if (typeof v === 'object' && v !== null) {
+            if (seen.has(v)) {
+                return '[Circular]';
+            }
+            seen.add(v);
+        }
+        return v;
+    }, 2);
+}
+
 // Stores the latest serialized JSON per virtual document path
 const contentStore = new Map<string, string>();
 
@@ -51,21 +73,9 @@ export async function showResolvedDeckModel(provider: DeckModelContentProvider):
         return;
     }
 
-    const seen = new Set<unknown>();
     let json: string;
     try {
-        json = JSON.stringify(result.deck, (_key, value) => {
-            if (typeof value === 'function') {
-                return undefined;
-            }
-            if (typeof value === 'object' && value !== null) {
-                if (seen.has(value)) {
-                    return '[Circular]';
-                }
-                seen.add(value);
-            }
-            return value;
-        }, 2);
+        json = serializeDeck(result.deck);
     } catch (err) {
         void vscode.window.showErrorMessage(
             `Failed to serialize deck model: ${err instanceof Error ? err.message : String(err)}`

@@ -266,4 +266,103 @@ describe('resolveEnvironment', () => {
     const result = await resolveEnvironment(deckPath, sidecar);
     expect(result['INJECTED']).to.equal('yes');
   });
+
+  // -------------------------------------------------------------------------
+  // Additional edge cases (DA-25)
+  // -------------------------------------------------------------------------
+
+  it('includes all multiple common vars in the result', async () => {
+    const deckPath = writeDeckFile();
+    const sidecar: SidecarFile = {
+      environment: {
+        common: {
+          ALPHA: 'alpha_val',
+          BETA: 'beta_val',
+          GAMMA: 'gamma_val',
+        },
+      },
+    };
+
+    const result = await resolveEnvironment(deckPath, sidecar, 'darwin');
+    expect(result['ALPHA']).to.equal('alpha_val');
+    expect(result['BETA']).to.equal('beta_val');
+    expect(result['GAMMA']).to.equal('gamma_val');
+  });
+
+  it('sidecar common overrides a process.env value for the same key', async () => {
+    const deckPath = writeDeckFile();
+    const testKey = 'DA25_COMMON_OVERRIDE_TEST';
+    process.env[testKey] = 'from_process_env';
+    try {
+      const sidecar: SidecarFile = {
+        environment: {
+          common: { [testKey]: 'from_common' },
+        },
+      };
+
+      const result = await resolveEnvironment(deckPath, sidecar, 'darwin');
+      expect(result[testKey]).to.equal('from_common');
+    } finally {
+      delete process.env[testKey];
+    }
+  });
+
+  it('darwin platform vars are absent when win32 platform is requested', async () => {
+    const deckPath = writeDeckFile();
+    const sidecar: SidecarFile = {
+      environment: {
+        platform: {
+          darwin: { DARWIN_ONLY: 'darwin_val' },
+        },
+      },
+    };
+
+    const result = await resolveEnvironment(deckPath, sidecar, 'win32');
+    expect(result['DARWIN_ONLY']).to.be.undefined;
+  });
+
+  it('win32 platform vars are absent when darwin platform is requested', async () => {
+    const deckPath = writeDeckFile();
+    const sidecar: SidecarFile = {
+      environment: {
+        platform: {
+          win32: { WIN32_ONLY: 'win32_val' },
+        },
+      },
+    };
+
+    const result = await resolveEnvironment(deckPath, sidecar, 'darwin');
+    expect(result['WIN32_ONLY']).to.be.undefined;
+  });
+
+  it('empty common object adds no new keys to the result', async () => {
+    const deckPath = writeDeckFile();
+    const sidecar: SidecarFile = {
+      environment: {
+        common: {},
+      },
+    };
+
+    const withoutSidecar = await resolveEnvironment(deckPath, null, 'darwin');
+    const withEmptyCommon = await resolveEnvironment(deckPath, sidecar, 'darwin');
+
+    // The keyset should be identical
+    expect(Object.keys(withEmptyCommon).sort()).to.deep.equal(Object.keys(withoutSidecar).sort());
+  });
+
+  it('environment.platform present but current platform entry is empty — no extra keys added', async () => {
+    const deckPath = writeDeckFile();
+    const sidecar: SidecarFile = {
+      environment: {
+        platform: {
+          darwin: {},
+        },
+      },
+    };
+
+    const withoutSidecar = await resolveEnvironment(deckPath, null, 'darwin');
+    const withEmptyPlatform = await resolveEnvironment(deckPath, sidecar, 'darwin');
+
+    expect(Object.keys(withEmptyPlatform).sort()).to.deep.equal(Object.keys(withoutSidecar).sort());
+  });
 });

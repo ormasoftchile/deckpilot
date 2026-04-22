@@ -518,6 +518,28 @@ describe('mergeSidecarDeckMetadata', () => {
       expect(result.recording!.autoStart).to.equal(true);
       expect(result.export!.subtitles).to.equal(true);
     });
+
+    it('applies recording and export from sidecar when no deck section is present', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = {
+        recording: { format: 'webm', framerate: 24 },
+        export: { video: true },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.title).to.be.undefined;
+      expect(result.theme).to.be.undefined;
+      expect(result.recording!.format).to.equal('webm');
+      expect(result.export!.video).to.equal(true);
+    });
+
+    it('returns same metadata reference when sidecar has only environment (no deck/recording/export)', () => {
+      const metadata: DeckMetadata = { title: 'Existing' };
+      const sidecar: SidecarFile = {
+        environment: { common: { FOO: 'bar' } },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result).to.equal(metadata);
+    });
   });
 
   describe('immutability', () => {
@@ -534,6 +556,72 @@ describe('mergeSidecarDeckMetadata', () => {
       const sidecar: SidecarFile = { deck: { title: 'New' } };
       const result = mergeSidecarDeckMetadata(metadata, sidecar);
       expect(result).to.not.equal(metadata);
+    });
+  });
+
+  describe('recording edge cases', () => {
+    it('preserves framerate: 0 from sidecar (falsy number is a valid value)', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = { recording: { framerate: 0 } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording!.framerate).to.equal(0);
+    });
+
+    it('inline recording with all fields wins completely over sidecar recording', () => {
+      const metadata: DeckMetadata = {
+        recording: {
+          autoStart: false,
+          outputDir: './inline',
+          format: 'avi',
+          codec: 'vp9',
+          framerate: 15,
+          windowScope: 'screen',
+        },
+      };
+      const sidecar: SidecarFile = {
+        recording: {
+          autoStart: true,
+          outputDir: './sidecar',
+          format: 'mp4',
+          codec: 'h264',
+          framerate: 60,
+          windowScope: 'focused',
+        },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording!.autoStart).to.equal(false);
+      expect(result.recording!.outputDir).to.equal('./inline');
+      expect(result.recording!.format).to.equal('avi');
+      expect(result.recording!.codec).to.equal('vp9');
+      expect(result.recording!.framerate).to.equal(15);
+      expect(result.recording!.windowScope).to.equal('screen');
+    });
+
+    it('inline export with all fields wins completely over sidecar export', () => {
+      const metadata: DeckMetadata = {
+        export: {
+          subtitles: false,
+          video: false,
+          outputDir: './inline-out',
+          srtFormat: 'srt',
+          voiceScript: false,
+        },
+      };
+      const sidecar: SidecarFile = {
+        export: {
+          subtitles: true,
+          video: true,
+          outputDir: './sidecar-out',
+          srtFormat: 'vtt',
+          voiceScript: true,
+        },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.export!.subtitles).to.equal(false);
+      expect(result.export!.video).to.equal(false);
+      expect(result.export!.outputDir).to.equal('./inline-out');
+      expect(result.export!.srtFormat).to.equal('srt');
+      expect(result.export!.voiceScript).to.equal(false);
     });
   });
 });
