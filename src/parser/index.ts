@@ -7,4 +7,5 @@ export { parseSlides, renderMarkdown, getLastParseWarnings } from './slideParser
 export { parseActionLinks, parseActionUri } from './actionLinkParser';
 export { parseActionBlocks, type ActionBlockParseResult, type ActionBlockParseError } from './actionBlockParser';
 export { resolveSidecarPath, sidecarExists, loadSidecar } from './sidecarLoader';
+export { mergeSidecarIntoSlides, mergeSidecarDeckMetadata } from './mergeEngine';
 export type { SidecarFile, SidecarSlide, SidecarAction, SidecarDeck, SidecarRecording, SidecarExport } from '../models/sidecar';

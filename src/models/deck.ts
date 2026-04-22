@@ -75,6 +75,8 @@ export interface DeckMetadata {
   options?: PresentationOptions;
   /** Authored scenes from deck frontmatter */
   scenes?: SceneDefinition[];
+  /** Theme override from sidecar (DA-05) */
+  theme?: string;
   /** Additional properties */
   [key: string]: unknown;
 }

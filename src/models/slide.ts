@@ -4,6 +4,7 @@
  */
 
 import { Action, ActionDefinition } from './action';
+import type { SidecarAction } from './sidecar';
 
 /**
  * YAML frontmatter structure for a slide
@@ -88,6 +89,12 @@ export interface Slide {
    * available even though the comments are removed from rendered HTML.
    */
   voiceCues?: Array<{ fragmentIndex?: number; text: string }>;
+  /** Speaker cue strings merged from sidecar (DA-05) */
+  cues?: string[];
+  /** Slide duration hint merged from sidecar, e.g. "2m30s" (DA-05) */
+  duration?: string;
+  /** Actions sourced from sidecar YAML; wired to action registry in DA-07/08 (DA-05) */
+  sidecarActions?: SidecarAction[];
 }
 
 /**
