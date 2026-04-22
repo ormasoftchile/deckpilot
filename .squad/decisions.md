@@ -5,29 +5,160 @@
 ### Dual Authoring Model — Architecture & Decomposition
 
 **Proposed by:** Cervantes (2026-04-22)  
-**Status:** Proposed  
+**Status:** ✅ Phase 1 Complete (2026-06-12) — 788 passing, 0 failing  
 **PRD:** Dual Authoring Model (Mode A: Inline, Mode B: Sidecar)
 
 The parser pipeline is already format-agnostic. The entire dual authoring feature lives in the parser layer + a new sidecar loader. Conductor and Webview layers are unchanged.
 
 **New components:**
-1. **SidecarLoader** — reads/parses `.deck.yaml`, returns typed sidecar object
-2. **SlideIdResolver** — assigns stable IDs to slides, matches sidecar refs
-3. **MergeEngine** — applies sidecar metadata onto parsed deck (precedence: inline > sidecar > defaults)
-4. **SidecarValidator** — checks for unknown IDs, duplicates, malformed values
+1. **SidecarLoader** (`src/parser/sidecarLoader.ts`) — reads/parses `.deck.yaml`, returns typed sidecar object
+2. **SlideIdParser** (`src/parser/slideIdParser.ts`) — assigns stable IDs to slides via two-phase extraction
+3. **MergeEngine** (`src/parser/mergeEngine.ts`) — applies sidecar metadata onto parsed deck (precedence: inline > sidecar > defaults)
+4. **SidecarValidator** (`src/parser/deckValidator.ts`) — checks for unknown IDs, duplicates, malformed YAML
+5. **SidecarActionMapper** (`src/parser/sidecarActionMapper.ts`) — maps raw `SidecarAction[]` to `Action[]`
 
-**Model changes needed:**
-- `Slide` gains `id?: string` field (stable slide ID)
-- `DeckMetadata` gains optional `recording`, `export`, `environment` sections
-- `Slide` gains optional `cues: string[]`, `duration?: string`, `timingHint?: string`
+**Model changes shipped:**
+- `Slide` gains `id?: string`, `idExplicit?: boolean`, `cues?: string[]`, `duration?: string`, `sidecarActions?: SidecarAction[]`
+- `DeckMetadata` gains `title?: string`, `theme?: string`
+- `src/models/sidecar.ts` — new: `SidecarFile`, `SidecarSlide`, `SidecarAction`, `SidecarDeck`, `SidecarRecording`, `SidecarExport`
 
-**Merge precedence:** inline frontmatter > sidecar YAML > global defaults
+**Merge precedence (enforced):** inline frontmatter > sidecar YAML > global defaults. Pure immutable functions; inputs never mutated.
 
 **Phase 3 decision:** "Reusable metadata templates" and "multi-file deck imports" are deferred. Phase 1 + 2 ship all user value.
 
-**Recommended First PR:** DA-01 + DA-02 + DA-14 (Slide ID support). ~150 lines production, ~200 lines tests. Zero risk to existing decks.
-
 See decision inbox file `cervantes-dual-authoring-decomp.md` for complete 25-item work breakdown (DA-01 through DA-25).
+
+---
+
+### Dual Authoring Model — Slide ID System (DA-01, DA-02, DA-11, DA-14)
+
+**Authors:** Cervantes (DA-01, DA-02), De Unamuno (DA-11), Delibes (DA-14)  
+**Status:** ✅ Implemented
+
+**Two-phase ID extraction:** Phase 1 strips `<!-- id: xxx -->` comments inside `parseSlideContent` (so they never reach the renderer). Phase 2 runs `generateSlideId` + `resolveUniqueIds` after the outer `parseSlides` loop has merged any pending YAML frontmatter.
+
+**Priority order:**
+1. `<!-- id: xxx -->` HTML comment — highest author intent; sets `idExplicit = true`
+2. YAML frontmatter `id:` field — sets `idExplicit = true`
+3. First heading slug — `# Getting Started` → `getting-started`
+4. `slide-{index}` positional fallback — always available
+
+**Deduplication:** `resolveUniqueIds` uses a two-pass algorithm. First pass pre-registers all explicit IDs. Second pass deduplicates only auto-generated IDs (appends `-2`, `-3`). Explicit duplicate IDs are intentionally preserved as-is — `validateSlideIds` surfaces them as errors.
+
+**Duplicate detection rules:**
+
+| Slide A `idExplicit` | Slide B `idExplicit` | Result |
+|---|---|---|
+| true | true | Error diagnostic |
+| true | false | Error diagnostic |
+| false | true | Error diagnostic |
+| false | false | Silent auto-suffix by `resolveUniqueIds` |
+
+**Bug fixed (DA-14):** Original `resolveUniqueIds` did not respect `idExplicit` — two slides with `<!-- id: setup -->` would silently produce `['setup', 'setup-2']`. Fixed with two-pass algorithm.
+
+**Diagnostics anchored to line 0** — `Slide` has no source position today. Future PR to add `lineStart?: number` to `Slide` will improve precision.
+
+---
+
+### Dual Authoring Model — SidecarLoader Contract (DA-03, DA-04, DA-15)
+
+**Authors:** De Unamuno (DA-03), Cervantes (DA-04), Delibes (DA-15)  
+**Status:** ✅ Implemented
+
+**File naming:** `src/parser/sidecarLoader.ts` — discovery (`resolveSidecarPath`, `sidecarExists`) and YAML parsing (`loadSidecar`) in one file, consistent with the SidecarLoader component name in the architecture.
+
+**Path convention:** `demo.deck.md` → `demo.deck.yaml`. `resolveSidecarPath` throws (not silent fallback) on non-`.deck.md` input — programming error, fail loudly.
+
+**`loadSidecar` behavior contract:**
+
+| Condition | Result |
+|---|---|
+| No `.deck.yaml` exists | `null` — not an error |
+| Empty / whitespace YAML | `{}` — valid empty sidecar |
+| YAML syntax error | `null` (best-effort); `validateSidecarSchema` surfaces diagnostics |
+| Top-level not a mapping | `null`; diagnostic surfaced separately |
+| Slide entry missing `id` | `Error` thrown with index and filename |
+
+**`SidecarSlide.id` is required** — without an ID, a sidecar slide entry has no merge target. All other top-level fields are optional (partial sidecars are valid).
+
+**Node `fs` (not `vscode.workspace.fs`)** — sidecar files are always real disk files; virtual FS handling not needed. Consistent with `EnvFileLoader` pattern.
+
+---
+
+### Dual Authoring Model — Merge Engine Contracts (DA-05, DA-06, DA-07, DA-09, DA-16)
+
+**Authors:** Cervantes (DA-05, DA-06, DA-09), De Unamuno (DA-07), Delibes (DA-16)  
+**Status:** ✅ Implemented
+
+**`parseDeck` made async (DA-06):** Was synchronous. Made async to accommodate `await loadSidecar()`. Three call-site `await`s added: `extension.ts`, `conductor.ts`, `srtSnapshots.test.ts`.
+
+**`sidecarActions` separation (DA-05):** Raw `SidecarAction[]` stored on `slide.sidecarActions`. DA-07 maps them to `onEnterActions` via `mapSidecarActions()`. Keeping them separate prevented mixing unresolved sidecar actions with resolved `Action[]` objects in the merge engine.
+
+**Action mapper (DA-07):** `src/parser/sidecarActionMapper.ts` — pure function, no vscode imports, no executor imports. Field normalization: `cmd→command` (terminal.run), `file→path` (file.open, editor.highlight). Unknown types: `console.warn` + skip, never throw. Trust enforcement falls through to existing `executeAction()` check in Conductor — zero special handling in the mapper.
+
+**`onEnterActions` precedence:** Sidecar actions populate `onEnterActions` only when `onEnterActions.length === 0`. Inline actions always win.
+
+**`DeckMetadata.theme` placement (DA-05):** Added directly on `DeckMetadata`, not on `PresentationOptions`. `PresentationOptions.theme` is a `'dark'|'light'` rendering hint; `DeckMetadata.theme` is the authoring-level token from sidecar. Two distinct layers.
+
+**Sidecar errors are non-fatal (DA-06):** Surfaced as `[sidecar]` warnings; deck still loads from inline content.
+
+**Deck metadata propagation verified (DA-09):** `title` and `theme` from sidecar flow through `mergeSidecarDeckMetadata` → `parseDeck` → `createDeck` → `Conductor.handleReady` → `DeckLoadedMessage`. Webview rendering not yet wired (De Vega, later phase).
+
+---
+
+### Dual Authoring Model — Validation Layer (DA-10, DA-11, DA-12, DA-17)
+
+**Authors:** De Unamuno (DA-10, DA-11, DA-12), Delibes (DA-17)  
+**Status:** ✅ Implemented
+
+**Three validator functions in `src/parser/deckValidator.ts`:**
+
+1. `validateSlideIds(slides)` — detects duplicate explicit IDs; returns `SlideDiagnosticResult[]` with `Error` severity
+2. `validateSidecarSlideIds(slides, sidecar)` — detects sidecar entries referencing unknown slide IDs; returns `Warning` (unknown ID is silently skipped at merge; deck loads correctly)
+3. `validateSidecarSchema(rawContent)` — detects malformed YAML, wrong top-level type, unknown top-level keys, missing slide `id`s
+
+**`SlideDiagnosticResult[]` not `vscode.Diagnostic[]`** — parser layer stays vscode-free. Consistent with `actionDiagnosticProvider.ts` pattern. `extension.ts` is responsible for conversion.
+
+**Lenient `loadSidecar` vs strict `validateSidecarSchema`:** `loadSidecar` returns best-effort parse (allows merge even with schema warnings). `validateSidecarSchema` provides full authoring feedback. Two distinct responsibilities.
+
+**Bug fixed (DA-17):** `validateSidecarSlideIds` crashed with `TypeError: Cannot read properties of null` when called with `null` sidecar. Fixed by adding leading `!sidecar` guard before property access.
+
+**Parallel write conflict (DA-10/11/12):** Three agents wrote to `deckValidator.ts` concurrently in Wave 4. DA-12 introduced an internal helper initially named `validateSidecarSlideIds` (single-arg), which was renamed to `validateSidecarSlideIdPresence` before landing to avoid collision. DA-10 is the canonical two-arg `validateSidecarSlideIds`. Missing `import * as yaml from 'js-yaml'` was added by Delibes in DA-15.
+
+---
+
+### Dual Authoring Model — File Watcher for `.deck.yaml` (DA-13)
+
+**Author:** De Unamuno  
+**Status:** ✅ Implemented
+
+**Pattern:** Exact structural mirror of the existing `.deck.env` watcher (`startEnvFileWatcher` / `disposeEnvFileWatcher`) in `Conductor`.
+
+**Key difference from env watcher:** Sidecar changes trigger a **full deck reload** (`reloadDeckFromDisk`), not just env resolution. Sidecar changes can affect slide content, IDs, voice cues, and speaker notes.
+
+**`RelativePattern` scoped to deck directory** — not a workspace-wide `**` glob. Covers only the single `.deck.yaml` sibling of the active `.deck.md`.
+
+**Debounce:** 500ms — matches env watcher.
+
+**Delete handled transparently:** `parseDeck` calls `sidecarExists()` → `false` → `loadSidecar()` returns `null` → merge skipped. No special-case code.
+
+**Second watcher in `extension.ts`** — workspace-wide `**/*.deck.yaml` watcher re-triggers editor diagnostics for all open `.deck.md` documents, reusing `refreshDiagnosticsOnEnvChange` handler.
+
+---
+
+### Dual Authoring Model — voiceCues Pipeline Bug (DA-08)
+
+**Author:** De Unamuno  
+**Status:** ✅ Fixed
+
+`parseCues()` in `src/recording/cueParser.ts` was ignoring `slide.cues` (populated by the merge engine from sidecar YAML). Sidecar-sourced cues never reached `buildSegments()`, `VoiceOverScriptGenerator`, or `CaptionsScaffoldGenerator`.
+
+**Fixed priority chain:**
+1. Inline `<!-- voice: -->` HTML comment cues (`voiceCues`) — inline wins
+2. Sidecar `cues[]` — each string → `VoiceOverCue` with `source: 'frontmatter'`, no fragment association
+3. Speaker notes — last resort
+
+Fragment-level cue targeting (voice[N]) remains exclusive to inline syntax. Blank/whitespace sidecar strings are skipped.
 
 ---
 
