@@ -77,6 +77,23 @@ export interface DeckMetadata {
   scenes?: SceneDefinition[];
   /** Theme override from sidecar (DA-05) */
   theme?: string;
+  /** Recording configuration from sidecar (DA-20) */
+  recording?: {
+    autoStart?: boolean;
+    outputDir?: string;
+    format?: string;
+    codec?: string;
+    framerate?: number;
+    windowScope?: 'focused' | 'screen';
+  };
+  /** Export configuration from sidecar (DA-20) */
+  export?: {
+    subtitles?: boolean;
+    video?: boolean;
+    outputDir?: string;
+    srtFormat?: 'srt' | 'vtt';
+    voiceScript?: boolean;
+  };
   /** Additional properties */
   [key: string]: unknown;
 }

@@ -403,6 +403,123 @@ describe('mergeSidecarDeckMetadata', () => {
     });
   });
 
+  describe('recording merging', () => {
+    it('applies full sidecar recording when metadata has none', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = {
+        recording: { autoStart: true, outputDir: './out', format: 'mp4', codec: 'h264', framerate: 30, windowScope: 'focused' },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording).to.deep.equal({ autoStart: true, outputDir: './out', format: 'mp4', codec: 'h264', framerate: 30, windowScope: 'focused' });
+    });
+
+    it('does not apply sidecar recording when sidecar has no recording section', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = { deck: { title: 'T' } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording).to.be.undefined;
+    });
+
+    it('inline recording wins over sidecar recording for each field', () => {
+      const metadata: DeckMetadata = { recording: { outputDir: './inline', framerate: 60 } };
+      const sidecar: SidecarFile = {
+        recording: { autoStart: true, outputDir: './sidecar', format: 'webm', framerate: 30 },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording!.outputDir).to.equal('./inline');
+      expect(result.recording!.framerate).to.equal(60);
+      // sidecar-only fields survive
+      expect(result.recording!.autoStart).to.equal(true);
+      expect(result.recording!.format).to.equal('webm');
+    });
+
+    it('sidecar recording field fills in when inline recording omits it', () => {
+      const metadata: DeckMetadata = { recording: { outputDir: './out' } };
+      const sidecar: SidecarFile = {
+        recording: { autoStart: false, outputDir: './sidecar', windowScope: 'screen' },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.recording!.outputDir).to.equal('./out');
+      expect(result.recording!.autoStart).to.equal(false);
+      expect(result.recording!.windowScope).to.equal('screen');
+    });
+
+    it('does not mutate the original recording object', () => {
+      const originalRec = { outputDir: './orig' };
+      const metadata: DeckMetadata = { recording: originalRec };
+      const sidecar: SidecarFile = { recording: { autoStart: true, outputDir: './sidecar' } };
+      mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(originalRec.outputDir).to.equal('./orig');
+      expect((originalRec as DeckMetadata['recording'])!.autoStart).to.be.undefined;
+    });
+  });
+
+  describe('export merging', () => {
+    it('applies full sidecar export when metadata has none', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = {
+        export: { subtitles: true, video: true, outputDir: './exports', srtFormat: 'vtt', voiceScript: true },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.export).to.deep.equal({ subtitles: true, video: true, outputDir: './exports', srtFormat: 'vtt', voiceScript: true });
+    });
+
+    it('does not apply sidecar export when sidecar has no export section', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = { recording: { autoStart: true } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.export).to.be.undefined;
+    });
+
+    it('inline export wins over sidecar export for each field', () => {
+      const metadata: DeckMetadata = { export: { outputDir: './inline-exports', srtFormat: 'srt' } };
+      const sidecar: SidecarFile = {
+        export: { subtitles: false, video: true, outputDir: './sidecar-exports', srtFormat: 'vtt' },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.export!.outputDir).to.equal('./inline-exports');
+      expect(result.export!.srtFormat).to.equal('srt');
+      // sidecar-only fields survive
+      expect(result.export!.subtitles).to.equal(false);
+      expect(result.export!.video).to.equal(true);
+    });
+
+    it('sidecar export field fills in when inline export omits it', () => {
+      const metadata: DeckMetadata = { export: { subtitles: true } };
+      const sidecar: SidecarFile = {
+        export: { subtitles: false, voiceScript: true, outputDir: './out' },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.export!.subtitles).to.equal(true);
+      expect(result.export!.voiceScript).to.equal(true);
+      expect(result.export!.outputDir).to.equal('./out');
+    });
+
+    it('does not mutate the original export object', () => {
+      const originalExp = { subtitles: true };
+      const metadata: DeckMetadata = { export: originalExp };
+      const sidecar: SidecarFile = { export: { video: true, subtitles: false } };
+      mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(originalExp.subtitles).to.equal(true);
+      expect((originalExp as DeckMetadata['export'])!.video).to.be.undefined;
+    });
+  });
+
+  describe('combined recording + export + deck merging', () => {
+    it('merges all three sections from sidecar in one pass', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = {
+        deck: { title: 'Full Deck' },
+        recording: { autoStart: true, format: 'mp4' },
+        export: { subtitles: true, srtFormat: 'vtt' },
+      };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.title).to.equal('Full Deck');
+      expect(result.recording!.autoStart).to.equal(true);
+      expect(result.export!.subtitles).to.equal(true);
+    });
+  });
+
   describe('immutability', () => {
     it('does not mutate the original metadata object', () => {
       const metadata: DeckMetadata = {};

@@ -77,18 +77,30 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
  * - Returns a new object; input metadata is not mutated.
  */
 export function mergeSidecarDeckMetadata(metadata: DeckMetadata, sidecar: SidecarFile): DeckMetadata {
-  if (!sidecar.deck) {
+  if (!sidecar.deck && !sidecar.recording && !sidecar.export) {
     return metadata;
   }
 
   const merged: DeckMetadata = { ...metadata };
 
-  if (sidecar.deck.title !== undefined && merged.title === undefined) {
-    merged.title = sidecar.deck.title;
+  if (sidecar.deck) {
+    if (sidecar.deck.title !== undefined && merged.title === undefined) {
+      merged.title = sidecar.deck.title;
+    }
+
+    if (sidecar.deck.theme !== undefined && merged.theme === undefined) {
+      merged.theme = sidecar.deck.theme;
+    }
   }
 
-  if (sidecar.deck.theme !== undefined && merged.theme === undefined) {
-    merged.theme = sidecar.deck.theme;
+  // recording: field-by-field merge — sidecar as base, inline wins per field
+  if (sidecar.recording !== undefined) {
+    merged.recording = { ...sidecar.recording, ...(merged.recording ?? {}) };
+  }
+
+  // export: field-by-field merge — sidecar as base, inline wins per field
+  if (sidecar.export !== undefined) {
+    merged.export = { ...sidecar.export, ...(merged.export ?? {}) };
   }
 
   return merged;

@@ -89,3 +89,33 @@
 - **Pre-existing bugs fixed incidentally:** `deckValidator.ts` (committed in DA-10) had a duplicate `validateSidecarSlideIds` export (two functions, different arity) and a missing `yaml` import. Renamed the 1-arg internal version to `validateSidecarSlideIdPresence`. The test file also had an unused `validateSidecarSchema` import that was blocking TypeScript compilation.
 - **Test count at DA-06:** 724 passing, 0 failing.
 - **Decision written to:** `.squad/decisions/inbox/cervantes-da06-parsedeck-integration.md`
+
+### 2025-07-23 — DA-19: Recording Settings in Sidecar Types
+
+- **Types-only change:** Added 5 fields to `SidecarRecording` (`outputDir`, `format`, `codec`, `framerate`, `windowScope`) and 3 fields to `SidecarExport` (`outputDir`, `srtFormat`, `voiceScript`). Zero runtime logic.
+- **`format`/`codec` stay `string`** (not union): ffmpeg accepts too many values for a closed union to be maintainable. Runtime validation is the right layer for this.
+- **`windowScope`** uses `'focused' | 'screen'` union — mirrors existing `windowX/Y/Width/Height` template variable lexicon.
+- **`srtFormat`** uses `'srt' | 'vtt'` union — small, stable set; closed union is appropriate here.
+- **788 tests, all passing.** Commit: `c6e2042`.
+- **Decision written to:** `.squad/decisions/inbox/cervantes-da19-types.md`
+
+### 2025-07-23 — P2 Wave Plan Produced
+
+- **Phase 2 scope:** 7 work items (DA-19 through DA-25) covering recording/export settings, environment/platform overrides, and two authoring commands.
+- **DA-19 to DA-25 breakdown was missing from decisions.md** — the initial decomposition (mentioned as "25 items: 18 P1 + 7 P2") was never persisted in detail. Reconstructed from PRD description.
+- **Wave structure:** 4 waves with parallelism in waves 1-3. Wave 1 (types) → Wave 2 (merge/resolution) → Wave 3 (commands) → Wave 4 (tests).
+- **Key architectural decisions:**
+  - `SidecarEnvironment` type with `platform` (darwin/linux/win32 → env map) and `common` sections
+  - Platform injection into `envResolver.ts` for testability
+  - "Extract Metadata" command creates `.deck.yaml` from inline metadata; action links in markdown body are NOT extracted (already inline)
+  - "Show Resolved Model" uses safe JSON serializer to avoid circular refs
+- **Risk R3 flagged:** Extracting action links from markdown body is hard (requires re-parsing HTML or source mapping). MVP only extracts frontmatter/structured data.
+- **Decision written to:** `.squad/decisions/inbox/cervantes-p2-wave-plan.md`
+
+### 2025-07-23 — DA-21: SidecarEnvironment Type and Validator Allowlist
+
+- **`SidecarEnvironment`** was already present in `src/models/sidecar.ts` from a prior wave commit (DA-19 landed it as part of the P2 type wave). DA-21's actual delta was the validator allowlist.
+- **`KNOWN_SIDECAR_KEYS`** in `deckValidator.ts` — added `'environment'` to prevent a spurious warning when authors write `environment:` in their `.deck.yaml`. Also updated the human-readable diagnostic message.
+- **Platform key names confirmed:** `darwin`, `linux`, `win32` — exact Node.js `process.platform` values. No normalization needed at the type layer; consumers can use `process.platform` directly as the lookup key.
+- **`common` section:** flat `Record<string, string>` — applies across all platforms before platform-specific overrides. Merge order (common first, platform second) is a DA-22 concern.
+- **Test count at DA-21:** 788 passing, 0 failing.
