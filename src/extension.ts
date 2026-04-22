@@ -7,6 +7,7 @@ import { ActionCompletionProvider } from './providers/actionCompletionProvider';
 import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
 import { registerDeckParticipant } from './chat/deckParticipant';
+import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
 
 let conductor: Conductor | undefined;
 
@@ -355,6 +356,18 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    // DA-24: Show Resolved Deck Model — virtual read-only JSON document
+    const deckModelProvider = new DeckModelContentProvider();
+    const deckModelProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+        'deckpilot-model',
+        deckModelProvider
+    );
+
+    const showResolvedDeckModelDisposable = vscode.commands.registerCommand(
+        'deckpilot.showResolvedDeckModel',
+        () => showResolvedDeckModel(deckModelProvider)
+    );
+
     // Register authoring assistance providers (US4)
     const documentSelector: vscode.DocumentSelector = { language: 'deck-markdown' };
 
@@ -486,6 +499,8 @@ export function activate(context: vscode.ExtensionContext): void {
         toggleRecordingPauseDisposable,
         autoRecordDisposable,
         cancelAutoRecordDisposable,
+        deckModelProviderDisposable,
+        showResolvedDeckModelDisposable,
         completionDisposable,
         hoverDisposable,
         diagnosticCollection,
