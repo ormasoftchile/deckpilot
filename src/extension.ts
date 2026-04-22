@@ -8,6 +8,7 @@ import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
 import { registerDeckParticipant } from './chat/deckParticipant';
 import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
+import { extractMetadataToSidecar } from './commands/extractMetadata';
 
 let conductor: Conductor | undefined;
 
@@ -356,6 +357,12 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    // DA-23: Extract Metadata to Sidecar — scaffold .deck.yaml from active .deck.md
+    const extractMetadataToSidecarDisposable = vscode.commands.registerCommand(
+        'deckpilot.extractMetadataToSidecar',
+        () => extractMetadataToSidecar()
+    );
+
     // DA-24: Show Resolved Deck Model — virtual read-only JSON document
     const deckModelProvider = new DeckModelContentProvider();
     const deckModelProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
@@ -499,6 +506,7 @@ export function activate(context: vscode.ExtensionContext): void {
         toggleRecordingPauseDisposable,
         autoRecordDisposable,
         cancelAutoRecordDisposable,
+        extractMetadataToSidecarDisposable,
         deckModelProviderDisposable,
         showResolvedDeckModelDisposable,
         completionDisposable,

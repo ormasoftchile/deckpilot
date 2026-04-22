@@ -129,6 +129,10 @@
       {
         "command": "executableTalk.cancelAutoRecord",
         "title": "Deckpilot: Cancel Auto-Record"
+      },
+      {
+        "command": "deckpilot.extractMetadataToSidecar",
+        "title": "Deckpilot: Extract Metadata to Sidecar"
       }
     ],
     "keybindings": [
