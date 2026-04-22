@@ -12,3 +12,5 @@ export * from './recording';
 
 // Explicit re-exports for new 005 types (convenience)
 export type { SceneDefinition, NavigationMethod, NavigationHistoryBreadcrumb } from './deck';
+
+export * from './sidecar';
