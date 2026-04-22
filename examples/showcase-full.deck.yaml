@@ -23,7 +23,8 @@ scenes:
 
 slides:
   - id: intro
-    # Title slide — no actions. Content and layout live entirely in the markdown.
+    layout: center
+    # Title slide — layout is slide-level, so it lives in the sidecar.
 
   - id: fragments
     # Fragment reveal is driven by the markdown content order — no sidecar metadata needed.

@@ -4,13 +4,11 @@ title: "Deckpilot — Feature Showcase (Sidecar Edition)"
 
 <!-- id: intro -->
 
-<!-- center -->
 # Deckpilot
 
 ### Live-code presentations inside VS Code
 
 Navigate with **→** / **←** &nbsp;·&nbsp; Jump with `Cmd+G` &nbsp;·&nbsp; Scenes with `Cmd+R`
-<!-- /center -->
 
 ---
 
