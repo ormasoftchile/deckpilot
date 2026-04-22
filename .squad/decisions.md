@@ -433,6 +433,40 @@ Created `slideRenderingPipeline.test.ts` with 38 tests:
 
 ---
 
+### Sidecar Button Fragment Ordering
+
+**Author:** De Unamuno  
+**Date:** 2026-07-09  
+**Status:** ✅ Implemented  
+**Requested by:** Rodrigo
+
+Sidecar action buttons (e.g. "Run: npm install") were appearing immediately on slide entry, before any explanatory text or code blocks. Root causes: `sidecarActionMapper.ts` set `fragment: false` on all sidecar elements; `buildButtonHtml()` emitted `data-no-fragment=""`; and sidecar injection in `parseDeck` occurs after `processFragments` has already run in `parseSlideContent`.
+
+**Pipeline context:**
+```
+parseSlideContent():
+  Step 4: injectBlockElementsFromParsed(html, blockElements)  ← block elements injected
+  Step 5: processFragments(html)                               ← fragments indexed; slide.fragmentCount set
+
+parseDeck():
+  mergeSidecarIntoSlides(slides, sidecar)                      ← sidecar added AFTER fragment processing
+```
+
+**Decision: Option B — Manual fragment index assignment at inject time.** In `injectBlockElements`, after building the block element section, scan the rendered HTML for the max `data-fragment="N"` value. For each sidecar element with `fragment !== false`, inject `<p class="fragment" data-fragment="{N+1}" data-fragment-animation="fade">` via the new `buildSidecarFragmentButtonHtml()` helper. Consecutive sidecar elements receive ascending indices.
+
+Rejected alternatives: Option A (move sidecar injection before fragment processing — disruptive async pipeline restructure); Option C (`__frag` sentinel before Phase 2 — no available injection point).
+
+**Changes:**
+- `src/parser/sidecarActionMapper.ts`: `fragment: false` → `fragment: true` on all sidecar elements.
+- `src/renderer/blockElementRenderer.ts`: Added `buildSidecarFragmentButtonHtml(el, fragmentIndex)`; updated `injectBlockElements` sidecar loop to scan for max existing `data-fragment` index and call the new helper.
+- `src/parser/mergeEngine.ts`: After merging sidecar elements, increments `merged.fragmentCount` by the count of sidecar elements with `fragment !== false`. Keeps Conductor/AutoPilot pacing correct.
+
+**Invariants upheld:** Block elements (from ` ```action ` fences) unchanged. `data-no-fragment` on block elements still honoured. Sidecar elements with `fragment: false` still fall back to `data-no-fragment`. `fragmentCount` updated in `mergeEngine` (not `injectBlockElements`) — render function stays pure; slide model is single source of truth for fragment count.
+
+**Test baseline:** 872 passing, 0 failing.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
