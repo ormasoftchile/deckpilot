@@ -1,0 +1,17 @@
+{
+  "assignments": [
+    {
+      "assignment_id": "executable-talk-2026-04-11",
+      "universe": "Spanish Literature",
+      "created_at": "2026-04-11T14:34:35Z",
+      "project": "executable-talk",
+      "requested_by": "ormasoftchile",
+      "agents": [
+        { "persistent_name": "Cervantes", "role": "Lead" },
+        { "persistent_name": "De Vega", "role": "Frontend Dev" },
+        { "persistent_name": "De Unamuno", "role": "Backend Dev" },
+        { "persistent_name": "Delibes", "role": "Tester" }
+      ]
+    }
+  ]
+}

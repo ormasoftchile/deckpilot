@@ -165,6 +165,19 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 
 **Pre-existing test-suite issue (not a regression):** Multiple uncommitted in-progress changes in the working tree (`deckParser.ts` DA-06 wiring, partial `sidecarLoader.test.ts`) cause `noUnusedLocals` failures when running the full `npm run test:unit`. The DA-07 additions compile cleanly (`tsc --noEmit` passes) and all 261 tests in the exercised suites pass.
 
+### 2026-04-22 — DA-20: Recording/Export merge into DeckMetadata
+
+**Changed files:** `src/models/deck.ts`, `src/parser/mergeEngine.ts`, `test/unit/parser/mergeEngine.test.ts`
+
+**What was done:**
+- Added `recording?` and `export?` nested types to `DeckMetadata` in `src/models/deck.ts`. Shapes mirror `SidecarRecording`/`SidecarExport` but are declared inline — no import from `src/models/sidecar.ts`, keeping the core model free of sidecar dependencies.
+- Extended `mergeSidecarDeckMetadata()` with field-by-field merge for both sections: `{ ...sidecarSection, ...inlineSection }` — sidecar as base, inline overwrites per-field. Works correctly because TypeScript optional fields absent from an object don't appear in spreads.
+- Restructured the early-return guard from `if (!sidecar.deck)` to `if (!sidecar.deck && !sidecar.recording && !sidecar.export)` — previously `recording` and `export` were unreachable when `deck` was absent from the sidecar.
+- Added 11 new tests (recording + export apply, inline wins per field, sidecar fills gaps, immutability, combined).
+- All 799 tests passing.
+
+**Key design note:** The spread merge strategy (`{ ...sidecar, ...inline }`) is safe as long as inline fields are genuinely absent (not explicitly set to `undefined`) when not authored. YAML parsing and frontmatter parsing both omit keys for absent fields — they do not set them to `undefined` explicitly. Explicit `undefined` assignments in TypeScript code would break the precedence, but this is not a realistic concern in the parser pipeline.
+
 ### 2026-04-22 — DA-12: Malformed sidecar YAML → editor diagnostics
 
 **New function:** `validateSidecarSchema(sidecarContent: string): SlideDiagnosticResult[]` in `src/parser/deckValidator.ts`  
@@ -183,3 +196,50 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 **Key architectural decision preserved:** `deckValidator.ts` has NO vscode import. All validation runs outside the extension host. Extension.ts lifts `SlideDiagnosticResult` → `vscode.Diagnostic` when wiring up a DiagnosticCollection for `.deck.yaml` files (future DA task).
 
 
+
+### 2026-06-12 — DA-23: Extract Metadata to Sidecar command
+
+**New file:** `src/commands/extractMetadata.ts`  
+**New test file:** `test/unit/commands/extractMetadata.test.ts` (17 tests)  
+**Modified:** `src/extension.ts`, `package.json`
+
+**What was done:**
+- Implemented `buildSidecarContent(deck: Deck): string` as a pure function (no VS Code API) — produces YAML via `js-yaml dump()`.
+- Implemented `extractMetadataToSidecar(): Promise<void>` as the VS Code command handler — validates active editor, checks .deck.md extension, guards against overwrite with `showWarningMessage`, calls `parseDeck()`, calls `buildSidecarContent()`, writes file with `fs.writeFileSync`, opens in editor.
+- Registered as `deckpilot.extractMetadataToSidecar` via the existing pattern in `extension.ts` alongside `deckpilot.showResolvedDeckModel`.
+
+**What IS exported to the sidecar:**
+- `deck.title`, `deck.theme` → `deck:` section (only if present)
+- `deck.metadata.recording` → `recording:` section (only if non-empty)
+- `deck.metadata.export` → `export:` section (only if non-empty)
+- Per-slide: `id`, `cues`, `duration`, `checkpoint`, `sidecarActions` (as `actions:`) — only when at least one of these is non-empty
+
+**What is NOT exported:**
+- Inline action links from markdown body (`[Label](action:...)`) — R3 scope exclusion
+- Slides with no exportable metadata (no cues, no duration, no checkpoint, no sidecarActions)
+- Slides without an `id` (no merge target without an id)
+
+**Key design decision:** `sidecarActions` on a slide come from the EXISTING sidecar (DA-07). Re-exporting them is round-trip preservation, not markdown body extraction. R3's "do not extract action links from markdown body" applies to inline links only.
+
+**Test baseline:** 814 → 831 passing (+17 tests), 0 failing.
+
+**New file:** `src/env/envMerger.ts`  
+**Modified:** `src/env/index.ts`, `src/models/deck.ts`, `src/parser/deckParser.ts`  
+**Test file:** `test/unit/env/envMerger.test.ts` (15 tests)
+
+**What was done:**
+- Implemented `resolveEnvironment(deckPath, sidecar, platform?)` as an async pure function in the `src/env/` layer
+- Precedence chain (lowest → highest): `process.env` → `sidecar.environment.common` → `sidecar.environment.platform[platform]` → `.deck.env` file values
+- Platform parameter defaults to `process.platform` but is injectable for tests — no hardcoded `process.platform` in the resolution logic
+- Added `resolvedEnvironment?: Record<string, string>` to the `Deck` interface in `src/models/deck.ts`
+- Wired into `parseDeck()` after sidecar load; wrapped in try/catch (non-fatal — deck still loads if env resolution fails)
+- Retained `loadedSidecar` reference outside the sidecar try/catch block so it's available to `resolveEnvironment`
+- Exported from `src/env/index.ts`
+
+**Key design choices:**
+- `resolveEnvironment` lives in `src/env/` (not `src/parser/`) — it is environment-layer logic, not parsing logic
+- Uses `EnvFileLoader` internally to load `.deck.env` — consistent with the rest of the env pipeline
+- `SidecarFile | null` parameter (not `SidecarFile | undefined`) — matches `loadSidecar` return type contract
+- Platform values are limited to `'darwin' | 'linux' | 'win32'` in the sidecar type — unknown platforms (e.g. `freebsd`) silently skip the platform layer without error
+
+**Pre-existing test baseline:** 799 tests. After DA-22: 814 passing, 0 failing (+15 new tests).
