@@ -122,6 +122,31 @@ function buildButtonHtml(el: InteractiveElement): string {
 }
 
 /**
+ * Build the button HTML for a sidecar-sourced interactive element, injecting
+ * it as a specific fragment step so it appears AFTER all other slide content.
+ */
+function buildSidecarFragmentButtonHtml(el: InteractiveElement, fragmentIndex: number): string {
+  const type = el.action.type;
+  const params = el.action.params ?? {};
+  const simpleParams = Object.entries(params)
+    .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+  const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
+  const escapedLabel = escapeHtml(el.label);
+
+  let preview = '';
+  if (el.showCommand) {
+    const previewText = getCommandPreview(type, params);
+    if (previewText) {
+      preview = `<code class="action-preview">${escapeHtml(previewText)}</code>`;
+    }
+  }
+
+  return `<p class="fragment" data-fragment="${fragmentIndex}" data-fragment-animation="fade"><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${preview}</p>`;
+}
+
+/**
  * Replace `<!--ACTION:id-->` placeholders in slide HTML with rendered
  * action-button links, so buttons appear at their original position in
  * the slide content rather than being appended at the end.
@@ -146,10 +171,27 @@ export function injectBlockElements(html: string, slide: Slide): string {
     (_match, id: string) => buttonMap.get(id) ?? '',
   );
 
-  // Append sidecar-sourced action buttons after all content
+  // Append sidecar-sourced action buttons after all content.
+  // Sidecar elements with fragment=true are injected as the next sequential
+  // fragment steps so they appear LAST in the reveal sequence, after all
+  // explanatory text and code blocks.
   const sidecarElements = slide.interactiveElements.filter(el => el.source === 'sidecar');
-  for (const el of sidecarElements) {
-    result += '\n' + buildButtonHtml(el);
+  if (sidecarElements.length > 0) {
+    // Find the current highest data-fragment index already in the HTML
+    let maxFragment = 0;
+    for (const m of result.matchAll(/data-fragment="(\d+)"/g)) {
+      const n = parseInt(m[1], 10);
+      if (n > maxFragment) { maxFragment = n; }
+    }
+
+    for (const el of sidecarElements) {
+      if (el.fragment !== false) {
+        maxFragment++;
+        result += '\n' + buildSidecarFragmentButtonHtml(el, maxFragment);
+      } else {
+        result += '\n' + buildButtonHtml(el);
+      }
+    }
   }
 
   return result;

@@ -255,3 +255,32 @@ A new specialist, **Cercas**, was onboarded to own the screen capture / window d
 - Platform values are limited to `'darwin' | 'linux' | 'win32'` in the sidecar type — unknown platforms (e.g. `freebsd`) silently skip the platform layer without error
 
 **Pre-existing test baseline:** 799 tests. After DA-22: 814 passing, 0 failing (+15 new tests).
+
+### 2026-07-09 — Sidecar button fragment ordering fix
+
+**Problem:** Sidecar action buttons (source='sidecar', e.g. "Run: npm install") appeared **on slide entry** instead of as the last reveal step, because `fragment: false` caused `buildButtonHtml` to emit `data-no-fragment` and sidecar injection happens AFTER `processFragments` has already run.
+
+**Pipeline clarification (important for future work):**
+- `parseSlideContent()` runs `injectBlockElementsFromParsed()` BEFORE `processFragments()` — so **block** elements get proper fragment indices during parse.
+- `mergeSidecarIntoSlides()` runs AFTER all slides are parsed, so sidecar elements are added to `slide.interactiveElements` post-parse, post-fragment.
+- `injectBlockElements(slide.html, slide)` is called at render time (Conductor, WebviewProvider, web host) — it appends sidecar elements to already-fragmented HTML. The block-element placeholder regex is a no-op at this point (placeholders already replaced).
+
+**Fix chosen: Option B — Manual fragment index assignment**
+
+Changed three files:
+1. **`src/parser/sidecarActionMapper.ts`**: `fragment: false` → `fragment: true` to declare intent.
+2. **`src/renderer/blockElementRenderer.ts`**: Added `buildSidecarFragmentButtonHtml(el, fragmentIndex)` helper. In `injectBlockElements`, for sidecar elements with `fragment !== false`, scan the rendered HTML for the max `data-fragment="N"` value, then inject `<p class="fragment" data-fragment="{N+1}" data-fragment-animation="fade">`. Elements with `fragment === false` still use the legacy `data-no-fragment` path.
+3. **`src/parser/mergeEngine.ts`**: After adding sidecar elements, increments `merged.fragmentCount` by the number of fragmenting sidecar elements so the Conductor and AutoPilot track the correct total.
+
+**Tests updated:**
+- `sidecarActionMapper.test.ts`: updated description + assertion (`fragment=false` → `fragment=true`)
+- `blockElementRenderer.test.ts`: added `makeSidecarElement()` helper + 5 new tests covering fragment injection, consecutive indexing, fallback to `data-no-fragment`
+- SRT snapshot updated (timing shifted because sidecar fragment step now counts toward fragment total, changing AutoPilot pacing)
+
+**Playwright verification:** Confirmed correct reveal order on Setup slide of `sidecar-demo.deck.md`:
+- Entry: heading only
+- Space 1: paragraph text
+- Space 2: code block
+- Space 3: "Run: npm install" button
+
+**Final test count:** 872 passing, 0 failing (was 867 before this session). Compile: clean.

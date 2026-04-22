@@ -10,7 +10,7 @@
  * - Unknown types: skipped with console.warn (no throw)
  * - Extra fields: passed through for all types
  * - Empty input: returns empty array
- * - Output shape: valid InteractiveElement (source='sidecar', fragment=false, label)
+ * - Output shape: valid InteractiveElement (source='sidecar', fragment=true, label)
  * - Label derivation: auto-generated from type+params, overridden by explicit label field
  */
 
@@ -228,14 +228,14 @@ describe('mapSidecarActionsToInteractiveElements', () => {
   // ---------------------------------------------------------------------------
 
   describe('output element shape', () => {
-    it('produces an InteractiveElement with source=sidecar and fragment=false', () => {
+    it('produces an InteractiveElement with source=sidecar and fragment=true', () => {
       const actions: SidecarAction[] = [{ type: 'terminal.run', cmd: 'ls' }];
       const result = mapSidecarActionsToInteractiveElements(actions, 7);
       const el = result[0];
       expect(el).to.have.property('id').that.is.a('string').and.not.empty;
       expect(el).to.have.property('label').that.is.a('string').and.not.empty;
       expect(el).to.have.property('source', 'sidecar');
-      expect(el).to.have.property('fragment', false);
+      expect(el).to.have.property('fragment', true);
       expect(el).to.have.property('rawLink').that.includes('action:terminal.run');
     });
 

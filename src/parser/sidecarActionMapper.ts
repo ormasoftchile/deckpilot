@@ -96,7 +96,8 @@ function deriveLabel(sidecar: SidecarAction): string {
  *
  * Each element gets source='sidecar' so the renderer appends it after slide
  * content rather than trying to replace an inline placeholder.
- * fragment=false ensures the button is always visible (not a fragment step).
+ * fragment=true so the button appears as the LAST reveal step, after any
+ * explanatory text and code blocks that precede it.
  */
 export function mapSidecarActionsToInteractiveElements(
   sidecarActions: SidecarAction[],
@@ -129,7 +130,7 @@ export function mapSidecarActionsToInteractiveElements(
       position: { line: 9999, column: 0 },
       rawLink: `[${label}](${href})`,
       source: 'sidecar',
-      fragment: false,
+      fragment: true,
     });
   }
 

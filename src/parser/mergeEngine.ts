@@ -64,6 +64,13 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
       const sidecarElements = mapSidecarActionsToInteractiveElements(sidecarSlide.actions, slide.index);
       if (sidecarElements.length > 0) {
         merged.interactiveElements = [...merged.interactiveElements, ...sidecarElements];
+        // Each sidecar element with fragment=true will be injected as an additional
+        // fragment step (after existing fragments). Update fragmentCount so the
+        // Conductor knows the correct total number of reveal steps.
+        const fragmentingCount = sidecarElements.filter(el => el.fragment !== false).length;
+        if (fragmentingCount > 0) {
+          merged.fragmentCount = slide.fragmentCount + fragmentingCount;
+        }
       }
     }
 
