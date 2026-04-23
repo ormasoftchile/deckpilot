@@ -201,7 +201,7 @@ export function validateSidecarSchema(sidecarContent: string): SlideDiagnosticRe
   }
 
   // Unknown top-level keys → Warning (permissive schema).
-  for (const key of Object.keys(parsed as object)) {
+  for (const key of Object.keys(parsed)) {
     if (!KNOWN_SIDECAR_KEYS.has(key)) {
       diagnostics.push({
         range: {
