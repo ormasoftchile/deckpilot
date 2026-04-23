@@ -116,11 +116,11 @@ function tagEligibleElements(seg: string): string {
   // container is the single fragment unit; its children must not each be individual steps.
   seg = seg.replace(
     /(<details\b[^>]*>)([\s\S]*?)(<\/details>)/g,
-    (_m, open, inner, close) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
+    (_m: string, open: string, inner: string, close: string) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
   );
   seg = seg.replace(
     /(<div\b[^>]*\bstep-optional\b[^>]*>)([\s\S]*?)(<\/div>)/g,
-    (_m, open, inner, close) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
+    (_m: string, open: string, inner: string, close: string) => `${open}${inner.replace(/ __frag="[\w-]+"/g, '')}${close}`,
   );
 
   // De-tag <p> elements that are direct children of <li> (loose list items).
