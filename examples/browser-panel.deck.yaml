@@ -1,0 +1,32 @@
+# browser-panel.deck.yaml
+# Companion metadata for browser-panel.deck.md
+
+deck:
+  title: Browser Panel Demo
+
+slides:
+  - id: intro
+    cues:
+      - Introduce the browser panel feature
+      - Click the button to open a live browser alongside the slides
+    duration: 20s
+
+  - id: navigate
+    actions:
+      - type: browser.navigate
+        url: https://github.com
+        label: Go to GitHub
+    cues:
+      - Show how to navigate the panel to a new URL without reopening it
+    duration: 15s
+
+  - id: localhost
+    layout: columns
+    actions:
+      - type: terminal.run
+        cmd: python3 -m http.server 8080
+        label: Start local server
+    cues:
+      - Demonstrate local server support
+      - Run the server, then open it in the browser panel
+    duration: 25s

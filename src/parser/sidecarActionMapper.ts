@@ -35,6 +35,8 @@ const KNOWN_ACTION_TYPES: ReadonlySet<string> = new Set<ActionType>([
   'validate.command',
   'validate.fileExists',
   'validate.port',
+  'browser.open',
+  'browser.navigate',
 ]);
 
 /**
@@ -87,6 +89,8 @@ function deriveLabel(sidecar: SidecarAction): string {
     case 'file.open':      return sidecar.file ? `Open: ${String(sidecar.file).split('/').pop()}` : 'Open file';
     case 'editor.highlight': return sidecar.file ? `Highlight: ${String(sidecar.file).split('/').pop()}` : 'Highlight';
     case 'debug.start':    return (sidecar.configName as string | undefined) ? `Debug: ${sidecar.configName}` : 'Start debug';
+    case 'browser.open':   return (sidecar.url as string | undefined) ? `Open: ${sidecar.url}` : 'Open browser';
+    case 'browser.navigate': return (sidecar.url as string | undefined) ? `Navigate: ${sidecar.url}` : 'Navigate';
     default:               return sidecar.type;
   }
 }
