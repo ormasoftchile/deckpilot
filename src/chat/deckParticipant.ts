@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode';
+import { execSync } from 'child_process';
 
 const PARTICIPANT_ID = 'executableTalk.deck';
 
@@ -150,6 +151,102 @@ voice-over script and SRT captions when recording mode is used.
 - Use fragments to reveal steps progressively
 - Write voice cues as natural spoken narration`;
 
+interface DeckPreferences {
+  authoringMode: 'inline' | 'sidecar';
+  zenMode: boolean;
+  authorName: string;
+}
+
+/**
+ * Collect authoring preferences from the user via quick-picks and an input box.
+ * Returns null if the user cancels any step.
+ */
+async function gatherPreferences(): Promise<DeckPreferences | null> {
+  const modeItems: Array<vscode.QuickPickItem & { value: 'inline' | 'sidecar' }> = [
+    {
+      label: 'Inline only (.deck.md)',
+      description: 'Everything in one file',
+      value: 'inline',
+    },
+    {
+      label: 'Inline + sidecar (.deck.md + .deck.yaml)',
+      description: 'Generate both files',
+      value: 'sidecar',
+    },
+  ];
+
+  const modeResult = await vscode.window.showQuickPick(modeItems, {
+    title: 'Authoring Mode',
+    placeHolder: 'Select authoring mode',
+  });
+  if (!modeResult) { return null; }
+
+  const zenItems: Array<vscode.QuickPickItem & { value: boolean }> = [
+    { label: 'Off (default)', description: 'Omit zenMode from frontmatter', value: false },
+    { label: 'On', description: 'Add zenMode: true to frontmatter', value: true },
+  ];
+
+  const zenResult = await vscode.window.showQuickPick(zenItems, {
+    title: 'Zen Mode',
+    placeHolder: 'Enable Zen Mode during presentation?',
+  });
+  if (!zenResult) { return null; }
+
+  let defaultAuthor = '';
+  try {
+    defaultAuthor = execSync('git config user.name', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    // skip gracefully if git is unavailable or not configured
+  }
+
+  const authorName = await vscode.window.showInputBox({
+    title: 'Author Name',
+    prompt: 'Author name to include in frontmatter — leave blank to omit',
+    value: defaultAuthor,
+  });
+  if (authorName === undefined) { return null; }
+
+  return { authoringMode: modeResult.value, zenMode: zenResult.value, authorName: authorName.trim() };
+}
+
+/**
+ * Build additional instruction text to inject into the per-request LLM user message.
+ */
+function buildPreferenceInstructions(prefs: DeckPreferences): string {
+  const parts: string[] = [];
+
+  if (prefs.zenMode) {
+    parts.push('Include `zenMode: true` inside the `options:` block of the YAML frontmatter.');
+  }
+  if (prefs.authorName) {
+    parts.push(`Include \`author: ${prefs.authorName}\` in the YAML frontmatter.`);
+  }
+  if (prefs.authoringMode === 'sidecar') {
+    parts.push(
+      'Generate BOTH the .deck.md AND a companion .deck.yaml sidecar. ' +
+      'Output them separated by a line containing exactly `--- SIDECAR ---`. ' +
+      'First part = .deck.md content, second part = .deck.yaml content.',
+    );
+  }
+
+  return parts.length > 0 ? '\n\nAdditional requirements:\n' + parts.map(p => `- ${p}`).join('\n') : '';
+}
+
+/**
+ * Split LLM output on `--- SIDECAR ---` into deck and optional sidecar parts.
+ */
+function splitSidecarContent(content: string): { deckContent: string; sidecarContent: string | undefined } {
+  const lines = content.split('\n');
+  const sepIdx = lines.findIndex(line => line.trim() === '--- SIDECAR ---');
+  if (sepIdx === -1) {
+    return { deckContent: content, sidecarContent: undefined };
+  }
+  return {
+    deckContent: lines.slice(0, sepIdx).join('\n').trim(),
+    sidecarContent: lines.slice(sepIdx + 1).join('\n').trim() || undefined,
+  };
+}
+
 /**
  * URI of the last .md file that had editor focus.
  * Updated whenever the active editor changes so that when the chat panel
@@ -290,7 +387,17 @@ async function handleCreate(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
+  stream.progress('Gathering preferences...');
+
+  const prefs = await gatherPreferences();
+  if (!prefs) {
+    stream.markdown('Cancelled. Run `@deck /create` again whenever you\'re ready.');
+    return {};
+  }
+
   stream.progress('Designing your presentation...');
+
+  const prefInstructions = buildPreferenceInstructions(prefs);
 
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
@@ -299,14 +406,26 @@ async function handleCreate(
       'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
       'Start directly with the YAML frontmatter (---). ' +
       'Include voice cues on every slide. Use fragments where they help build up ideas. ' +
-      'Use action links and YAML action blocks for any demonstrations.',
+      'Use action links and YAML action blocks for any demonstrations.' +
+      prefInstructions,
     ),
   ];
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let fullOutput = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    fullOutput += chunk;
+  }
+
+  if (prefs.authoringMode === 'sidecar') {
+    const { deckContent, sidecarContent } = splitSidecarContent(fullOutput);
+    stream.markdown(deckContent);
+    if (sidecarContent) {
+      stream.markdown('\n\n---\n\n**`.deck.yaml` sidecar:**\n\n```yaml\n' + sidecarContent + '\n```');
+    }
+  } else {
+    stream.markdown(fullOutput);
   }
 
   stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
@@ -324,6 +443,14 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
+  stream.progress('Gathering preferences...');
+
+  const prefs = await gatherPreferences();
+  if (!prefs) {
+    stream.markdown('Cancelled. Run `@deck /convert` again whenever you\'re ready.');
+    return {};
+  }
+
   // Try to get content from referenced file — handle Uri and Location (implicit editor ref)
   let sourceContent = '';
   let sourceUri: vscode.Uri | undefined;
@@ -372,6 +499,8 @@ async function handleConvert(
 
   stream.progress('Converting to deck format...');
 
+  const prefInstructions = buildPreferenceInstructions(prefs);
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
     vscode.LanguageModelChatMessage.User(
@@ -381,26 +510,29 @@ async function handleConvert(
       'Start directly with the YAML frontmatter (---). ' +
       'Split on natural heading boundaries. Add voice cues on every slide. ' +
       'Convert code references into action links. Add fragments for lists. ' +
-      'Keep the original content and structure but make it presentation-friendly.',
+      'Keep the original content and structure but make it presentation-friendly.' +
+      prefInstructions,
     ),
   ];
 
   const response = await model.sendRequest(messages, {}, token);
 
-  let deckContent = '';
+  let rawOutput = '';
   for await (const chunk of response.text) {
-    deckContent += chunk;
+    rawOutput += chunk;
   }
 
   // Strip accidental wrapping code fences the model may have added
-  deckContent = deckContent
+  rawOutput = rawOutput
     .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
     .replace(/\r?\n```\s*$/, '')
     .trim();
 
   // Strip stray ``` that the model sometimes inserts right after the deck frontmatter
   // e.g.  ---\n(frontmatter)\n---\n```\n# Slide → renders first slide as a code block
-  deckContent = deckContent.replace(/(^---\n[\s\S]*?\n---)\n```\n/, '$1\n\n');
+  rawOutput = rawOutput.replace(/(^---\n[\s\S]*?\n---)\n```\n/, '$1\n\n');
+
+  const { deckContent, sidecarContent } = splitSidecarContent(rawOutput);
 
   if (sourceUri) {
     const outputUri = vscode.Uri.file(sourceUri.fsPath.replace(/\.md$/, '.deck.md'));
@@ -409,10 +541,21 @@ async function handleConvert(
     const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(outputUri, 'Open deck file');
+
+    if (prefs.authoringMode === 'sidecar' && sidecarContent) {
+      const sidecarUri = vscode.Uri.file(sourceUri.fsPath.replace(/\.md$/, '.deck.yaml'));
+      await vscode.workspace.fs.writeFile(sidecarUri, Buffer.from(sidecarContent, 'utf-8'));
+      stream.markdown(`\n✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
+      stream.anchor(sidecarUri, 'Open sidecar file');
+    }
+
     stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
+    if (prefs.authoringMode === 'sidecar' && sidecarContent) {
+      stream.markdown('\n\n---\n\n**`.deck.yaml` sidecar:**\n\n```yaml\n' + sidecarContent + '\n```');
+    }
     stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
   }
 
