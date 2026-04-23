@@ -36,6 +36,9 @@ function extractActionTarget(action: Action): string | undefined {
       return typeof p.configName === 'string' ? p.configName : undefined;
     case 'vscode.command':
       return typeof p.id === 'string' ? p.id : undefined;
+    case 'browser.open':
+    case 'browser.navigate':
+      return typeof p.url === 'string' ? p.url : undefined;
     case 'sequence':
       return undefined; // detail comes via sequenceDetail
     default:

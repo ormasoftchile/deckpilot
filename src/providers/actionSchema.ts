@@ -407,6 +407,50 @@ export const ACTION_SCHEMAS: ReadonlyMap<ActionType, ActionSchema> = new Map<Act
       ],
     },
   ],
+  [
+    'browser.open',
+    {
+      type: 'browser.open',
+      description: 'Opens a URL in a side-by-side WebviewPanel browser.',
+      requiresTrust: false,
+      parameters: [
+        {
+          name: 'url',
+          type: 'string',
+          required: true,
+          description: 'URL to open. Must be https://, http://localhost, or http://127.0.0.1.',
+        },
+        {
+          name: 'title',
+          type: 'string',
+          required: false,
+          description: 'Panel tab title (default: "Browser").',
+        },
+        {
+          name: 'column',
+          type: 'number',
+          required: false,
+          description: 'VS Code ViewColumn to open in. Default: 2 (beside presentation). Use -1 for Beside.',
+        },
+      ],
+    },
+  ],
+  [
+    'browser.navigate',
+    {
+      type: 'browser.navigate',
+      description: 'Navigates the open browser panel to a new URL. Opens panel if not already open.',
+      requiresTrust: false,
+      parameters: [
+        {
+          name: 'url',
+          type: 'string',
+          required: true,
+          description: 'URL to navigate to. Must be https://, http://localhost, or http://127.0.0.1.',
+        },
+      ],
+    },
+  ],
 ]);
 
 /**

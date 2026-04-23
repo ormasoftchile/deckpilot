@@ -234,3 +234,23 @@ When a DA test task is issued, part of the implementation may have already lande
 5. `buildSidecarContent` — no test for `deck.slides = []` (makeDeck helper silently added a default slide).
 
 **No bugs found** in the P2 pipeline during this audit. All edge-case tests passed on first run.
+
+---
+
+### 2026-07-24 — Browser Panel Feature Tests
+
+**Files created:**
+- `test/unit/browser/urlValidator.test.ts` — 13 tests
+- `test/unit/browser/BrowserPanelContent.test.ts` — 13 tests
+- `test/unit/actions/browserOpenExecutor.test.ts` — 13 tests
+- `test/unit/actions/browserNavigateExecutor.test.ts` — 10 tests
+
+**All source files already existed** (De Unamuno had completed the implementation concurrently). `src/browser/urlValidator.ts`, `src/browser/BrowserPanelContent.ts`, `src/browser/BrowserPanel.ts`, `src/actions/browserOpenExecutor.ts`, `src/actions/browserNavigateExecutor.ts` were all present and `'browser.open'`/`'browser.navigate'` were added to the `ActionType` union in `src/models/action.ts`.
+
+**vscode-mock.cjs updated:** Added `ViewColumn` constants (`One=1`, `Two=2`, `Three=3`, `Beside=-2`, etc.) and `window.createWebviewPanel` stub. Required because `browserOpenExecutor.ts` calls `vscode.ViewColumn.Two` at runtime inside `resolveColumn()`. The addition is purely additive — no existing tests were affected.
+
+**Mocking `getOrCreateBrowserPanel`:** Used the `require()`-mutation pattern documented in the recording test section. Import the module as `const browserPanelMod = require('../../../src/browser/BrowserPanel')`, save and restore the function reference in `beforeEach`/`afterEach`. This works because TypeScript compiles `import { getOrCreateBrowserPanel }` to a property access on the module exports object (`BrowserPanel_1.getOrCreateBrowserPanel()`), so mutating the property is immediately visible at call time even after the module is cached.
+
+**Column mapping tests:** The `resolveColumn()` function maps numeric column values to `vscode.ViewColumn` enum constants. Since the mock defines `ViewColumn.Two = 2`, the spy captures the numeric value `2` from `panel.open()` when `column` is omitted, and `3` when `column: 3` is passed. Mapping `-1` → `ViewColumn.Beside` → `−2` also tested.
+
+**Suite count:** 877 → 926 passing (49 new), 0 failing.

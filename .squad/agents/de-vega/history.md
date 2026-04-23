@@ -106,3 +106,32 @@ New command in `src/commands/showResolvedModel.ts`. Parses the active `.deck.md`
 - `vscode.languages.setTextDocumentLanguage(doc, 'json')` applied after opening to get syntax highlighting on a virtual doc
 - Provider registered in `extension.ts` alongside the command, both in `context.subscriptions`
 - 814 unit tests still green post-implementation; zero TypeScript errors
+
+### 2026-06-13 — BrowserPanel Webview (browser.open action)
+
+**Files created:**
+- `src/browser/BrowserPanelContent.ts` — `BrowserPanelContent.getHtmlContent(webview, initialUrl)` generates self-contained HTML for the side-by-side browser WebviewPanel.
+- `src/browser/index.ts` — re-exports `BrowserPanelContent`.
+
+**Key design decisions:**
+
+**CSP for iframe:**
+VS Code webviews enforce their own sandbox (`allow-scripts allow-same-origin`). To load arbitrary external URLs in a nested `<iframe>`, the webview's `<meta http-equiv="Content-Security-Policy">` must include `frame-src *`. Without this, the browser refuses to load external content. The nonce-based script-src pattern is preserved for the inline control script.
+
+**iframe sandbox attribute:**
+The `<iframe>` carries `sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"`. This allows external pages to run normally while giving the outer chrome (`allow-popups-to-escape-sandbox`) a chance to let popup links open in the real browser.
+
+**X-Frame-Options / blocked-page detection:**
+There is no reliable cross-origin API to detect X-Frame-Options denial. The heuristic used: after the `load` event fires, if `iframe.contentWindow.location.href` is accessible and equals `about:blank` (same-origin check didn't throw but returned blank), we infer the load was blocked and surface the error overlay with an "Open in external browser" link. A cross-origin access exception means the page loaded fine.
+
+**History management:**
+Since `contentWindow.history` is inaccessible cross-origin, the chrome maintains its own URL array (`history[]` + `historyIndex`). Back/forward replay URLs from this stack by calling `navigate(url, push=false)`.
+
+**Title propagation:**
+`iframe.contentDocument.title` is read on `load` — succeeds for same-origin pages, silently fails for cross-origin. When successful, `document.title` is updated; VS Code uses `webviewPanel.title` separately and can be set by the backend executor.
+
+**Theming:**
+All colors use `--vscode-*` CSS custom properties aliased to local `--bg`, `--chrome-bg`, `--input-*`, `--btn-*` vars. No hardcoded colors except fallbacks in `:root`.
+
+**Loading indicator:**
+CSS-only indeterminate progress bar (translateX + scaleX animation on a 2px strip under the chrome). Activated by toggling `.active` class. Clears on iframe `load` or `error`.

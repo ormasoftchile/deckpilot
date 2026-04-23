@@ -328,3 +328,32 @@ Changed three files:
 
 **Test baseline:** 883 tests passing, 0 failing. No regressions.
 
+
+### 2025-07-24 — Browser Panel Backend Implemented
+
+Implemented the full backend for `browser.open` and `browser.navigate` action types, as designed by Cervantes in `.squad/decisions/inbox/cervantes-browser-panel-arch.md`.
+
+**Files created:**
+- `src/browser/urlValidator.ts` — `isAllowedUrl()`: allows `https://` and `http://localhost|127.0.0.1|::1` only
+- `src/browser/BrowserPanel.ts` — `BrowserPanel` class + module-level `getOrCreateBrowserPanel()` / `disposeBrowserPanel()`
+- `src/actions/browserOpenExecutor.ts` — `BrowserOpenExecutor` (actionType: `browser.open`, requiresTrust: false)
+- `src/actions/browserNavigateExecutor.ts` — `BrowserNavigateExecutor` (actionType: `browser.navigate`, requiresTrust: false)
+
+**Files modified:**
+- `src/models/action.ts` — Added `'browser.open'` and `'browser.navigate'` to `ActionType` union; added `BrowserOpenParams`, `BrowserNavigateParams` interfaces; extended `ActionParams` union
+- `src/actions/index.ts` — Exported and registered both new executors
+- `src/providers/actionSchema.ts` — Added `ACTION_SCHEMAS` entries for both new action types
+- `src/actions/executionPipeline.ts` — Added `browser.open` / `browser.navigate` cases to `extractActionTarget()` (return `url`)
+- `src/conductor/conductor.ts` — Imported `disposeBrowserPanel` from `../browser`; called it in `dispose()`
+- `src/browser/index.ts` — Added exports for `BrowserPanel`, `getOrCreateBrowserPanel`, `disposeBrowserPanel`, `isAllowedUrl`
+
+**Key implementation detail vs Cervantes's design:**
+- De Vega's `BrowserPanelContent` uses inline JavaScript (address bar + history controls), so `enableScripts: true` is required (not `false` as written in the architecture doc).
+- HTML is set once at panel creation; subsequent navigations use `panel.webview.postMessage({ command: 'navigate', url })` rather than rebuilding HTML.
+
+**Undo behavior:**
+- `browser.open` (new panel): undo closes the panel
+- `browser.open` (panel already open): undo navigates back to previous URL
+- `browser.navigate`: undo navigates back to previous URL; if no previous URL, closes the panel
+
+**Build result:** `npm run compile` exits 0, no TypeScript errors.

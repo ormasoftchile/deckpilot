@@ -38,6 +38,7 @@ import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
 import { buildAutoPilotPlan, AutoPilotStep } from '../recording/autoPilot';
+import { disposeBrowserPanel } from '../browser';
 
 /**
  * Actions that require workspace trust
@@ -988,6 +989,7 @@ export class Conductor implements vscode.Disposable {
     this.webviewProvider.dispose();
     this.presenterViewProvider.dispose();
     this.snapshotFactory.disposeDecorations();
+    disposeBrowserPanel();
     this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
   }

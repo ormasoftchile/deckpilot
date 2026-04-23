@@ -127,3 +127,17 @@
 - **Safety timeout:** 2-second timeout in `waitForSlideRender()` prevents infinite blocking if webview doesn't respond.
 - **Files changed:** `messages.ts`, `messageHandler.ts`, `webviewProvider.ts`, `conductor.ts`, `presentation.js`
 - **Test count after fix:** 857 passing, 0 failing.
+
+### 2025-07-24 — Browser Panel Architecture (browser.open / browser.navigate)
+
+- **Two new action types:** `browser.open` (open/create panel, navigate to URL) and `browser.navigate` (update URL in existing panel, auto-create if closed). Both `requiresTrust = false`.
+- **BrowserPanel class lives in `src/browser/BrowserPanel.ts`** — not in `src/actions/`. It's infrastructure, not an executor. Follows same module-level singleton pattern as `presentationTerminals` in `terminalRunExecutor.ts`.
+- **WebviewPanel config:** `enableScripts: false` (the shell needs no JS), `retainContextWhenHidden: true`, `localResourceRoots: []`. Navigation is done by replacing `panel.webview.html` wholesale — no postMessage needed.
+- **CSP in HTML:** `default-src 'none'; frame-src https: http://localhost:* http://127.0.0.1:*; style-src 'unsafe-inline'`. External HTTPS + local HTTP only.
+- **URL allowlist enforced in `validate()`:** `https://` anything, `http://` only for localhost/127.0.0.1/::1. `javascript:` and `file:` are blocked. `ValidationError` thrown pre-execution.
+- **Default column: `ViewColumn.Two`** — presentation is in One, browser goes beside it.
+- **Conductor change is minimal:** only add `disposeBrowserPanel()` call in `Conductor.dispose()`. No state stack changes, no ExecutionContext changes.
+- **X-Frame-Options limitation documented:** Sites that block framing show blank. Cannot be fixed. Show `blocked-notice` div as a future UX hook.
+- **Files to create:** `src/browser/BrowserPanel.ts`, `src/browser/urlValidator.ts`, `src/browser/index.ts`, `src/actions/browserOpenExecutor.ts`, `src/actions/browserNavigateExecutor.ts`
+- **Files to modify:** `src/models/action.ts`, `src/actions/index.ts`, `src/providers/actionSchema.ts`, `src/actions/executionPipeline.ts`, `src/conductor/conductor.ts`
+- **Decision written to:** `.squad/decisions/inbox/cervantes-browser-panel-arch.md`
