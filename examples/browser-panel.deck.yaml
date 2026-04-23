@@ -14,8 +14,8 @@ slides:
   - id: navigate
     actions:
       - type: browser.navigate
-        url: https://github.com
-        label: Go to GitHub
+        url: https://example.com/index.html
+        label: Open IANA example page
     cues:
       - Show how to navigate the panel to a new URL without reopening it
     duration: 15s

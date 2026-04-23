@@ -311,40 +311,58 @@ export class BrowserPanelContent {
 
       iframe.src = url;
       updateControls();
+
+      // Safety net: if no successful load detected within 4 s, assume blocked.
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(() => {
+        if (currentUrl) { showError(currentUrl); }
+      }, 4000);
     }
 
     // ── iframe events ──────────────────────────────────────────────────────
     let loadTimer = null;
 
     iframe.addEventListener('load', () => {
-      setLoading(false);
       clearTimeout(loadTimer);
 
       // Attempt to read the iframe title (same-origin only; cross-origin silently fails)
       try {
         const frameTitle = iframe.contentDocument?.title;
-        if (frameTitle) {
-          document.title = frameTitle;
-        }
+        if (frameTitle) { document.title = frameTitle; }
       } catch (_) { /* cross-origin — expected */ }
 
-      // Heuristic: if the iframe src is about:blank and we expected a real URL,
-      // it was likely blocked by X-Frame-Options.  We detect this via a short
-      // timer — if the document is blank after load for a known URL, show error.
+      // Detect X-Frame-Options / frame-ancestors blocking.
+      //
+      // When a site refuses to be embedded, Electron/Chromium loads about:blank
+      // into the iframe instead. Three observable states:
+      //   • contentWindow === null   → sandbox blocked window access entirely → blocked
+      //   • location.href === 'about:blank' → blank doc landed → blocked
+      //   • location.href throws SecurityError → cross-origin page loaded fine
+      //   • location.href is a real URL → same-origin page loaded fine
       if (currentUrl) {
+        const win = iframe.contentWindow;
+        if (win === null) {
+          // VS Code's webview sandbox set contentWindow to null — treat as blocked.
+          showError(currentUrl);
+          return;
+        }
         try {
-          const loc = iframe.contentWindow?.location?.href;
-          if (loc === 'about:blank') {
+          const loc = win.location?.href;
+          if (!loc || loc === 'about:blank') {
             showError(currentUrl);
+          } else {
+            setLoading(false); // real content arrived
           }
         } catch (_) {
-          // Cross-origin access to location is forbidden — page loaded fine.
+          // SecurityError: cross-origin page loaded successfully.
+          setLoading(false);
         }
+      } else {
+        setLoading(false);
       }
     });
 
     iframe.addEventListener('error', () => {
-      setLoading(false);
       clearTimeout(loadTimer);
       if (currentUrl) { showError(currentUrl); }
     });

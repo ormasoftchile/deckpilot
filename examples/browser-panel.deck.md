@@ -12,23 +12,28 @@ Click the button below to try it:
 
 [Open example.com](action:browser.open?url=https://example.com&title=Example&column=2)
 
+> **Note:** Sites that use `X-Frame-Options: deny` (GitHub, Google, MDN…) will show
+> a "can't embed" error — that's the website refusing, not a Deckpilot bug.
+> Local servers (`http://localhost:PORT`) always work.
+
 ---
 
 <!-- id: navigate -->
 
 # Navigating the Browser
 
-Once the panel is open, you can navigate it to a new URL without closing and re-opening it.
+Once the panel is open, navigate it to any embeddable URL without closing and reopening.
 
-[Go to GitHub](action:browser.navigate?url=https://github.com)
+[Open IANA example page](action:browser.navigate?url=https://example.com/index.html)
 
 ---
 
 <!-- id: localhost -->
 
-# Local Servers Too
+# Best Use Case: Local Servers
 
-The browser panel supports `https://` and `http://localhost` / `http://127.0.0.1` URLs.
+The browser panel really shines for `http://localhost` — start a dev server, open it
+right next to your slides.
 
 <!-- layout: columns -->
 
