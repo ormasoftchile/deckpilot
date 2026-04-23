@@ -1,106 +1,82 @@
 ---
-title: "browser panel"
+title: "Browser Panel"
 basePath: ..
 ---
 
+<!-- id: intro -->
+
 # Browser Panel — Side-by-Side
 
-Open a live web page **beside** your slide with a single click.
-Great for live demos, API docs, and running local apps.
+Open a live web page **beside** your slide — no alt-tab, no context switch.
 
-[Open MDN Docs](action:browser.open?url=https://developer.mozilla.org/en-US/docs/Web/API&title=MDN%20Web%20APIs)
+Great for live demos, API walkthroughs, and running local apps.
+
+---
+
+<!-- id: open-docs -->
+
+# Opening a URL
+
+The `browser.open` action opens a **WebviewPanel** in column 2,
+right next to your presentation.
+
+The panel appears automatically when you enter this slide.
 
 ---
 
-# Navigate Without Reopening
+<!-- id: navigate-fetch -->
 
-Once the panel is open, `browser.navigate` changes the URL **in-place** —
-no flash, no new window.
+# Navigating In-Place
 
-[Go to Fetch API](action:browser.navigate?url=https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
+`browser.navigate` changes the URL **without reopening** the panel.
 
-[Go to WebSocket API](action:browser.navigate?url=https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)
+No flash. No new tab. The audience stays focused on your slide.
 
 ---
+
+<!-- id: navigate-websocket -->
+
+# Continuing the Tour
+
+Each slide can drive the browser to the next destination.
+
+Your deck becomes the navigation layer for the demo.
+
+---
+
+<!-- id: local-dev -->
 
 # Local Dev Server
 
-Start your app, then open it instantly in the panel.
+Use a `sequence` to start your app and open it in one click:
 
-```action
-type: sequence
-label: 🚀 Start & open app
-steps:
-  - type: terminal.run
-    command: npm run dev
-    background: true
-    name: Dev Server
-  - type: browser.open
-    url: http://localhost:5173
-    title: Local App
-    column: 2
-```
+1. `terminal.run` — start the dev server in the background
+2. `browser.open` — load `http://localhost:5173` in the panel
+
+The panel opens as soon as the server is ready.
 
 ---
 
-# Live API Exploration
-
-Walk your audience through an API — each slide navigates the panel.
-
-## Slide 1 — Overview
-
-[Open API Docs](action:browser.open?url=https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch&title=Fetch%20API)
-
----
-
-## Slide 2 — Request
-
-[→ Request object](action:browser.navigate?url=https://developer.mozilla.org/en-US/docs/Web/API/Request)
-
----
-
-## Slide 3 — Response
-
-[→ Response object](action:browser.navigate?url=https://developer.mozilla.org/en-US/docs/Web/API/Response)
-
----
-
-# Inline Action Block
-
-Use a fenced `action` block for richer control:
-
-```action
-type: browser.open
-url: https://developer.mozilla.org/en-US/docs/Web/API/URL
-title: URL API Reference
-column: 2
-```
-
----
+<!-- id: column-options -->
 
 # Column Options
 
-| Value | Panel position |
-|-------|---------------|
-| `2` *(default)* | Side by side |
+| `column` value | Panel position |
+|---------------|----------------|
+| `2` *(default)* | Side by side with the presentation |
 | `3` | Third column |
-| `-1` | Beside active editor |
-
-```action
-type: browser.open
-url: https://developer.mozilla.org/en-US/
-title: MDN
-column: -1
-```
+| `-1` | Beside the currently active editor |
 
 ---
 
+<!-- id: limitation -->
+
 # Known Limitation
 
-Sites that set `X-Frame-Options: DENY` (GitHub, Google) will show a blank panel.
-This is enforced by the **site itself** — it cannot be bypassed.
+Sites that send `X-Frame-Options: DENY` — GitHub, Google, etc. —
+will show a **blank panel**. This is enforced by the site and cannot be bypassed.
 
-For those, use a direct link instead:
-[Open GitHub](https://github.com)
+✅ Works great with: localhost dev servers, your own apps, API docs sites.
 
-✅ Works great with: local dev servers, API docs, your own apps, localhost tools.
+Use a plain link for sites that block framing:
+[Open on GitHub](https://github.com)

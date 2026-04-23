@@ -1,0 +1,81 @@
+# browser-panel.deck.yaml
+# Sidecar for browser-panel.deck.md
+# All browser actions live here — the Markdown stays clean.
+
+deck:
+  title: Browser Panel
+  theme: dark
+
+slides:
+  - id: intro
+    cues:
+      - Introduce the concept: no alt-tab, demo runs right beside the slide
+    duration: 10s
+
+  - id: open-docs
+    layout: right
+    onEnterActions:
+      - type: browser.open
+        url: https://developer.mozilla.org/en-US/docs/Web/API
+        title: MDN Web APIs
+        column: 2
+    cues:
+      - The panel opens automatically when this slide appears
+      - Point out the side-by-side layout
+    duration: 15s
+
+  - id: navigate-fetch
+    layout: right
+    onEnterActions:
+      - type: browser.navigate
+        url: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+    cues:
+      - Notice the panel navigated without reopening
+      - Walk through the Fetch API docs
+    duration: 20s
+
+  - id: navigate-websocket
+    layout: right
+    onEnterActions:
+      - type: browser.navigate
+        url: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
+    cues:
+      - Each slide advances the browser — your deck is the nav layer
+    duration: 15s
+
+  - id: local-dev
+    actions:
+      - type: sequence
+        label: Start app & open browser
+        steps:
+          - type: terminal.run
+            command: npm run dev
+            background: true
+            name: Dev Server
+          - type: browser.open
+            url: http://localhost:5173
+            title: Local App
+            column: 2
+    cues:
+      - Click the button to start the server and open the panel together
+      - Show the app loading in the panel
+    duration: 25s
+
+  - id: column-options
+    cues:
+      - Explain the column parameter — default is 2 (side by side)
+    duration: 10s
+
+  - id: limitation
+    cues:
+      - Be upfront about X-Frame-Options — it is a site-level decision
+      - Recommend localhost or your own apps for the best experience
+    duration: 12s
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
