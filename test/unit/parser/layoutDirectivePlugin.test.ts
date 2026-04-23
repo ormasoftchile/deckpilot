@@ -1,17 +1,20 @@
 import { expect } from 'chai';
-import { transformLayoutDirectives } from '../../../src/parser/layoutDirectivePlugin';
+import { processLayoutComments } from '../../../src/parser/layoutCommentProcessor';
 
-describe('Layout Directive Plugin', () => {
-  describe('transformLayoutDirectives', () => {
-    it('should transform :::center block', () => {
-      const input = ':::center\nBig idea\n:::';
-      const result = transformLayoutDirectives(input);
-      expect(result).to.equal('<div class="layout-center">\n\nBig idea\n\n</div>');
+describe('Layout Comment Processor', () => {
+  describe('processLayoutComments', () => {
+    it('should transform <!-- center --> block', () => {
+      const html = '<!-- center -->\n<p>Big idea</p>\n<!-- /center -->';
+      const result = processLayoutComments(html);
+      expect(result).to.contain('<div class="layout-center">');
+      expect(result).to.contain('Big idea');
+      expect(result).to.contain('</div>');
+      expect(result).not.to.contain('<!-- center -->');
     });
 
-    it('should transform :::columns with :::left and :::right', () => {
-      const input = ':::columns\n:::left\nText\n:::\n:::right\nCode\n:::\n:::';
-      const result = transformLayoutDirectives(input);
+    it('should transform <!-- columns --> with <!-- left --> and <!-- right -->', () => {
+      const html = '<!-- columns -->\n<!-- left -->\n<p>Text</p>\n<!-- /left -->\n<!-- right -->\n<p>Code</p>\n<!-- /right -->\n<!-- /columns -->';
+      const result = processLayoutComments(html);
       expect(result).to.contain('<div class="layout-columns">');
       expect(result).to.contain('<div class="layout-left">');
       expect(result).to.contain('<div class="layout-right">');
@@ -19,61 +22,50 @@ describe('Layout Directive Plugin', () => {
       expect(result).to.contain('Code');
     });
 
-    it('should pass through content with no directives', () => {
-      const input = '# Hello\n\nSome text';
-      const result = transformLayoutDirectives(input);
-      expect(result).to.equal(input);
+    it('should pass through HTML with no markers', () => {
+      const html = '<h1>Hello</h1>\n<p>Some text</p>';
+      const result = processLayoutComments(html);
+      expect(result).to.equal(html);
     });
 
-    it('should close unclosed directives gracefully', () => {
-      const input = ':::center\nContent without close';
-      const result = transformLayoutDirectives(input);
-      expect(result).to.contain('<div class="layout-center">');
+    it('should transform <!-- group --> block', () => {
+      const html = '<!-- group -->\n<p>First</p>\n<p>Second</p>\n<!-- /group -->';
+      const result = processLayoutComments(html);
+      expect(result).to.contain('<div class="slide-group">');
       expect(result).to.contain('</div>');
-      // Blank line after opening tag ensures markdown-it renders inner content
-      expect(result).to.contain('<div class="layout-center">\n\nContent without close');
     });
 
-    it('should handle nested directives', () => {
-      const input = ':::columns\n:::left\nLeft content\n:::\n:::right\nRight content\n:::\n:::';
-      const result = transformLayoutDirectives(input);
-      // Count divs
-      const openDivs = (result.match(/<div/g) || []).length;
-      const closeDivs = (result.match(/<\/div>/g) || []).length;
-      expect(openDivs).to.equal(closeDivs);
-    });
-
-    it('should not transform directives inside fenced code blocks', () => {
-      const input = '```\n:::center\nsome code\n:::\n```';
-      const result = transformLayoutDirectives(input);
-      expect(result).to.contain(':::center');
-      expect(result).to.not.contain('<div');
-    });
-
-    it('should transform :::advanced into details/summary', () => {
-      const input = ':::advanced\nSome advanced content\n:::';
-      const result = transformLayoutDirectives(input);
+    it('should transform <!-- advanced --> into details/summary', () => {
+      const html = '<!-- advanced -->\n<p>Deep dive</p>\n<!-- /advanced -->';
+      const result = processLayoutComments(html);
       expect(result).to.contain('<details class="disclosure-advanced">');
       expect(result).to.contain('<summary>Advanced</summary>');
       expect(result).to.contain('</details>');
-      expect(result).to.contain('Some advanced content');
+      expect(result).to.contain('Deep dive');
     });
 
-    it('should transform :::optional with badge', () => {
-      const input = ':::optional\nOptional step content\n:::';
-      const result = transformLayoutDirectives(input);
+    it('should transform <!-- optional --> with badge', () => {
+      const html = '<!-- optional -->\n<p>Optional step</p>\n<!-- /optional -->';
+      const result = processLayoutComments(html);
       expect(result).to.contain('<div class="step-optional">');
       expect(result).to.contain('<span class="optional-badge">Optional</span>');
-      expect(result).to.contain('Optional step content');
+      expect(result).to.contain('Optional step');
       expect(result).to.contain('</div>');
     });
 
-    it('should handle mixed layout and disclosure directives', () => {
-      const input = ':::columns\n:::left\nText\n:::\n:::right\n:::advanced\nDetails\n:::\n:::\n:::';
-      const result = transformLayoutDirectives(input);
+    it('should handle nested directives', () => {
+      const html = '<!-- columns -->\n<!-- left -->\n<p>Left</p>\n<!-- /left -->\n<!-- right -->\n<!-- advanced -->\n<p>Details</p>\n<!-- /advanced -->\n<!-- /right -->\n<!-- /columns -->';
+      const result = processLayoutComments(html);
       expect(result).to.contain('<div class="layout-columns">');
       expect(result).to.contain('<details class="disclosure-advanced">');
       expect(result).to.contain('</details>');
+      expect(result).to.contain('</div>');
+    });
+
+    it('should tolerate extra whitespace in comment markers', () => {
+      const html = '<!--  center  -->\n<p>Text</p>\n<!--  /center  -->';
+      const result = processLayoutComments(html);
+      expect(result).to.contain('<div class="layout-center">');
       expect(result).to.contain('</div>');
     });
   });

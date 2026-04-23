@@ -1,0 +1,13 @@
+1
+00:00:00,000 --> 00:00:03,600
+Welcome the audience and explain the dual
+authoring model
+
+2
+00:00:07,100 --> 00:00:09,600
+Walk through the dependency installation
+output
+
+3
+00:00:20,100 --> 00:00:22,600
+Show the application starting up

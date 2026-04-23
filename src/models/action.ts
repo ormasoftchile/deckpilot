@@ -16,7 +16,9 @@ export type ActionType =
   | 'wait.condition'
   | 'validate.command'
   | 'validate.fileExists'
-  | 'validate.port';
+  | 'validate.port'
+  | 'browser.open'
+  | 'browser.navigate';
 
 /**
  * Execution status of an action
@@ -141,6 +143,26 @@ export interface WaitConditionParams {
 }
 
 /**
+ * Parameters for browser.open action
+ */
+export interface BrowserOpenParams {
+  /** URL to open. Must be https://, http://localhost, or http://127.0.0.1. */
+  url: string;
+  /** Panel tab title. Default: "Browser" */
+  title?: string;
+  /** VS Code ViewColumn (1, 2, 3, or -1 for Beside). Default: 2 */
+  column?: number;
+}
+
+/**
+ * Parameters for browser.navigate action
+ */
+export interface BrowserNavigateParams {
+  /** URL to navigate to. Must be https://, http://localhost, or http://127.0.0.1. */
+  url: string;
+}
+
+/**
  * Action parameters union type
  */
 export type ActionParams =
@@ -150,7 +172,9 @@ export type ActionParams =
   | DebugStartParams
   | SequenceParams
   | VscodeCommandParams
-  | WaitConditionParams;
+  | WaitConditionParams
+  | BrowserOpenParams
+  | BrowserNavigateParams;
 
 /**
  * Action definition as it appears in YAML frontmatter

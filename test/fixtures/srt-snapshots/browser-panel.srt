@@ -1,0 +1,12 @@
+1
+00:00:00,000 --> 00:00:02,500
+Introduce the browser panel feature
+
+2
+00:00:16,000 --> 00:00:21,200
+Show how to navigate the panel to a new
+URL without reopening it
+
+3
+00:00:33,700 --> 00:00:36,200
+Demonstrate local server support

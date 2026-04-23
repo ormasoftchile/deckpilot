@@ -7,6 +7,9 @@ import matter from 'gray-matter';
 import { Deck, DeckMetadata, SceneDefinition, createDeck } from '../models/deck';
 import { parseSlides, getLastParseWarnings } from './slideParser';
 import { EnvDeclarationParser } from '../env/envDeclarationParser';
+import { loadSidecar } from './sidecarLoader';
+import { mergeSidecarIntoSlides, mergeSidecarDeckMetadata } from './mergeEngine';
+import { resolveEnvironment } from '../env/envMerger';
 
 /**
  * Parse result with potential errors
@@ -24,13 +27,13 @@ export interface ParseResult {
  * @param content Raw file content
  * @param filePath Absolute path to the file
  */
-export function parseDeck(content: string, filePath: string): ParseResult {
+export async function parseDeck(content: string, filePath: string): Promise<ParseResult> {
   try {
     // Extract deck-level frontmatter (before first slide delimiter)
     const { data: metadata, content: bodyContent } = extractDeckFrontmatter(content);
 
     // Parse slides from body content
-    const slides = parseSlides(bodyContent);
+    let slides = parseSlides(bodyContent);
 
     if (slides.length === 0) {
       return {
@@ -38,14 +41,31 @@ export function parseDeck(content: string, filePath: string): ParseResult {
       };
     }
 
+    // Load and merge sidecar (.deck.yaml) if present — zero behavior change when absent
+    let mergedMetadata = metadata as DeckMetadata;
+    let loadedSidecar: import('../models/sidecar').SidecarFile | null = null;
+    const sidecarWarnings: string[] = [];
+    try {
+      const sidecar = await loadSidecar(filePath);
+      loadedSidecar = sidecar;
+      if (sidecar) {
+        slides = mergeSidecarIntoSlides(slides, sidecar);
+        mergedMetadata = mergeSidecarDeckMetadata(mergedMetadata, sidecar);
+      }
+    } catch (sidecarError) {
+      // Non-fatal: sidecar load/merge errors surface as warnings, deck still loads
+      const msg = sidecarError instanceof Error ? sidecarError.message : 'Unknown sidecar error';
+      sidecarWarnings.push(`[sidecar] ${msg}`);
+    }
+
     // Parse authored scenes from frontmatter (T043)
     const { scenes, errors: sceneErrors } = parseAuthoredScenes(
-      metadata.scenes,
+      mergedMetadata.scenes,
       slides.length
     );
 
     // Update metadata with parsed scenes
-    const enrichedMetadata = { ...metadata, scenes } as DeckMetadata;
+    const enrichedMetadata = { ...mergedMetadata, scenes } as DeckMetadata;
 
     // Parse env declarations from frontmatter (T015 [US1])
     let envDeclarations: import('../models/env').EnvDeclaration[] = [];
@@ -62,6 +82,13 @@ export function parseDeck(content: string, filePath: string): ParseResult {
     const deck = createDeck(filePath, slides, enrichedMetadata);
     deck.envDeclarations = envDeclarations;
 
+    // Resolve merged execution environment (DA-22): process.env ← sidecar.common ← sidecar.platform ← .deck.env
+    try {
+      deck.resolvedEnvironment = await resolveEnvironment(filePath, loadedSidecar);
+    } catch {
+      // Non-fatal — deck still loads without resolved environment
+    }
+
     // Collect action block parse warnings (non-fatal)
     const warnings = getLastParseWarnings();
 
@@ -72,6 +99,11 @@ export function parseDeck(content: string, filePath: string): ParseResult {
 
     // Add env parse warnings
     for (const w of envWarnings) {
+      warnings.push(w);
+    }
+
+    // Add sidecar warnings
+    for (const w of sidecarWarnings) {
       warnings.push(w);
     }
 

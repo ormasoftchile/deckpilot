@@ -18,6 +18,8 @@ export { WaitConditionExecutor } from './waitConditionExecutor';
 export { ValidateCommandExecutor } from './validateCommandExecutor';
 export { ValidateFileExistsExecutor } from './validateFileExistsExecutor';
 export { ValidatePortExecutor } from './validatePortExecutor';
+export { BrowserOpenExecutor } from './browserOpenExecutor';
+export { BrowserNavigateExecutor } from './browserNavigateExecutor';
 
 // Pipeline
 export { executeWithPipeline, actionRequiresTrust, createExecutionContext } from './executionPipeline';
@@ -37,6 +39,8 @@ import { WaitConditionExecutor } from './waitConditionExecutor';
 import { ValidateCommandExecutor } from './validateCommandExecutor';
 import { ValidateFileExistsExecutor } from './validateFileExistsExecutor';
 import { ValidatePortExecutor } from './validatePortExecutor';
+import { BrowserOpenExecutor } from './browserOpenExecutor';
+import { BrowserNavigateExecutor } from './browserNavigateExecutor';
 
 /**
  * Register all action executors
@@ -54,4 +58,6 @@ export function registerAllExecutors(): void {
   registry.register(new ValidateCommandExecutor());
   registry.register(new ValidateFileExistsExecutor());
   registry.register(new ValidatePortExecutor());
+  registry.register(new BrowserOpenExecutor());
+  registry.register(new BrowserNavigateExecutor());
 }

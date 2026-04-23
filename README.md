@@ -905,6 +905,64 @@ To make your deck portable:
    2. Fill in their own values
    3. Open the deck — ready to present!
 
+## Sidecar Files (`.deck.yaml`)
+
+For more advanced authoring, you can split your presentation into two files:
+- **`.deck.md`** — The main presentation content and Markdown
+- **`.deck.yaml`** — Metadata, frontmatter options, and slide-level overrides
+
+This dual-authoring approach is useful when:
+- Your deck is large and you want to keep metadata separate
+- You're sharing the Markdown content but personalizing metadata per presenter
+- You want to organize slide-level settings separately
+
+### Creating a Sidecar File
+
+Create a `.deck.yaml` file with the same base name as your `.deck.md`:
+
+```
+my-talk/
+  ├── onboarding.deck.md          ← Your presentation content
+  ├── onboarding.deck.yaml        ← Metadata and overrides (optional)
+  └── onboarding.deck.env         ← Environment variables (optional)
+```
+
+### Slide-Level Layout
+
+Use the `layout` field in sidecar slide entries to control visual alignment:
+
+```yaml
+slides:
+  - index: 1
+    layout: center        # Center content vertically and horizontally
+    
+  - index: 3
+    layout: right         # Right-align text content
+    
+  - index: 5
+    layout: left          # Left-align text content
+    
+  - index: 7
+    layout: columns       # Two-column layout
+```
+
+Supported values:
+- `center` — Vertically and horizontally centered content (useful for title slides)
+- `left` — Left-aligned text
+- `right` — Right-aligned text
+- `columns` — Two-column layout helper
+
+### Commands from Sidecar Files
+
+All four deck commands work when a `.deck.yaml` file is the active editor:
+
+- **Start Presentation** — Auto-resolves the paired `.deck.md` and begins presenting
+- **Validate Deck** — Validates the linked presentation
+- **Extract Metadata to Sidecar** — Updates the sidecar from deck metadata
+- **Show Resolved Deck Model** — Displays the merged model
+
+If no paired `.deck.md` exists, a clear error message guides you to create one.
+
 ## Fragment Animations
 
 Reveal content step-by-step using fragment markers. Add `<!-- .fragment -->` after any element to make it appear on the next arrow key press:

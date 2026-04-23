@@ -99,7 +99,7 @@ export async function loadDeck(filePath: string): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const content = await res.text();
 
-    const result = parseDeck(content, filePath);
+    const result = await parseDeck(content, filePath);
     if (!result.deck) {
       console.error('[web-host] Parse error:', result.error);
       sendToPresentation({

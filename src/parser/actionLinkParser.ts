@@ -23,6 +23,8 @@ const VALID_ACTION_TYPES: ActionType[] = [
   'sequence',
   'vscode.command',
   'wait.condition',
+  'browser.open',
+  'browser.navigate',
 ];
 
 /**

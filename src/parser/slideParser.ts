@@ -9,10 +9,12 @@ import { Slide, SlideFrontmatter, createSlide } from '../models/slide';
 import { parseActionLinks } from './actionLinkParser';
 import { parseActionBlocks } from './actionBlockParser';
 import { parseRenderDirectives } from '../renderer';
-import { transformLayoutDirectives } from './layoutDirectivePlugin';
+import { processLayoutComments } from './layoutCommentProcessor';
 import { injectBlockElementsFromParsed } from '../renderer/blockElementRenderer';
 import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
+import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
+import { validateSlideIds, SlideDiagnosticResult } from './deckValidator';
 
 // Initialize markdown-it renderer
 const md = new MarkdownIt({
@@ -20,48 +22,6 @@ const md = new MarkdownIt({
   linkify: true,
   typographer: true,
 });
-
-// :::group ... ::: plugin — wraps the inner block content in a single
-// <div class="slide-group"> so fragmentProcessor treats it as one step.
-md.block.ruler.before('fence', 'slide_group', (state, startLine, endLine, silent) => {
-  const pos = state.bMarks[startLine] + state.tShift[startLine];
-  const max = state.eMarks[startLine];
-  const line = state.src.slice(pos, max).trim();
-
-  if (line !== ':::group') { return false; }
-  if (silent) { return true; }
-
-  // Find the closing :::
-  let nextLine = startLine + 1;
-  let found = false;
-  while (nextLine < endLine) {
-    const lpos = state.bMarks[nextLine] + state.tShift[nextLine];
-    const lmax = state.eMarks[nextLine];
-    const l = state.src.slice(lpos, lmax).trim();
-    if (l === ':::') { found = true; break; }
-    nextLine++;
-  }
-  if (!found) { return false; }
-
-  const oldParentType = state.parentType;
-  const oldLineMax = state.lineMax;
-  (state.parentType as unknown) = 'blockquote';
-
-  const openToken = state.push('html_block', '', 0);
-  openToken.content = '<div class="slide-group">\n';
-  openToken.map = [startLine, nextLine];
-
-  state.lineMax = nextLine;
-  state.md.block.tokenize(state, startLine + 1, nextLine);
-  state.lineMax = oldLineMax;
-  state.parentType = oldParentType;
-
-  const closeToken = state.push('html_block', '', 0);
-  closeToken.content = '</div>\n';
-
-  state.line = nextLine + 1;
-  return true;
-}, { alt: [] });
 
 /**
  * Slide delimiter pattern: --- on its own line
@@ -76,6 +36,12 @@ const SLIDE_DELIMITER = /^---+\s*$/m;
 let _lastParseWarnings: string[] = [];
 
 /**
+ * Validation diagnostics (duplicate explicit IDs) from the last parseSlides() call.
+ * Reset at the start of each parseSlides() invocation.
+ */
+let _lastValidationDiagnostics: SlideDiagnosticResult[] = [];
+
+/**
  * Get warnings from the most recent parseSlides() call.
  * Returns action block parse errors formatted as human-readable strings.
  */
@@ -84,11 +50,21 @@ export function getLastParseWarnings(): string[] {
 }
 
 /**
+ * Get validation diagnostics (e.g. duplicate explicit slide IDs) from the
+ * most recent parseSlides() call.  Results can be forwarded to VS Code's
+ * DiagnosticCollection by mapping them to vscode.Diagnostic in extension.ts.
+ */
+export function getLastValidationDiagnostics(): SlideDiagnosticResult[] {
+  return _lastValidationDiagnostics;
+}
+
+/**
  * Parse content into individual slides
  */
 export function parseSlides(content: string): Slide[] {
-  // Reset warnings
+  // Reset warnings and validation diagnostics
   _lastParseWarnings = [];
+  _lastValidationDiagnostics = [];
   
   // Split content on slide delimiter
   const rawSlides = splitOnDelimiter(content);
@@ -128,6 +104,26 @@ export function parseSlides(content: string): Slide[] {
     slide.index = slides.length;
     slides.push(slide);
   }
+
+  // Assign IDs for slides that had no <!-- id: --> comment (priorities 2-4).
+  // Done here so pending-frontmatter merging above is already reflected.
+  for (const slide of slides) {
+    if (slide.id === undefined) {
+      const fmId = slide.frontmatter?.id;
+      slide.id = generateSlideId(slide.content, slide.frontmatter, slide.index);
+      // Mark as explicit if the frontmatter id field drove the result
+      if (typeof fmId === 'string' && fmId.trim().length > 0) {
+        slide.idExplicit = true;
+      }
+    }
+  }
+
+  // Validate for duplicate explicit IDs before uniquification renames them.
+  // Results are stored so callers can surface them as editor diagnostics.
+  _lastValidationDiagnostics = validateSlideIds(slides);
+
+  // Ensure all IDs are unique within this deck
+  resolveUniqueIds(slides);
   
   return slides;
 }
@@ -191,6 +187,16 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   const { checkpoint, cleanedContent: contentAfterCheckpoint } = extractCheckpoint(content);
   content = contentAfterCheckpoint;
 
+  // Step 1.55: Strip any <!-- id: xxx --> comment from content before rendering.
+  // The id value is stored immediately; heading/frontmatter fallbacks run in
+  // parseSlides after pending-frontmatter merging.
+  const { commentId, cleanedContent: contentAfterId } = extractIdComment(content);
+  content = contentAfterId;
+  if (commentId !== undefined) {
+    // Assign now; parseSlides won't overwrite an already-set id.
+    // (stored as a local; set on slide after createSlide below)
+  }
+
   // Step 1.6: Extract voice-over cues BEFORE stripping them, so parseCues()
   // can still find them after slide.content no longer contains the comments.
   const voiceCues = extractVoiceCues(content);
@@ -232,14 +238,19 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   }
   
   // Step 3: Render markdown to HTML (uses cleaned content — no action blocks in output)
-  const layoutTransformed = transformLayoutDirectives(cleanedContent);
-  let html = md.render(layoutTransformed);
+  let html = md.render(cleanedContent);
   
   // Step 4: Inject block element buttons into HTML (replaces <!--ACTION:--> placeholders)
   // This must happen BEFORE fragment processing so that action buttons with
   // `fragment: true` get fragment indices in document order alongside other
   // fragment-marked elements.
   html = injectBlockElementsFromParsed(html, actionBlockResult.elements);
+
+  // Step 4.5: Convert <!-- layout --> comment markers to HTML wrapper divs.
+  // Must run after markdown-it rendering (so comments are in the HTML string)
+  // but before fragment processing (so slide-group/details/step-optional are
+  // present when processFragments scans for eligible elements).
+  html = processLayoutComments(html);
   
   // Step 5: Process fragments and get count
   const { html: fragmentHtml, fragmentCount } = processFragments(html);
@@ -266,6 +277,11 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   
   // Create base slide
   const slide = createSlide(index, content, html, frontmatter, checkpoint);
+  // Set id from comment if found (prevents parseSlides from overwriting it)
+  if (commentId !== undefined) {
+    slide.id = commentId;
+    slide.idExplicit = true;
+  }
   slide.fragmentCount = fragmentCount;
   if (voiceCues.length > 0) {
     slide.voiceCues = voiceCues;

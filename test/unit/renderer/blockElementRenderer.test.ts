@@ -15,9 +15,10 @@ import { createAction } from '../../../src/models/action';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeSlide(elements: InteractiveElement[]): Slide {
-  // Build html with one placeholder per element
-  const html = elements
+function makeSlide(elements: InteractiveElement[], existingHtml?: string): Slide {
+  // Build html with one placeholder per block element (sidecar elements have no placeholder)
+  const html = existingHtml ?? elements
+    .filter(el => el.source === 'block')
     .map(el => `<!--ACTION:${el.id}-->`)
     .join('\n');
   return {
@@ -47,6 +48,23 @@ function makeElement(
     rawLink: '',
     source: 'block',
     showCommand,
+  };
+}
+
+function makeSidecarElement(
+  type: string,
+  params: Record<string, unknown>,
+  fragment: boolean = true,
+): InteractiveElement {
+  const id = `sidecar-0-${elementCounter++}`;
+  return {
+    id,
+    label: 'Run it',
+    action: createAction(type as never, params, 0),
+    position: { line: 9999, column: 0 },
+    rawLink: '',
+    source: 'sidecar',
+    fragment,
   };
 }
 
@@ -182,5 +200,63 @@ describe('blockElementRenderer — showCommand preview', () => {
       const html = injectBlockElements(slide.html, slide);
       expect(html).to.not.include('action-preview');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sidecar elements — fragment injection
+// ---------------------------------------------------------------------------
+
+describe('blockElementRenderer — sidecar fragment injection', () => {
+  beforeEach(() => { elementCounter = 0; });
+
+  it('injects a sidecar button with class="fragment" and a data-fragment index', () => {
+    const el = makeSidecarElement('terminal.run', { command: 'npm install' });
+    // Simulate slide HTML that has already had processFragments run
+    const existingHtml = '<h1>Setup</h1>\n<p class="fragment" data-fragment="1" data-fragment-animation="fade">Install deps</p>';
+    const slide = makeSlide([el], existingHtml);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('class="fragment"');
+    expect(html).to.include('data-fragment="2"');
+    expect(html).to.include('data-fragment-animation="fade"');
+    expect(html).to.not.include('data-no-fragment');
+  });
+
+  it('assigns fragment index N+1 after the last existing fragment', () => {
+    const el = makeSidecarElement('terminal.run', { command: 'npm test' });
+    const existingHtml =
+      '<p class="fragment" data-fragment="1" data-fragment-animation="fade">One</p>\n' +
+      '<p class="fragment" data-fragment="2" data-fragment-animation="fade">Two</p>';
+    const slide = makeSlide([el], existingHtml);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('data-fragment="3"');
+    expect(html).to.not.include('data-fragment="4"');
+  });
+
+  it('starts at fragment index 1 when the slide has no existing fragments', () => {
+    const el = makeSidecarElement('terminal.run', { command: 'echo hi' });
+    const existingHtml = '<h1>Title Only</h1>';
+    const slide = makeSlide([el], existingHtml);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('data-fragment="1"');
+  });
+
+  it('injects multiple sidecar elements as consecutive fragment steps', () => {
+    const el1 = makeSidecarElement('terminal.run', { command: 'npm install' });
+    const el2 = makeSidecarElement('file.open', { path: 'src/app.ts' });
+    const existingHtml = '<p class="fragment" data-fragment="1" data-fragment-animation="fade">Step 1</p>';
+    const slide = makeSlide([el1, el2], existingHtml);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('data-fragment="2"');
+    expect(html).to.include('data-fragment="3"');
+  });
+
+  it('falls back to no-fragment markup when sidecar element has fragment=false', () => {
+    const el = makeSidecarElement('terminal.run', { command: 'ls' }, false);
+    const existingHtml = '<h1>Title</h1>';
+    const slide = makeSlide([el], existingHtml);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('data-no-fragment');
+    expect(html).to.not.include('class="fragment"');
   });
 });

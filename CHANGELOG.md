@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable `message`, `timeoutMs`, and `pollIntervalMs`
   - Designed for Auto-Pilot and onboarding flows that need to pause until external setup is complete
 
+- **Sidecar Layout Field**: The `layout` field in `.deck.yaml` sidecar files now visually affects slide presentation
+  - Supported values: `center`, `right`, `left`, `columns`
+  - `layout: center` enables vertical and horizontal centering with `min-height: 100%`
+  - `layout: right` and `layout: left` apply text alignment
+  - Used in sidecar YAML under `slides:` entries (e.g., `layout: center`)
+
+- **Deck Commands from Sidecar Files**: All four deck commands now work when a `.deck.yaml` file is active
+  - `Start Presentation`, `Validate Deck`, `Extract Metadata to Sidecar`, `Show Resolved Deck Model`
+  - Auto-resolves the paired `.deck.md` file when triggered from sidecar
+  - Clear error message if no paired `.deck.md` exists
+
 ### Changed
 
 - README now clarifies that marketplace/package identifiers still use `executable-talk` for compatibility after the Deckpilot rename

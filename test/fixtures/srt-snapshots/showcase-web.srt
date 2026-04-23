@@ -1,13 +1,13 @@
 1
-00:01:11,000 --> 00:01:15,800
+00:01:26,000 --> 00:01:30,800
 Describe how speaker notes and voice cues
 work in the presenter view.
 
 2
-00:01:15,800 --> 00:01:18,300
+00:01:30,800 --> 00:01:33,300
 ...
 
 3
-00:01:23,300 --> 00:01:27,700
+00:01:38,300 --> 00:01:42,700
 Voice cues align to specific fragments
 using the [N] index syntax.

@@ -75,6 +75,25 @@ export interface DeckMetadata {
   options?: PresentationOptions;
   /** Authored scenes from deck frontmatter */
   scenes?: SceneDefinition[];
+  /** Theme override from sidecar (DA-05) */
+  theme?: string;
+  /** Recording configuration from sidecar (DA-20) */
+  recording?: {
+    autoStart?: boolean;
+    outputDir?: string;
+    format?: string;
+    codec?: string;
+    framerate?: number;
+    windowScope?: 'focused' | 'screen';
+  };
+  /** Export configuration from sidecar (DA-20) */
+  export?: {
+    subtitles?: boolean;
+    video?: boolean;
+    outputDir?: string;
+    srtFormat?: 'srt' | 'vtt';
+    voiceScript?: boolean;
+  };
   /** Additional properties */
   [key: string]: unknown;
 }
@@ -106,6 +125,8 @@ export interface Deck {
   error?: string;
   /** Environment variable declarations from frontmatter (Feature 006) */
   envDeclarations: EnvDeclaration[];
+  /** Merged execution environment: process.env ← sidecar.common ← sidecar.platform ← .deck.env (DA-22) */
+  resolvedEnvironment?: Record<string, string>;
 }
 
 /**

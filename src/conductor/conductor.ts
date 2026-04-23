@@ -38,6 +38,7 @@ import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
 import { buildAutoPilotPlan, AutoPilotStep } from '../recording/autoPilot';
+import { disposeBrowserPanel } from '../browser';
 
 /**
  * Actions that require workspace trust
@@ -67,10 +68,14 @@ export class Conductor implements vscode.Disposable {
   private resolvedEnv: ResolvedEnv | undefined;
   private envFileWatcher: vscode.Disposable | undefined;
   private envDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private sidecarFileWatcher: vscode.Disposable | undefined;
+  private sidecarDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   private onboardingSteps: OnboardingStepState[] = [];
   private recordingState: RecordingState;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
   private autoPilotRunning = false;
+  /** Pending slide render callback — resolved when webview confirms render complete */
+  private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
 
   constructor(extensionUri: vscode.Uri) {
     this.stateStack = new StateStack();
@@ -125,6 +130,9 @@ export class Conductor implements vscode.Disposable {
       // Start file watcher for .deck.env (Feature 006 — T039)
       this.startEnvFileWatcher(deck);
     }
+
+    // Start file watcher for .deck.yaml sidecar (DA-13)
+    this.startSidecarFileWatcher(deck);
 
     // Load authored scenes from deck frontmatter (T044 [US5])
     if (deck.metadata?.scenes && deck.metadata.scenes.length > 0) {
@@ -202,6 +210,9 @@ export class Conductor implements vscode.Disposable {
       },
       onRecordingMarker: (payload) => {
         this.onRecordingMarker(payload.markerType, payload.note);
+      },
+      onSlideRendered: (payload) => {
+        this.handleSlideRendered(payload.slideIndex);
       },
     };
 
@@ -288,8 +299,9 @@ export class Conductor implements vscode.Disposable {
       }
     }
 
-    // Execute onEnter actions if any
+    // Execute onEnter actions AFTER the slide is rendered and visible
     if (slide.onEnterActions && slide.onEnterActions.length > 0) {
+      await this.waitForSlideRender(targetIndex);
       await this.executeSlideActions(slide);
     }
   }
@@ -403,6 +415,9 @@ export class Conductor implements vscode.Disposable {
     // Dispose env file watcher (Feature 006 — T040)
     this.disposeEnvFileWatcher();
 
+    // Dispose sidecar file watcher (DA-13)
+    this.disposeSidecarFileWatcher();
+
     // Clear state
     this.stateStack.clear();
     this.snapshotFactory.disposeDecorations();
@@ -446,7 +461,7 @@ export class Conductor implements vscode.Disposable {
     const filePath = document.uri.fsPath;
 
     // Parse the deck first
-    const parseResult = parseDeck(content, filePath);
+    const parseResult = await parseDeck(content, filePath);
     if (!parseResult.deck) {
       void vscode.window.showWarningMessage(
         `Cannot validate: ${parseResult.error || 'Failed to parse deck'}`
@@ -974,6 +989,7 @@ export class Conductor implements vscode.Disposable {
     this.webviewProvider.dispose();
     this.presenterViewProvider.dispose();
     this.snapshotFactory.disposeDecorations();
+    disposeBrowserPanel();
     this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
   }
@@ -1278,6 +1294,7 @@ export class Conductor implements vscode.Disposable {
       this.webviewProvider.sendDeckLoaded({
         title: this.deck.title,
         author: this.deck.author,
+        theme: this.deck.metadata.theme,
         totalSlides: this.deck.slides.length,
         currentSlideIndex: 0,
         slideHtml: firstSlideHtml,
@@ -1337,6 +1354,36 @@ export class Conductor implements vscode.Disposable {
   private async executeSlideActions(slide: Slide): Promise<void> {
     for (const action of slide.onEnterActions) {
       await this.executeAction(action, action.id);
+    }
+  }
+
+  /**
+   * Wait for the webview to confirm that the slide has been rendered.
+   * Uses a promise that is resolved when handleSlideRendered is called.
+   * Times out after 2 seconds to avoid blocking forever if webview doesn't respond.
+   */
+  private waitForSlideRender(slideIndex: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.pendingSlideRender = { slideIndex, resolve };
+      // Safety timeout — don't block forever if webview doesn't respond
+      setTimeout(() => {
+        if (this.pendingSlideRender?.slideIndex === slideIndex) {
+          this.pendingSlideRender = undefined;
+          resolve();
+        }
+      }, 2000);
+    });
+  }
+
+  /**
+   * Handle slideRendered message from webview.
+   * Resolves the pending promise so onEnterActions can execute.
+   */
+  private handleSlideRendered(slideIndex: number): void {
+    if (this.pendingSlideRender && this.pendingSlideRender.slideIndex === slideIndex) {
+      const { resolve } = this.pendingSlideRender;
+      this.pendingSlideRender = undefined;
+      resolve();
     }
   }
 
@@ -1789,6 +1836,73 @@ export class Conductor implements vscode.Disposable {
     if (this.envFileWatcher) {
       this.envFileWatcher.dispose();
       this.envFileWatcher = undefined;
+    }
+  }
+
+  /**
+   * Start watching .deck.yaml sidecar file for changes (DA-13).
+   * 500ms debounce — re-reads .deck.md from disk and re-opens deck so sidecar changes
+   * (create / edit / delete) are immediately reflected in the live presentation.
+   */
+  private startSidecarFileWatcher(deck: Deck): void {
+    this.disposeSidecarFileWatcher();
+
+    const deckDir = path.dirname(deck.filePath);
+    const pattern = new vscode.RelativePattern(deckDir, '*.deck.yaml');
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+    const onChange = () => {
+      if (this.sidecarDebounceTimer) {
+        clearTimeout(this.sidecarDebounceTimer);
+      }
+      this.sidecarDebounceTimer = setTimeout(() => {
+        if (!this.deck) {
+          return;
+        }
+        void this.reloadDeckFromDisk(this.deck.filePath);
+      }, 500);
+    };
+
+    watcher.onDidChange(onChange);
+    watcher.onDidCreate(onChange);
+    watcher.onDidDelete(onChange);
+
+    this.sidecarFileWatcher = watcher;
+    this.disposables.push(watcher);
+  }
+
+  /**
+   * Dispose the sidecar file watcher and debounce timer (DA-13).
+   */
+  private disposeSidecarFileWatcher(): void {
+    if (this.sidecarDebounceTimer) {
+      clearTimeout(this.sidecarDebounceTimer);
+      this.sidecarDebounceTimer = undefined;
+    }
+    if (this.sidecarFileWatcher) {
+      this.sidecarFileWatcher.dispose();
+      this.sidecarFileWatcher = undefined;
+    }
+  }
+
+  /**
+   * Reload deck from disk — re-reads .deck.md, re-parses (picks up new .deck.yaml state),
+   * and re-opens the presentation. Called when sidecar file changes on disk (DA-13).
+   * Graceful degradation: delete of .deck.yaml causes reload with null sidecar (merge engine
+   * already handles null sidecar cleanly).
+   */
+  private async reloadDeckFromDisk(filePath: string): Promise<void> {
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf8');
+      const parseResult = await parseDeck(content, filePath);
+      if (!parseResult.deck) {
+        this.outputChannel.appendLine(`[Sidecar] Reload failed: ${parseResult.error ?? 'parse error'}`);
+        return;
+      }
+      await this.openDeck(parseResult.deck);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.outputChannel.appendLine(`[Sidecar] Watcher reload failed: ${msg}`);
     }
   }
 

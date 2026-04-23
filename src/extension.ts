@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { Conductor } from './conductor';
 import { parseDeck } from './parser';
 import { registerAllExecutors } from './actions';
@@ -7,8 +8,45 @@ import { ActionCompletionProvider } from './providers/actionCompletionProvider';
 import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
 import { registerDeckParticipant } from './chat/deckParticipant';
+import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
+import { extractMetadataToSidecar } from './commands/extractMetadata';
 
 let conductor: Conductor | undefined;
+
+/**
+ * Resolves a deck URI from the active editor, supporting both .deck.md and .deck.yaml files.
+ * 
+ * - If the active editor is a .deck.md file, returns it as-is.
+ * - If the active editor is a .deck.yaml sidecar, derives and returns the paired .deck.md URI.
+ * - Returns undefined if no active editor, or the .deck.md file doesn't exist.
+ * 
+ * @param editor - The active text editor (usually from vscode.window.activeTextEditor)
+ * @returns The URI of the .deck.md file, or undefined if not applicable
+ */
+function resolveDeckUri(editor: vscode.TextEditor | undefined): vscode.Uri | undefined {
+    if (!editor) {
+        return undefined;
+    }
+
+    const filePath = editor.document.uri.fsPath;
+    
+    // If it's already a .deck.md file, return it
+    if (filePath.endsWith('.deck.md')) {
+        return editor.document.uri;
+    }
+    
+    // If it's a .deck.yaml sidecar, derive the paired .deck.md path
+    if (filePath.endsWith('.deck.yaml')) {
+        const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        
+        // Verify the .deck.md file exists
+        if (fs.existsSync(deckMdPath)) {
+            return vscode.Uri.file(deckMdPath);
+        }
+    }
+    
+    return undefined;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
     console.log('Deckpilot extension is now active');
@@ -29,23 +67,26 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const editor = vscode.window.activeTextEditor;
             
-            if (!editor) {
-                void vscode.window.showWarningMessage('No active editor. Open a .deck.md file first.');
-                return;
-            }
-
-            const document = editor.document;
+            // Resolve deck URI (supports both .deck.md and .deck.yaml)
+            const deckUri = resolveDeckUri(editor);
             
-            // Check if it's a deck file
-            if (!document.fileName.endsWith('.deck.md')) {
-                void vscode.window.showWarningMessage('Active file is not a .deck.md presentation file.');
+            if (!deckUri) {
+                const activeFile = editor?.document.fileName;
+                if (activeFile?.endsWith('.deck.yaml')) {
+                    void vscode.window.showWarningMessage(
+                        'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                    );
+                } else {
+                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md or .deck.yaml file first.');
+                }
                 return;
             }
 
             try {
-                // Parse the deck
-                const content = document.getText();
-                const result = parseDeck(content, document.uri.fsPath);
+                // Load and parse the deck
+                const deckDocument = await vscode.workspace.openTextDocument(deckUri);
+                const content = deckDocument.getText();
+                const result = await parseDeck(content, deckUri.fsPath);
 
                 if (result.error || !result.deck) {
                     void vscode.window.showWarningMessage(result.error || 'Failed to parse presentation.');
@@ -137,11 +178,25 @@ export function activate(context: vscode.ExtensionContext): void {
         'executableTalk.validateDeck',
         async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor || !editor.document.fileName.endsWith('.deck.md')) {
-                void vscode.window.showWarningMessage('Open a .deck.md file first to validate.');
+            
+            // Resolve deck URI (supports both .deck.md and .deck.yaml)
+            const deckUri = resolveDeckUri(editor);
+            
+            if (!deckUri) {
+                const activeFile = editor?.document.fileName;
+                if (activeFile?.endsWith('.deck.yaml')) {
+                    void vscode.window.showWarningMessage(
+                        'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                    );
+                } else {
+                    void vscode.window.showWarningMessage('Open a .deck.md or .deck.yaml file first to validate.');
+                }
                 return;
             }
-            await conductor?.validateDeck(editor.document);
+            
+            // Load the deck document
+            const deckDocument = await vscode.workspace.openTextDocument(deckUri);
+            await conductor?.validateDeck(deckDocument);
         }
     );
 
@@ -355,6 +410,24 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
+    // DA-23: Extract Metadata to Sidecar — scaffold .deck.yaml from active .deck.md
+    const extractMetadataToSidecarDisposable = vscode.commands.registerCommand(
+        'deckpilot.extractMetadataToSidecar',
+        () => extractMetadataToSidecar()
+    );
+
+    // DA-24: Show Resolved Deck Model — virtual read-only JSON document
+    const deckModelProvider = new DeckModelContentProvider();
+    const deckModelProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
+        'deckpilot-model',
+        deckModelProvider
+    );
+
+    const showResolvedDeckModelDisposable = vscode.commands.registerCommand(
+        'deckpilot.showResolvedDeckModel',
+        () => showResolvedDeckModel(deckModelProvider)
+    );
+
     // Register authoring assistance providers (US4)
     const documentSelector: vscode.DocumentSelector = { language: 'deck-markdown' };
 
@@ -460,6 +533,12 @@ export function activate(context: vscode.ExtensionContext): void {
     envFileWatcher.onDidCreate(refreshDiagnosticsOnEnvChange);
     envFileWatcher.onDidDelete(refreshDiagnosticsOnEnvChange);
 
+    // Watch .deck.yaml sidecar files — re-trigger deck-markdown diagnostics on sidecar changes (DA-13)
+    const sidecarFileWatcher = vscode.workspace.createFileSystemWatcher('**/*.deck.yaml');
+    sidecarFileWatcher.onDidChange(refreshDiagnosticsOnEnvChange);
+    sidecarFileWatcher.onDidCreate(refreshDiagnosticsOnEnvChange);
+    sidecarFileWatcher.onDidDelete(refreshDiagnosticsOnEnvChange);
+
     context.subscriptions.push(
         openPresentationDisposable,
         closePresentationDisposable,
@@ -480,6 +559,9 @@ export function activate(context: vscode.ExtensionContext): void {
         toggleRecordingPauseDisposable,
         autoRecordDisposable,
         cancelAutoRecordDisposable,
+        extractMetadataToSidecarDisposable,
+        deckModelProviderDisposable,
+        showResolvedDeckModelDisposable,
         completionDisposable,
         hoverDisposable,
         diagnosticCollection,
@@ -487,6 +569,7 @@ export function activate(context: vscode.ExtensionContext): void {
         onOpenDisposable,
         onCloseDisposable,
         envFileWatcher,
+        sidecarFileWatcher,
         { dispose() { diagnosticProvider.dispose(); } }
     );
 }

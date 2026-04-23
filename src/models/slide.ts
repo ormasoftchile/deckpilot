@@ -4,6 +4,7 @@
  */
 
 import { Action, ActionDefinition } from './action';
+import type { SidecarAction } from './sidecar';
 
 /**
  * YAML frontmatter structure for a slide
@@ -43,9 +44,9 @@ export interface InteractiveElement {
   position: ContentPosition;
   /** Original markdown link text */
   rawLink: string;
-  /** Whether this element came from an inline link or a fenced block.
+  /** Whether this element came from an inline link, a fenced block, or a sidecar action.
    *  Defaults to 'inline' for backward compatibility. */
-  source?: 'inline' | 'block';
+  source?: 'inline' | 'block' | 'sidecar';
   /** Fragment animation for this element.
    *  - `true` or `'fade'` = default fade animation
    *  - A string like `'slide-up'` = specific animation type
@@ -61,6 +62,15 @@ export interface InteractiveElement {
 export interface Slide {
   /** Zero-based position in deck */
   index: number;
+  /** Stable author-assigned identifier for sidecar YAML references (DA-01) */
+  id?: string;
+  /**
+   * True when `id` was explicitly declared by the author (HTML comment or
+   * frontmatter `id:` field).  False/absent means the ID was derived from a
+   * heading slug or assigned as a positional fallback.  Used by the duplicate
+   * ID validator (DA-11) to distinguish author intent from auto-generation.
+   */
+  idExplicit?: boolean;
   /** Raw Markdown content (without frontmatter) */
   content: string;
   /** Rendered HTML content */
@@ -86,6 +96,12 @@ export interface Slide {
    * available even though the comments are removed from rendered HTML.
    */
   voiceCues?: Array<{ fragmentIndex?: number; text: string }>;
+  /** Speaker cue strings merged from sidecar (DA-05) */
+  cues?: string[];
+  /** Slide duration hint merged from sidecar, e.g. "2m30s" (DA-05) */
+  duration?: string;
+  /** Actions sourced from sidecar YAML; wired to action registry in DA-07/08 (DA-05) */
+  sidecarActions?: SidecarAction[];
 }
 
 /**

@@ -27,11 +27,37 @@ const vscodeMock = {
     showErrorMessage: () => {},
     showInformationMessage: () => {},
     createOutputChannel: () => ({ appendLine: () => {}, show: () => {}, dispose: () => {} }),
+    createWebviewPanel: (_viewType, _title, _column, _options) => ({
+      webview: {
+        html: '',
+        cspSource: 'vscode-resource:',
+        postMessage: async () => true,
+        onDidReceiveMessage: () => ({ dispose: () => {} }),
+      },
+      title: '',
+      reveal: () => {},
+      dispose: () => {},
+      onDidDispose: (cb) => { cb(); return { dispose: () => {} }; },
+      viewColumn: 2,
+    }),
   },
   env: { shell: '' },
   EventEmitter: class { on() {} off() {} fire() {} },
   Disposable: class { dispose() {} },
   ThemeColor: class { constructor(id) { this.id = id; } },
+  ViewColumn: {
+    One: 1,
+    Two: 2,
+    Three: 3,
+    Four: 4,
+    Five: 5,
+    Six: 6,
+    Seven: 7,
+    Eight: 8,
+    Nine: 9,
+    Active: -1,
+    Beside: -2,
+  },
 };
 
 // Intercept Node's module resolver so any `require('vscode')` or

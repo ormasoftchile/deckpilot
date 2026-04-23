@@ -21,7 +21,11 @@ const VOICE_CUE_REGEX = /<!--\s*voice(?:\[(\d+)\])?:\s*([\s\S]*?)\s*-->/gi;
 
 /**
  * Parse voice-over cues from an array of slides.
- * Priority: HTML comment cues first, then speaker notes as fallback.
+ *
+ * Priority order per the Dual Authoring Model (DA-08):
+ *   1. Inline HTML comment cues  (<!-- voice: --> / <!-- voice[N]: -->)
+ *   2. Sidecar cues              (slide.cues[], merged from .deck.yaml by DA-05)
+ *   3. Speaker notes             (slide.speakerNotes — last resort)
  */
 export function parseCues(slides: Slide[]): VoiceOverCue[] {
   const cues: VoiceOverCue[] = [];
@@ -43,8 +47,27 @@ export function parseCues(slides: Slide[]): VoiceOverCue[] {
     }
     cues.push(...commentCues);
 
-    // If no comment cues found and speaker notes exist, use notes as fallback
-    if (commentCues.length === 0 && slide.speakerNotes) {
+    if (commentCues.length > 0) {
+      // Inline comment cues win — skip lower-priority sources.
+      continue;
+    }
+
+    // Sidecar cues (slide.cues) are slide-level strings; no fragment association.
+    if (slide.cues && slide.cues.length > 0) {
+      for (const text of slide.cues) {
+        if (text.trim().length > 0) {
+          cues.push({
+            slideIndex: slide.index,
+            text: text.trim(),
+            source: 'frontmatter',
+          });
+        }
+      }
+      continue;
+    }
+
+    // Last resort: speaker notes
+    if (slide.speakerNotes) {
       cues.push({
         slideIndex: slide.index,
         text: slide.speakerNotes.trim(),

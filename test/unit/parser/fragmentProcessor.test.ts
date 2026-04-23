@@ -239,8 +239,48 @@ describe('processFragments — group opt-out slide scenario', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Legacy <!-- .fragment --> comments are stripped and no longer drive behaviour
+// pre (code blocks) auto-fragmentation
 // ---------------------------------------------------------------------------
+
+describe('processFragments — pre (code blocks)', () => {
+  it('a bare <pre> becomes a fragment step', () => {
+    const { html, fragmentCount } = processFragments('<pre><code>npm install</code></pre>');
+    expect(fragmentCount).to.equal(1);
+    expect(html).to.contain('<pre class="fragment"');
+    expect(html).to.contain('data-fragment="1"');
+  });
+
+  it('<pre> after a <p> fragments AFTER the paragraph (correct reveal order)', () => {
+    const html = '<h1>Setup</h1>\n<p>Install dependencies before running:</p>\n<pre><code>npm install</code></pre>';
+    const { html: out, fragmentCount } = processFragments(html);
+    // h1 is not a fragment; p=1, pre=2
+    expect(fragmentCount).to.equal(2);
+    expect(out).to.contain('<p class="fragment" data-fragment="1"');
+    expect(out).to.contain('<pre class="fragment" data-fragment="2"');
+  });
+
+  it('<pre> with data attributes works correctly', () => {
+    // markdown-it puts language class on <code>, not <pre>
+    // so <pre> with a data attribute is the realistic edge case
+    const { html } = processFragments('<pre data-lang="bash"><code>npm install</code></pre>');
+    expect(html).to.contain('class="fragment"');
+    expect(html).to.contain('data-fragment="1"');
+    expect(html).to.contain('data-lang="bash"');
+  });
+
+  it('multiple <pre> blocks each become separate fragment steps', () => {
+    const html = '<pre><code>step one</code></pre>\n<pre><code>step two</code></pre>';
+    const { fragmentCount } = processFragments(html);
+    expect(fragmentCount).to.equal(2);
+  });
+
+  it('uses fade animation for <pre> by default', () => {
+    const { html } = processFragments('<pre><code>hello</code></pre>');
+    expect(html).to.contain('data-fragment-animation="fade"');
+  });
+});
+
+
 
 describe('processFragments — legacy comment stripping', () => {
   it('removes <!-- .fragment --> comments from output', () => {
@@ -256,5 +296,42 @@ describe('processFragments — legacy comment stripping', () => {
     const { html: out } = processFragments(html);
     expect(out).to.not.contain('<!--');
     expect(out).to.contain('<p class="fragment"');
+  });
+});
+
+describe('processFragments — details (:::advanced)', () => {
+  it('<details> becomes a single fragment step', () => {
+    const html = '<details class="disclosure-advanced"><summary>Advanced</summary><p>Inner content</p></details>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('<details class="disclosure-advanced fragment"');
+    expect(fragmentCount).to.equal(1);
+  });
+
+  it('inner <p> inside <details> is NOT a separate fragment', () => {
+    const html = '<details class="disclosure-advanced"><summary>Advanced</summary><p>Inner</p></details>';
+    const { html: out } = processFragments(html);
+    expect(out).to.not.contain('<p class="fragment"');
+    expect(out).to.contain('<p>Inner</p>');
+  });
+
+  it('<p> before <details> fragments before the details block', () => {
+    const html = '<p>Intro text</p><details class="disclosure-advanced"><summary>Advanced</summary><p>Inner</p></details>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('<p class="fragment" data-fragment="1"');
+    expect(out).to.contain('<details class="disclosure-advanced fragment" data-fragment="2"');
+    expect(fragmentCount).to.equal(2);
+  });
+
+  it('<div class="step-optional"> becomes a single fragment step', () => {
+    const html = '<div class="step-optional"><span class="optional-badge">Optional</span><p>Run lint</p></div>';
+    const { html: out, fragmentCount } = processFragments(html);
+    expect(out).to.contain('class="step-optional fragment"');
+    expect(fragmentCount).to.equal(1);
+  });
+
+  it('inner <p> inside .step-optional is NOT a separate fragment', () => {
+    const html = '<div class="step-optional"><p>Optional action</p></div>';
+    const { html: out } = processFragments(html);
+    expect(out).to.not.contain('<p class="fragment"');
   });
 });

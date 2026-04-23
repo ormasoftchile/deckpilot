@@ -168,6 +168,17 @@ export interface RecordingMarkerMessage {
 }
 
 /**
+ * Webview confirms that a slide has finished rendering and is visible.
+ * Sent after handleSlideChanged completes DOM updates.
+ */
+export interface SlideRenderedMessage {
+  type: 'slideRendered';
+  payload: {
+    slideIndex: number;
+  };
+}
+
+/**
  * Union of all Webview → Host messages
  */
 export type WebviewToHostMessage =
@@ -186,7 +197,8 @@ export type WebviewToHostMessage =
   | RetryStepMessage
   | ResetToCheckpointMessage
   | FragmentRevealedMessage
-  | RecordingMarkerMessage;
+  | RecordingMarkerMessage
+  | SlideRenderedMessage;
 
 // ============================================================================
 // Extension Host → Webview Messages
@@ -244,6 +256,8 @@ export interface DeckLoadedMessage {
   payload: {
     title?: string;
     author?: string;
+    /** Theme token from deck frontmatter or sidecar deck section (DA-09) */
+    theme?: string;
     totalSlides: number;
     currentSlideIndex: number;
     slideHtml: string;
@@ -255,6 +269,10 @@ export interface DeckLoadedMessage {
     }>;
     /** Environment variable status (Feature 006) */
     envStatus?: EnvStatus;
+    // Note: slide.cues (sidecar voice cues) are NOT forwarded to the Webview
+    // because they belong to the recording pipeline only (parseCues → buildSegments →
+    // VoiceOverScriptGenerator / CaptionsScaffoldGenerator).  The Webview uses
+    // speakerNotes for presenter-view display.
   };
 }
 
@@ -484,6 +502,7 @@ export type ResetToCheckpointPayload = ResetToCheckpointMessage['payload'];
 export type FragmentRevealedPayload = FragmentRevealedMessage['payload'];
 export type RecordingMarkerPayload = RecordingMarkerMessage['payload'];
 export type RecordingStatusPayload = RecordingStatusMessage['payload'];
+export type SlideRenderedPayload = SlideRenderedMessage['payload'];
 
 // ============================================================================
 // Error Codes

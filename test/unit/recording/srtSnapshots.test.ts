@@ -91,9 +91,9 @@ function synthesiseEvents(
   return events;
 }
 
-function buildSrtForDeck(deckPath: string): string {
+async function buildSrtForDeck(deckPath: string): Promise<string> {
   const content = fs.readFileSync(deckPath, 'utf8');
-  const result = parseDeck(content, deckPath);
+  const result = await parseDeck(content, deckPath);
   if (!result.deck) {
     throw new Error(`Failed to parse ${path.basename(deckPath)}: ${result.error}`);
   }
@@ -146,8 +146,8 @@ describe('SRT Snapshots', () => {
     const deckPath = path.join(EXAMPLES_DIR, filename);
     const snapshotPath = path.join(SNAPSHOTS_DIR, `${deckName}.srt`);
 
-    it(`matches snapshot for ${deckName}`, () => {
-      const actual = buildSrtForDeck(deckPath);
+    it(`matches snapshot for ${deckName}`, async () => {
+      const actual = await buildSrtForDeck(deckPath);
 
       if (UPDATE || !fs.existsSync(snapshotPath)) {
         fs.writeFileSync(snapshotPath, actual, 'utf8');

@@ -4,7 +4,8 @@
  * Inline action links (`[label](action:...)`) are already present in `slide.html`
  * because markdown-it renders them as `<a>` tags. Block elements (from ` ```action `
  * fenced code blocks) are stripped during parsing and need to be injected as HTML
- * wherever slide content is sent to the webview.
+ * wherever slide content is sent to the webview. Sidecar elements (source='sidecar')
+ * are appended after all slide content.
  */
 
 import { Slide, InteractiveElement } from '../models/slide';
@@ -121,12 +122,40 @@ function buildButtonHtml(el: InteractiveElement): string {
 }
 
 /**
+ * Build the button HTML for a sidecar-sourced interactive element, injecting
+ * it as a specific fragment step so it appears AFTER all other slide content.
+ */
+function buildSidecarFragmentButtonHtml(el: InteractiveElement, fragmentIndex: number): string {
+  const type = el.action.type;
+  const params = el.action.params ?? {};
+  const simpleParams = Object.entries(params)
+    .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+  const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
+  const escapedLabel = escapeHtml(el.label);
+
+  let preview = '';
+  if (el.showCommand) {
+    const previewText = getCommandPreview(type, params);
+    if (previewText) {
+      preview = `<code class="action-preview">${escapeHtml(previewText)}</code>`;
+    }
+  }
+
+  return `<p class="fragment" data-fragment="${fragmentIndex}" data-fragment-animation="fade"><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${preview}</p>`;
+}
+
+/**
  * Replace `<!--ACTION:id-->` placeholders in slide HTML with rendered
  * action-button links, so buttons appear at their original position in
  * the slide content rather than being appended at the end.
  *
  * If a placeholder has no matching element (e.g. parse error), it is
  * removed from the HTML silently.
+ *
+ * Sidecar-sourced elements (source='sidecar') are appended after all
+ * content — they have no placeholder in the markdown HTML.
  */
 export function injectBlockElements(html: string, slide: Slide): string {
   const blockElements = slide.interactiveElements.filter(el => el.source === 'block');
@@ -137,10 +166,35 @@ export function injectBlockElements(html: string, slide: Slide): string {
   }
 
   // Replace each placeholder; remove unmatched ones (from errored blocks)
-  return html.replace(
+  let result = html.replace(
     /<!--ACTION:(block-\d+-\d+)-->/g,
     (_match, id: string) => buttonMap.get(id) ?? '',
   );
+
+  // Append sidecar-sourced action buttons after all content.
+  // Sidecar elements with fragment=true are injected as the next sequential
+  // fragment steps so they appear LAST in the reveal sequence, after all
+  // explanatory text and code blocks.
+  const sidecarElements = slide.interactiveElements.filter(el => el.source === 'sidecar');
+  if (sidecarElements.length > 0) {
+    // Find the current highest data-fragment index already in the HTML
+    let maxFragment = 0;
+    for (const m of result.matchAll(/data-fragment="(\d+)"/g)) {
+      const n = parseInt(m[1], 10);
+      if (n > maxFragment) { maxFragment = n; }
+    }
+
+    for (const el of sidecarElements) {
+      if (el.fragment !== false) {
+        maxFragment++;
+        result += '\n' + buildSidecarFragmentButtonHtml(el, maxFragment);
+      } else {
+        result += '\n' + buildButtonHtml(el);
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
