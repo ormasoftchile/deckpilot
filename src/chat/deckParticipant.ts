@@ -754,19 +754,27 @@ function isConvertibleMd(fsPath: string): boolean {
  * (VS Code automatically injects the active editor as an implicit reference).
  * If ref.value is a string it is returned directly as inline content.
  */
+/**
+ * Resolve the best matching Markdown reference from a list of chat prompt references.
+ *
+ * Priority order (highest to lowest):
+ *   1. Explicit URI refs  (user typed #file:, ref.range defined, value is Uri/Location)
+ *   2. Explicit string refs (user typed #file:, value is inlined string content)
+ *   3. Implicit URI refs  (VS Code auto-injected active editor, value is Uri)
+ *   4. Implicit string refs (auto-injected, value is inlined string)
+ *
+ * This ordering ensures the user's explicit #file: attachment ALWAYS wins over
+ * whatever VS Code decides to auto-inject, regardless of how VS Code encodes the value.
+ */
 async function resolveMarkdownReference(
   refs: readonly vscode.ChatPromptReference[],
   filter: (path: string) => boolean,
 ): Promise<{ content: string; uri?: vscode.Uri } | undefined> {
-  // Sort: explicit (range defined) before implicit (range undefined)
-  const sorted = [...refs].sort((a, b) => {
-    const aExplicit = a.range !== undefined ? 0 : 1;
-    const bExplicit = b.range !== undefined ? 0 : 1;
-    return aExplicit - bExplicit;
-  });
+  const explicit = refs.filter(r => r.range !== undefined);
+  const implicit = refs.filter(r => r.range === undefined);
 
-  // First pass: URI-based refs (always preferred — they carry a file path)
-  for (const ref of sorted) {
+  // Pass 1: Explicit URI refs
+  for (const ref of explicit) {
     let uri: vscode.Uri | undefined;
     if (ref.value instanceof vscode.Uri) {
       uri = ref.value;
@@ -783,8 +791,33 @@ async function resolveMarkdownReference(
     }
   }
 
-  // Second pass: string refs (inline content — no URI available)
-  for (const ref of sorted) {
+  // Pass 2: Explicit string refs
+  for (const ref of explicit) {
+    if (typeof ref.value === 'string' && ref.value.trim()) {
+      return { content: ref.value };
+    }
+  }
+
+  // Pass 3: Implicit URI refs
+  for (const ref of implicit) {
+    let uri: vscode.Uri | undefined;
+    if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && filter(uri.fsPath)) {
+      try {
+        const data = await vscode.workspace.fs.readFile(uri);
+        return { content: Buffer.from(data).toString('utf-8'), uri };
+      } catch {
+        // ignore read errors, try next
+      }
+    }
+  }
+
+  // Pass 4: Implicit string refs (last resort)
+  for (const ref of implicit) {
     if (typeof ref.value === 'string' && ref.value.trim()) {
       return { content: ref.value };
     }
