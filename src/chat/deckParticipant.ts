@@ -305,11 +305,39 @@ async function handleCreate(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let deckContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    deckContent += chunk;
   }
 
-  stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
+  // Strip accidental wrapping code fences the model may have added
+  deckContent = deckContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  const slug = request.prompt.trim().split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'presentation';
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
+  const defaultUri = ws ? vscode.Uri.joinPath(ws, `${slug}.deck.md`) : undefined;
+
+  const saveUri = await vscode.window.showSaveDialog({
+    defaultUri,
+    filters: { 'Deckpilot Presentation': ['deck.md'] },
+    saveLabel: 'Save Deck',
+  });
+
+  if (saveUri) {
+    await vscode.workspace.fs.writeFile(saveUri, Buffer.from(deckContent, 'utf-8'));
+    await vscode.window.showTextDocument(saveUri, { preview: false });
+    const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
+    stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(saveUri)}\` — **${slideCount} slides**.\n`);
+    stream.anchor(saveUri, 'Open deck file');
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+  } else {
+    // User cancelled the save dialog — fall back to showing in chat
+    stream.markdown(deckContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
+  }
 
   return { command: 'create' };
 }
@@ -476,8 +504,26 @@ async function handleEnrich(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let enrichedContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    enrichedContent += chunk;
+  }
+
+  // Strip accidental wrapping code fences the model may have added
+  enrichedContent = enrichedContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  if (deckUri) {
+    await vscode.workspace.fs.writeFile(deckUri, Buffer.from(enrichedContent, 'utf-8'));
+    await vscode.window.showTextDocument(deckUri, { preview: false });
+    stream.markdown(`✅ Enriched \`${vscode.workspace.asRelativePath(deckUri)}\` — saved to disk.\n`);
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+  } else {
+    // No deckUri tracked — fall back to showing in chat
+    stream.markdown(enrichedContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
   }
 
   return { command: 'enrich' };
