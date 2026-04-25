@@ -495,6 +495,27 @@ async function handleConvert(
   const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt) || /\bsidecar\b/i.test(rawPrompt);
   const wantsZenMode = /\bzen\s*mode\b/i.test(rawPrompt);
 
+  // ── DEBUG: dump every ref VS Code sends ──────────────────────────────────
+  {
+    const lines: string[] = [`**🔍 Debug: ${request.references.length} ref(s) received**\n`];
+    for (const ref of request.references) {
+      const kind = ref.range !== undefined ? 'EXPLICIT' : 'implicit';
+      let desc: string;
+      if (ref.value instanceof vscode.Uri) {
+        desc = `Uri → \`${ref.value.fsPath}\` (passes filter: ${isConvertibleMd(ref.value.fsPath)})`;
+      } else if (ref.value instanceof vscode.Location) {
+        desc = `Location → \`${ref.value.uri.fsPath}\` (passes filter: ${isConvertibleMd(ref.value.uri.fsPath)})`;
+      } else if (typeof ref.value === 'string') {
+        desc = `string (${ref.value.length} chars) → "${ref.value.slice(0, 80).replace(/\n/g, '↵')}…"`;
+      } else {
+        desc = `unknown type: ${typeof ref.value}`;
+      }
+      lines.push(`- **${kind}** \`${ref.id}\`: ${desc}`);
+    }
+    stream.markdown(lines.join('\n') + '\n\n---\n\n');
+  }
+  // ── END DEBUG ─────────────────────────────────────────────────────────────
+
   // Prefer explicit #file references (range defined) over implicit active-editor injection
   let sourceContent = '';
   let sourceUri: vscode.Uri | undefined;
