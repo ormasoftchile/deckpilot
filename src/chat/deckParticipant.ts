@@ -489,6 +489,11 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
+  // Parse meta-preferences from the raw prompt (same approach as handleCreate)
+  const rawPrompt = request.prompt ?? '';
+  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt) || /\bsidecar\b/i.test(rawPrompt);
+  const wantsZenMode = /\bzen\s*mode\b/i.test(rawPrompt);
+
   // Prefer explicit #file references (range defined) over implicit active-editor injection
   let sourceContent = '';
   let sourceUri: vscode.Uri | undefined;
@@ -538,17 +543,22 @@ async function handleConvert(
 
   stream.progress('Converting to deck format...');
 
+  let convertUserMsg =
+    'Convert this Markdown content into a .deck.md presentation:\n\n' +
+    '```markdown\n' + sourceContent + '\n```\n\n' +
+    'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
+    'Start directly with the YAML frontmatter (---). ' +
+    'Split on natural heading boundaries. Add voice cues on every slide. ' +
+    'Convert code references into action links. Add fragments for lists. ' +
+    'Keep the original content and structure but make it presentation-friendly.';
+
+  if (wantsZenMode) {
+    convertUserMsg += '\nThe user wants zen mode — set layout: center on all slides in the deck frontmatter.';
+  }
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
-    vscode.LanguageModelChatMessage.User(
-      'Convert this Markdown content into a .deck.md presentation:\n\n' +
-      '```markdown\n' + sourceContent + '\n```\n\n' +
-      'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
-      'Start directly with the YAML frontmatter (---). ' +
-      'Split on natural heading boundaries. Add voice cues on every slide. ' +
-      'Convert code references into action links. Add fragments for lists. ' +
-      'Keep the original content and structure but make it presentation-friendly.',
-    ),
+    vscode.LanguageModelChatMessage.User(convertUserMsg),
   ];
 
   const response = await model.sendRequest(messages, {}, token);
@@ -576,6 +586,34 @@ async function handleConvert(
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(outputUri, 'Open deck file');
     stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+
+    if (wantsSidecar) {
+      stream.progress('Generating sidecar...');
+      const sidecarMessages = [
+        vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
+        vscode.LanguageModelChatMessage.User(
+          `Here is a .deck.md file:\n\n\`\`\`\n${deckContent}\n\`\`\`\n\n` +
+          'Generate a companion .deck.yaml sidecar file for this deck. ' +
+          'Include a slides array where each entry has an id (matching a <!-- id: slug --> marker you would add to the markdown), ' +
+          'cues (1-2 sentence spoken narration), and estimated duration. ' +
+          'Include a recording section with autoStart: false. ' +
+          'Output ONLY the YAML — no explanations, no code fences.',
+        ),
+      ];
+      const sidecarResponse = await model.sendRequest(sidecarMessages, {}, token);
+      let sidecarContent = '';
+      for await (const chunk of sidecarResponse.text) {
+        sidecarContent += chunk;
+      }
+      sidecarContent = sidecarContent
+        .replace(/^```(?:yaml)?\r?\n/, '')
+        .replace(/\r?\n```\s*$/, '')
+        .trim();
+      const sidecarUri = vscode.Uri.file(outputUri.fsPath.replace(/\.deck\.md$/, '.deck.yaml'));
+      await vscode.workspace.fs.writeFile(sidecarUri, Buffer.from(sidecarContent, 'utf-8'));
+      stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
+      stream.anchor(sidecarUri, 'Open sidecar file');
+    }
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
