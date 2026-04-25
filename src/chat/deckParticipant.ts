@@ -148,7 +148,36 @@ voice-over script and SRT captions when recording mode is used.
 - Include file.open actions for config files and code
 - Include editor.highlight for key code sections
 - Use fragments to reveal steps progressively
-- Write voice cues as natural spoken narration`;
+- Write voice cues as natural spoken narration
+
+### Sidecar File (.deck.yaml)
+A companion file (same name, .deck.yaml extension) stores operational metadata separately from content:
+\`\`\`yaml
+deck:
+  title: Presentation Title
+  theme: dark          # optional: light | dark
+
+slides:
+  - id: slide-slug    # matches <!-- id: slide-slug --> in the .deck.md
+    cues:
+      - "What to say when this slide appears"
+    duration: 10s
+    actions:
+      - type: terminal.run
+        cmd: npm start
+    notes: "Presenter reminder (optional)"
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
+  srtFormat: srt
+\`\`\`
+
+To link slides to sidecar entries, add \`<!-- id: slug -->\` comments in the markdown, one per slide, right after the \`---\` slide separator.`;
 
 /**
  * URI of the last .md file that had editor focus.
@@ -292,12 +321,45 @@ async function handleCreate(
 ): Promise<DeckChatResult> {
   stream.progress('Designing your presentation...');
 
+  // --- parse meta-preferences from prompt ---
+  const rawPrompt = request.prompt;
+
+  // Filename: "name it foo.deck.md" / "call it foo" / "save as foo.deck.md"
+  const filenameMatch =
+    rawPrompt.match(/\bname\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bcall\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bsave\s+(?:as|to)\s+([\w.\-]+(?:\.deck\.md)?)/i);
+  let userFilename = filenameMatch?.[1];
+  if (userFilename && !userFilename.endsWith('.deck.md')) {
+    userFilename += '.deck.md';
+  }
+
+  // Feature preferences
+  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt);
+  const wantsZenMode = /\bzen\s+mode\b/i.test(rawPrompt);
+
+  // Strip meta-instructions — leave only the content description
+  const contentDescription = rawPrompt
+    .replace(/\bname\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bcall\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bsave\s+(?:as|to)\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bwith\s+sidecar\b/gi, '')
+    .replace(/\bwithout\s+sidecar\b/gi, '')
+    .replace(/\bzen\s+mode\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const zenModeInstruction = wantsZenMode
+    ? 'Include `options:\\n  zenMode: true` in the deck frontmatter. '
+    : '';
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
     vscode.LanguageModelChatMessage.User(
-      `Create a complete .deck.md presentation based on this description:\n\n${request.prompt}\n\n` +
+      `Create a complete .deck.md presentation based on this description:\n\n${contentDescription}\n\n` +
       'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
       'Start directly with the YAML frontmatter (---). ' +
+      zenModeInstruction +
       'Include voice cues on every slide. Use fragments where they help build up ideas. ' +
       'Use action links and YAML action blocks for any demonstrations.',
     ),
@@ -316,9 +378,14 @@ async function handleCreate(
     .replace(/\r?\n```\s*$/, '')
     .trim();
 
-  const slug = request.prompt.trim().split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'presentation';
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
-  const defaultUri = ws ? vscode.Uri.joinPath(ws, `${slug}.deck.md`) : undefined;
+  let defaultUri: vscode.Uri | undefined;
+  if (userFilename) {
+    defaultUri = ws ? vscode.Uri.joinPath(ws, userFilename) : vscode.Uri.file(userFilename);
+  } else {
+    const slug = contentDescription.trim().split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'presentation';
+    defaultUri = ws ? vscode.Uri.joinPath(ws, `${slug}.deck.md`) : undefined;
+  }
 
   const saveUri = await vscode.window.showSaveDialog({
     defaultUri,
@@ -333,6 +400,34 @@ async function handleCreate(
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(saveUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(saveUri, 'Open deck file');
     stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+
+    if (wantsSidecar) {
+      stream.progress('Generating sidecar...');
+      const sidecarMessages = [
+        vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
+        vscode.LanguageModelChatMessage.User(
+          `Here is a .deck.md file:\n\n\`\`\`\n${deckContent}\n\`\`\`\n\n` +
+          'Generate a companion .deck.yaml sidecar file for this deck. ' +
+          'Include a slides array where each entry has an id (matching a <!-- id: slug --> marker you would add to the markdown), ' +
+          'cues (1-2 sentence spoken narration), and estimated duration. ' +
+          'Include a recording section with autoStart: false. ' +
+          'Output ONLY the YAML — no explanations, no code fences.',
+        ),
+      ];
+      const sidecarResponse = await model.sendRequest(sidecarMessages, {}, token);
+      let sidecarContent = '';
+      for await (const chunk of sidecarResponse.text) {
+        sidecarContent += chunk;
+      }
+      sidecarContent = sidecarContent
+        .replace(/^```(?:yaml)?\r?\n/, '')
+        .replace(/\r?\n```\s*$/, '')
+        .trim();
+      const sidecarUri = vscode.Uri.file(saveUri.fsPath.replace(/\.deck\.md$/, '.deck.yaml'));
+      await vscode.workspace.fs.writeFile(sidecarUri, Buffer.from(sidecarContent, 'utf-8'));
+      stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
+      stream.anchor(sidecarUri, 'Open sidecar file');
+    }
   } else {
     // User cancelled the save dialog — fall back to showing in chat
     stream.markdown(deckContent);
