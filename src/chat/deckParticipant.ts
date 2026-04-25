@@ -324,42 +324,36 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get content from referenced file — handle Uri and Location (implicit editor ref)
+  // Prefer explicit #file references (range defined) over implicit active-editor injection
   let sourceContent = '';
   let sourceUri: vscode.Uri | undefined;
-  for (const ref of request.references) {
-    let uri: vscode.Uri | undefined;
-    if (ref.value instanceof vscode.Uri) {
-      uri = ref.value;
-    } else if (ref.value instanceof vscode.Location) {
-      uri = ref.value.uri;
-    }
-    if (uri && uri.scheme === 'file' && uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.deck.md')) {
-      try {
-        const data = await vscode.workspace.fs.readFile(uri);
-        sourceContent = Buffer.from(data).toString('utf-8');
-        sourceUri = uri;
-        stream.progress(`Converting ${vscode.workspace.asRelativePath(uri)}...`);
-        break;
-      } catch {
-        // ignore read errors
-      }
-    }
-  }
 
-  // Fall back to the active tab — reliable even after chat panel steals focus
-  if (!sourceContent) {
+  const resolved = await resolveMarkdownReference(
+    request.references,
+    p => p.endsWith('.md') && !p.endsWith('.deck.md'),
+  );
+
+  if (resolved) {
+    sourceContent = resolved.content;
+    sourceUri = resolved.uri;
+  } else {
+    // Fall back to the active tab — reliable even after chat panel steals focus
     const fallbackUri = resolveActiveMdUri();
     if (fallbackUri) {
       try {
         const data = await vscode.workspace.fs.readFile(fallbackUri);
         sourceContent = Buffer.from(data).toString('utf-8');
         sourceUri = fallbackUri;
-        stream.progress(`Converting ${vscode.workspace.asRelativePath(fallbackUri)}...`);
       } catch {
         // file may have been closed/deleted
       }
     }
+  }
+
+  if (sourceUri) {
+    const label = vscode.workspace.asRelativePath(sourceUri);
+    stream.progress(`Converting ${label}...`);
+    stream.markdown(`📄 Converting **${label}**\n\n`);
   }
 
   if (!sourceContent) {
@@ -429,33 +423,35 @@ async function handleEnrich(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get deck content from referenced file or active editor
+  // Prefer explicit #file references (range defined) over implicit active-editor injection
   let deckContent = '';
-  for (const ref of request.references) {
-    if (ref.value instanceof vscode.Uri) {
-      try {
-        const data = await vscode.workspace.fs.readFile(ref.value);
-        deckContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Enriching ${ref.value.fsPath}...`);
-      } catch {
-        // ignore
-      }
-    } else if (typeof ref.value === 'string') {
-      deckContent = ref.value;
-    }
-  }
+  let deckUri: vscode.Uri | undefined;
 
-  if (!deckContent) {
+  const resolved = await resolveMarkdownReference(
+    request.references,
+    p => p.endsWith('.deck.md'),
+  );
+
+  if (resolved) {
+    deckContent = resolved.content;
+    deckUri = resolved.uri;
+  } else {
     const fallbackUri = resolveActiveDeckUri();
     if (fallbackUri) {
       try {
         const data = await vscode.workspace.fs.readFile(fallbackUri);
         deckContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Enriching ${vscode.workspace.asRelativePath(fallbackUri)}...`);
+        deckUri = fallbackUri;
       } catch {
         // ignore
       }
     }
+  }
+
+  if (deckUri) {
+    const label = vscode.workspace.asRelativePath(deckUri);
+    stream.progress(`Enriching ${label}...`);
+    stream.markdown(`📄 Enriching **${label}**\n\n`);
   }
 
   if (!deckContent) {
@@ -515,4 +511,44 @@ async function handleFreeform(
 
 function isConvertibleMd(fsPath: string): boolean {
   return fsPath.endsWith('.md') && !fsPath.endsWith('.deck.md');
+}
+
+/**
+ * Resolve the best matching Markdown reference from a list of chat prompt references.
+ *
+ * Explicit references (ref.range !== undefined) are tried before implicit ones
+ * (VS Code automatically injects the active editor as an implicit reference).
+ * If ref.value is a string it is returned directly as inline content.
+ */
+async function resolveMarkdownReference(
+  refs: readonly vscode.ChatPromptReference[],
+  filter: (path: string) => boolean,
+): Promise<{ content: string; uri?: vscode.Uri } | undefined> {
+  // Sort: explicit (range defined) before implicit (range undefined)
+  const sorted = [...refs].sort((a, b) => {
+    const aExplicit = a.range !== undefined ? 0 : 1;
+    const bExplicit = b.range !== undefined ? 0 : 1;
+    return aExplicit - bExplicit;
+  });
+
+  for (const ref of sorted) {
+    if (typeof ref.value === 'string' && ref.value.trim()) {
+      return { content: ref.value };
+    }
+    let uri: vscode.Uri | undefined;
+    if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && filter(uri.fsPath)) {
+      try {
+        const data = await vscode.workspace.fs.readFile(uri);
+        return { content: Buffer.from(data).toString('utf-8'), uri };
+      } catch {
+        // ignore read errors, try next
+      }
+    }
+  }
+  return undefined;
 }
