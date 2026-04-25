@@ -369,9 +369,9 @@ async function handleCreate(
 
   // Filename: "name it foo.deck.md" / "call it foo" / "save as foo.deck.md"
   const filenameMatch =
-    rawPrompt.match(/\bname\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
-    rawPrompt.match(/\bcall\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
-    rawPrompt.match(/\bsave\s+(?:as|to)\s+([\w.\-]+(?:\.deck\.md)?)/i);
+    rawPrompt.match(/\bname\s+it\s+([\w.-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bcall\s+it\s+([\w.-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bsave\s+(?:as|to)\s+([\w.-]+(?:\.deck\.md)?)/i);
   let userFilename = filenameMatch?.[1];
   if (userFilename && !userFilename.endsWith('.deck.md')) {
     userFilename += '.deck.md';
@@ -383,9 +383,9 @@ async function handleCreate(
 
   // Strip meta-instructions — leave only the content description
   const contentDescription = rawPrompt
-    .replace(/\bname\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
-    .replace(/\bcall\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
-    .replace(/\bsave\s+(?:as|to)\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bname\s+it\s+[\w.-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bcall\s+it\s+[\w.-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bsave\s+(?:as|to)\s+[\w.-]+(?:\.deck\.md)?/gi, '')
     .replace(/\bwith\s+sidecar\b/gi, '')
     .replace(/\bwithout\s+sidecar\b/gi, '')
     .replace(/\bzen\s+mode\b/gi, '')
