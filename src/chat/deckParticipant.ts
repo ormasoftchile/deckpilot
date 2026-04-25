@@ -195,6 +195,7 @@ let lastActiveMdUri: vscode.Uri | undefined;
  * text tab even after a webview/panel opens — this is the reliable source.
  */
 function resolveActiveMdUri(): vscode.Uri | undefined {
+  // 1. Active tab in current editor tab group
   const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
   if (activeTab?.input instanceof vscode.TabInputText) {
     const uri = activeTab.input.uri;
@@ -202,13 +203,32 @@ function resolveActiveMdUri(): vscode.Uri | undefined {
       return uri;
     }
   }
-  return lastActiveMdUri;
+
+  // 2. Last known active .md file (persisted across panel focus changes)
+  if (lastActiveMdUri) {
+    return lastActiveMdUri;
+  }
+
+  // 3. Scan all editor tab groups — find any open convertible .md file
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText) {
+        const uri = tab.input.uri;
+        if (isConvertibleMd(uri.fsPath)) {
+          return uri;
+        }
+      }
+    }
+  }
+
+  return undefined;
 }
 
 /**
  * Best-effort: return the URI of the most recently focused .deck.md file.
  */
 function resolveActiveDeckUri(): vscode.Uri | undefined {
+  // 1. Active tab in current editor tab group
   const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
   if (activeTab?.input instanceof vscode.TabInputText) {
     const uri = activeTab.input.uri;
@@ -216,6 +236,19 @@ function resolveActiveDeckUri(): vscode.Uri | undefined {
       return uri;
     }
   }
+
+  // 2. Scan all editor tab groups — find any open .deck.md file
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText) {
+        const uri = tab.input.uri;
+        if (uri.fsPath.endsWith('.deck.md')) {
+          return uri;
+        }
+      }
+    }
+  }
+
   return undefined;
 }
 
@@ -227,6 +260,15 @@ export function registerDeckParticipant(context: vscode.ExtensionContext): vscod
   const current = vscode.window.activeTextEditor;
   if (current && isConvertibleMd(current.document.uri.fsPath)) {
     lastActiveMdUri = current.document.uri;
+  }
+
+  // Also seed from all currently visible editors (covers case where extension
+  // activates while chat is focused and activeTextEditor is undefined)
+  for (const editor of vscode.window.visibleTextEditors) {
+    if (isConvertibleMd(editor.document.uri.fsPath)) {
+      lastActiveMdUri = editor.document.uri;
+      break;
+    }
   }
 
   context.subscriptions.push(
