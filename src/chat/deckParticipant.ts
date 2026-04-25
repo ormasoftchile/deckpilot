@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 const PARTICIPANT_ID = 'executableTalk.deck';
 
@@ -148,7 +149,36 @@ voice-over script and SRT captions when recording mode is used.
 - Include file.open actions for config files and code
 - Include editor.highlight for key code sections
 - Use fragments to reveal steps progressively
-- Write voice cues as natural spoken narration`;
+- Write voice cues as natural spoken narration
+
+### Sidecar File (.deck.yaml)
+A companion file (same name, .deck.yaml extension) stores operational metadata separately from content:
+\`\`\`yaml
+deck:
+  title: Presentation Title
+  theme: dark          # optional: light | dark
+
+slides:
+  - id: slide-slug    # matches <!-- id: slide-slug --> in the .deck.md
+    cues:
+      - "What to say when this slide appears"
+    duration: 10s
+    actions:
+      - type: terminal.run
+        cmd: npm start
+    notes: "Presenter reminder (optional)"
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
+  srtFormat: srt
+\`\`\`
+
+To link slides to sidecar entries, add \`<!-- id: slug -->\` comments in the markdown, one per slide, right after the \`---\` slide separator.`;
 
 /**
  * URI of the last .md file that had editor focus.
@@ -166,6 +196,7 @@ let lastActiveMdUri: vscode.Uri | undefined;
  * text tab even after a webview/panel opens — this is the reliable source.
  */
 function resolveActiveMdUri(): vscode.Uri | undefined {
+  // 1. Active tab in current editor tab group
   const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
   if (activeTab?.input instanceof vscode.TabInputText) {
     const uri = activeTab.input.uri;
@@ -173,13 +204,32 @@ function resolveActiveMdUri(): vscode.Uri | undefined {
       return uri;
     }
   }
-  return lastActiveMdUri;
+
+  // 2. Last known active .md file (persisted across panel focus changes)
+  if (lastActiveMdUri) {
+    return lastActiveMdUri;
+  }
+
+  // 3. Scan all editor tab groups — find any open convertible .md file
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText) {
+        const uri = tab.input.uri;
+        if (isConvertibleMd(uri.fsPath)) {
+          return uri;
+        }
+      }
+    }
+  }
+
+  return undefined;
 }
 
 /**
  * Best-effort: return the URI of the most recently focused .deck.md file.
  */
 function resolveActiveDeckUri(): vscode.Uri | undefined {
+  // 1. Active tab in current editor tab group
   const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
   if (activeTab?.input instanceof vscode.TabInputText) {
     const uri = activeTab.input.uri;
@@ -187,6 +237,19 @@ function resolveActiveDeckUri(): vscode.Uri | undefined {
       return uri;
     }
   }
+
+  // 2. Scan all editor tab groups — find any open .deck.md file
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText) {
+        const uri = tab.input.uri;
+        if (uri.fsPath.endsWith('.deck.md')) {
+          return uri;
+        }
+      }
+    }
+  }
+
   return undefined;
 }
 
@@ -198,6 +261,15 @@ export function registerDeckParticipant(context: vscode.ExtensionContext): vscod
   const current = vscode.window.activeTextEditor;
   if (current && isConvertibleMd(current.document.uri.fsPath)) {
     lastActiveMdUri = current.document.uri;
+  }
+
+  // Also seed from all currently visible editors (covers case where extension
+  // activates while chat is focused and activeTextEditor is undefined)
+  for (const editor of vscode.window.visibleTextEditors) {
+    if (isConvertibleMd(editor.document.uri.fsPath)) {
+      lastActiveMdUri = editor.document.uri;
+      break;
+    }
   }
 
   context.subscriptions.push(
@@ -292,12 +364,45 @@ async function handleCreate(
 ): Promise<DeckChatResult> {
   stream.progress('Designing your presentation...');
 
+  // --- parse meta-preferences from prompt ---
+  const rawPrompt = request.prompt;
+
+  // Filename: "name it foo.deck.md" / "call it foo" / "save as foo.deck.md"
+  const filenameMatch =
+    rawPrompt.match(/\bname\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bcall\s+it\s+([\w.\-]+(?:\.deck\.md)?)/i) ||
+    rawPrompt.match(/\bsave\s+(?:as|to)\s+([\w.\-]+(?:\.deck\.md)?)/i);
+  let userFilename = filenameMatch?.[1];
+  if (userFilename && !userFilename.endsWith('.deck.md')) {
+    userFilename += '.deck.md';
+  }
+
+  // Feature preferences
+  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt);
+  const wantsZenMode = /\bzen\s+mode\b/i.test(rawPrompt);
+
+  // Strip meta-instructions — leave only the content description
+  const contentDescription = rawPrompt
+    .replace(/\bname\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bcall\s+it\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bsave\s+(?:as|to)\s+[\w.\-]+(?:\.deck\.md)?/gi, '')
+    .replace(/\bwith\s+sidecar\b/gi, '')
+    .replace(/\bwithout\s+sidecar\b/gi, '')
+    .replace(/\bzen\s+mode\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const zenModeInstruction = wantsZenMode
+    ? 'Include `options:\\n  zenMode: true` in the deck frontmatter. '
+    : '';
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
     vscode.LanguageModelChatMessage.User(
-      `Create a complete .deck.md presentation based on this description:\n\n${request.prompt}\n\n` +
+      `Create a complete .deck.md presentation based on this description:\n\n${contentDescription}\n\n` +
       'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
       'Start directly with the YAML frontmatter (---). ' +
+      zenModeInstruction +
       'Include voice cues on every slide. Use fragments where they help build up ideas. ' +
       'Use action links and YAML action blocks for any demonstrations.',
     ),
@@ -305,11 +410,72 @@ async function handleCreate(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let deckContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    deckContent += chunk;
   }
 
-  stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
+  // Strip accidental wrapping code fences the model may have added
+  deckContent = deckContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
+  let defaultUri: vscode.Uri | undefined;
+  if (userFilename) {
+    defaultUri = ws ? vscode.Uri.joinPath(ws, userFilename) : vscode.Uri.file(userFilename);
+  } else {
+    const slug = contentDescription.trim().split(/\s+/).slice(0, 5).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'presentation';
+    defaultUri = ws ? vscode.Uri.joinPath(ws, `${slug}.deck.md`) : undefined;
+  }
+
+  const saveUri = await vscode.window.showSaveDialog({
+    defaultUri,
+    filters: { 'Deckpilot Presentation': ['deck.md'] },
+    saveLabel: 'Save Deck',
+  });
+
+  if (saveUri) {
+    await vscode.workspace.fs.writeFile(saveUri, Buffer.from(deckContent, 'utf-8'));
+    await vscode.window.showTextDocument(saveUri, { preview: false });
+    const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
+    stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(saveUri)}\` — **${slideCount} slides**.\n`);
+    stream.anchor(saveUri, 'Open deck file');
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+
+    if (wantsSidecar) {
+      stream.progress('Generating sidecar...');
+      const sidecarMessages = [
+        vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
+        vscode.LanguageModelChatMessage.User(
+          `Here is a .deck.md file:\n\n\`\`\`\n${deckContent}\n\`\`\`\n\n` +
+          'Generate a companion .deck.yaml sidecar file for this deck. ' +
+          'Include a slides array where each entry has an id (matching a <!-- id: slug --> marker you would add to the markdown), ' +
+          'cues (1-2 sentence spoken narration), and estimated duration. ' +
+          'Include a recording section with autoStart: false. ' +
+          'Output ONLY the YAML — no explanations, no code fences.',
+        ),
+      ];
+      const sidecarResponse = await model.sendRequest(sidecarMessages, {}, token);
+      let sidecarContent = '';
+      for await (const chunk of sidecarResponse.text) {
+        sidecarContent += chunk;
+      }
+      sidecarContent = sidecarContent
+        .replace(/^```(?:yaml)?\r?\n/, '')
+        .replace(/\r?\n```\s*$/, '')
+        .trim();
+      const sidecarUri = vscode.Uri.file(saveUri.fsPath.replace(/\.deck\.md$/, '.deck.yaml'));
+      await vscode.workspace.fs.writeFile(sidecarUri, Buffer.from(sidecarContent, 'utf-8'));
+      stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
+      stream.anchor(sidecarUri, 'Open sidecar file');
+    }
+  } else {
+    // User cancelled the save dialog — fall back to showing in chat
+    stream.markdown(deckContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file and run `Deckpilot: Start Presentation`.*');
+  }
 
   return { command: 'create' };
 }
@@ -324,42 +490,76 @@ async function handleConvert(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get content from referenced file — handle Uri and Location (implicit editor ref)
+  // Parse meta-preferences from the raw prompt (same approach as handleCreate)
+  const rawPrompt = request.prompt ?? '';
+  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt) || /\bsidecar\b/i.test(rawPrompt);
+  const wantsZenMode = /\bzen\s*mode\b/i.test(rawPrompt);
+
+  // ── DEBUG: dump every ref VS Code sends ──────────────────────────────────
+  {
+    const lines: string[] = [`**🔍 Debug: ${request.references.length} ref(s) received**\n`];
+    for (const ref of request.references) {
+      const kind = ref.range !== undefined ? 'EXPLICIT' : 'implicit';
+      let desc: string;
+      if (ref.value instanceof vscode.Uri) {
+        desc = `Uri → \`${ref.value.fsPath}\` (passes filter: ${isConvertibleMd(ref.value.fsPath)})`;
+      } else if (ref.value instanceof vscode.Location) {
+        desc = `Location → \`${ref.value.uri.fsPath}\` (passes filter: ${isConvertibleMd(ref.value.uri.fsPath)})`;
+      } else if (typeof ref.value === 'string') {
+        desc = `string (${ref.value.length} chars) → "${ref.value.slice(0, 80).replace(/\n/g, '↵')}…"`;
+      } else {
+        desc = `unknown type: ${typeof ref.value}`;
+      }
+      lines.push(`- **${kind}** \`${ref.id}\`: ${desc}`);
+    }
+    stream.markdown(lines.join('\n') + '\n\n---\n\n');
+  }
+  // ── END DEBUG ─────────────────────────────────────────────────────────────
+
+  // Prefer explicit #file references (range defined) over implicit active-editor injection
   let sourceContent = '';
   let sourceUri: vscode.Uri | undefined;
-  for (const ref of request.references) {
-    let uri: vscode.Uri | undefined;
-    if (ref.value instanceof vscode.Uri) {
-      uri = ref.value;
-    } else if (ref.value instanceof vscode.Location) {
-      uri = ref.value.uri;
-    }
-    if (uri && uri.scheme === 'file' && uri.fsPath.endsWith('.md') && !uri.fsPath.endsWith('.deck.md')) {
-      try {
-        const data = await vscode.workspace.fs.readFile(uri);
-        sourceContent = Buffer.from(data).toString('utf-8');
-        sourceUri = uri;
-        stream.progress(`Converting ${vscode.workspace.asRelativePath(uri)}...`);
-        break;
-      } catch {
-        // ignore read errors
+
+  const resolved = await resolveMarkdownReference(
+    request.references,
+    isConvertibleMd,
+  );
+
+  if (resolved) {
+    sourceContent = resolved.content;
+    sourceUri = resolved.uri;
+    // If content came from a string ref (no URI), read the active editor's content
+    // from disk so content and URI are always from the SAME file.
+    if (!sourceUri) {
+      const activeUri = resolveActiveMdUri();
+      if (activeUri) {
+        try {
+          const data = await vscode.workspace.fs.readFile(activeUri);
+          sourceContent = Buffer.from(data).toString('utf-8');
+          sourceUri = activeUri;
+        } catch {
+          // keep the string content; no URI → save dialog will prompt
+        }
       }
     }
-  }
-
-  // Fall back to the active tab — reliable even after chat panel steals focus
-  if (!sourceContent) {
+  } else {
+    // Fall back to the active tab — reliable even after chat panel steals focus
     const fallbackUri = resolveActiveMdUri();
     if (fallbackUri) {
       try {
         const data = await vscode.workspace.fs.readFile(fallbackUri);
         sourceContent = Buffer.from(data).toString('utf-8');
         sourceUri = fallbackUri;
-        stream.progress(`Converting ${vscode.workspace.asRelativePath(fallbackUri)}...`);
       } catch {
         // file may have been closed/deleted
       }
     }
+  }
+
+  if (sourceUri) {
+    const label = vscode.workspace.asRelativePath(sourceUri);
+    stream.progress(`Converting ${label}...`);
+    stream.markdown(`📄 Converting **${label}**\n\n`);
   }
 
   if (!sourceContent) {
@@ -372,17 +572,22 @@ async function handleConvert(
 
   stream.progress('Converting to deck format...');
 
+  let convertUserMsg =
+    'Convert this Markdown content into a .deck.md presentation:\n\n' +
+    '```markdown\n' + sourceContent + '\n```\n\n' +
+    'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
+    'Start directly with the YAML frontmatter (---). ' +
+    'Split on natural heading boundaries. Add voice cues on every slide. ' +
+    'Convert code references into action links. Add fragments for lists. ' +
+    'Keep the original content and structure but make it presentation-friendly.';
+
+  if (wantsZenMode) {
+    convertUserMsg += '\nThe user wants zen mode — set layout: center on all slides in the deck frontmatter.';
+  }
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
-    vscode.LanguageModelChatMessage.User(
-      'Convert this Markdown content into a .deck.md presentation:\n\n' +
-      '```markdown\n' + sourceContent + '\n```\n\n' +
-      'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
-      'Start directly with the YAML frontmatter (---). ' +
-      'Split on natural heading boundaries. Add voice cues on every slide. ' +
-      'Convert code references into action links. Add fragments for lists. ' +
-      'Keep the original content and structure but make it presentation-friendly.',
-    ),
+    vscode.LanguageModelChatMessage.User(convertUserMsg),
   ];
 
   const response = await model.sendRequest(messages, {}, token);
@@ -410,6 +615,34 @@ async function handleConvert(
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(outputUri, 'Open deck file');
     stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+
+    if (wantsSidecar) {
+      stream.progress('Generating sidecar...');
+      const sidecarMessages = [
+        vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
+        vscode.LanguageModelChatMessage.User(
+          `Here is a .deck.md file:\n\n\`\`\`\n${deckContent}\n\`\`\`\n\n` +
+          'Generate a companion .deck.yaml sidecar file for this deck. ' +
+          'Include a slides array where each entry has an id (matching a <!-- id: slug --> marker you would add to the markdown), ' +
+          'cues (1-2 sentence spoken narration), and estimated duration. ' +
+          'Include a recording section with autoStart: false. ' +
+          'Output ONLY the YAML — no explanations, no code fences.',
+        ),
+      ];
+      const sidecarResponse = await model.sendRequest(sidecarMessages, {}, token);
+      let sidecarContent = '';
+      for await (const chunk of sidecarResponse.text) {
+        sidecarContent += chunk;
+      }
+      sidecarContent = sidecarContent
+        .replace(/^```(?:yaml)?\r?\n/, '')
+        .replace(/\r?\n```\s*$/, '')
+        .trim();
+      const sidecarUri = vscode.Uri.file(outputUri.fsPath.replace(/\.deck\.md$/, '.deck.yaml'));
+      await vscode.workspace.fs.writeFile(sidecarUri, Buffer.from(sidecarContent, 'utf-8'));
+      stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
+      stream.anchor(sidecarUri, 'Open sidecar file');
+    }
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
@@ -429,33 +662,41 @@ async function handleEnrich(
   model: vscode.LanguageModelChat,
   token: vscode.CancellationToken,
 ): Promise<DeckChatResult> {
-  // Try to get deck content from referenced file or active editor
+  // Prefer explicit #file references (range defined) over implicit active-editor injection
   let deckContent = '';
-  for (const ref of request.references) {
-    if (ref.value instanceof vscode.Uri) {
-      try {
-        const data = await vscode.workspace.fs.readFile(ref.value);
-        deckContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Enriching ${ref.value.fsPath}...`);
-      } catch {
-        // ignore
-      }
-    } else if (typeof ref.value === 'string') {
-      deckContent = ref.value;
-    }
-  }
+  let deckUri: vscode.Uri | undefined;
 
-  if (!deckContent) {
+  const resolved = await resolveMarkdownReference(
+    request.references,
+    p => p.endsWith('.deck.md'),
+  );
+
+  if (resolved) {
+    deckContent = resolved.content;
+    deckUri = resolved.uri;
+    if (!deckUri) {
+      const activeUri = resolveActiveDeckUri();
+      if (activeUri) {
+        deckUri = activeUri;
+      }
+    }
+  } else {
     const fallbackUri = resolveActiveDeckUri();
     if (fallbackUri) {
       try {
         const data = await vscode.workspace.fs.readFile(fallbackUri);
         deckContent = Buffer.from(data).toString('utf-8');
-        stream.progress(`Enriching ${vscode.workspace.asRelativePath(fallbackUri)}...`);
+        deckUri = fallbackUri;
       } catch {
         // ignore
       }
     }
+  }
+
+  if (deckUri) {
+    const label = vscode.workspace.asRelativePath(deckUri);
+    stream.progress(`Enriching ${label}...`);
+    stream.markdown(`📄 Enriching **${label}**\n\n`);
   }
 
   if (!deckContent) {
@@ -480,8 +721,26 @@ async function handleEnrich(
 
   const response = await model.sendRequest(messages, {}, token);
 
+  let enrichedContent = '';
   for await (const chunk of response.text) {
-    stream.markdown(chunk);
+    enrichedContent += chunk;
+  }
+
+  // Strip accidental wrapping code fences the model may have added
+  enrichedContent = enrichedContent
+    .replace(/^```(?:markdown|deck-markdown|yaml|md)?\r?\n/, '')
+    .replace(/\r?\n```\s*$/, '')
+    .trim();
+
+  if (deckUri) {
+    await vscode.workspace.fs.writeFile(deckUri, Buffer.from(enrichedContent, 'utf-8'));
+    await vscode.window.showTextDocument(deckUri, { preview: false });
+    stream.markdown(`✅ Enriched \`${vscode.workspace.asRelativePath(deckUri)}\` — saved to disk.\n`);
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+  } else {
+    // No deckUri tracked — fall back to showing in chat
+    stream.markdown(enrichedContent);
+    stream.markdown('\n\n---\n*Save this as a `.deck.md` file.*');
   }
 
   return { command: 'enrich' };
@@ -513,6 +772,96 @@ async function handleFreeform(
   return {};
 }
 
+/** Directories that contain framework/config files — never valid source content. */
+const FRAMEWORK_PATH_SEGMENTS = [
+  `${path.sep}.squad${path.sep}`,
+  `${path.sep}.github${path.sep}agents${path.sep}`,
+  `${path.sep}.copilot${path.sep}`,
+  `${path.sep}node_modules${path.sep}`,
+];
+
 function isConvertibleMd(fsPath: string): boolean {
-  return fsPath.endsWith('.md') && !fsPath.endsWith('.deck.md');
+  if (!fsPath.endsWith('.md') || fsPath.endsWith('.deck.md')) {
+    return false;
+  }
+  return !FRAMEWORK_PATH_SEGMENTS.some(seg => fsPath.includes(seg));
+}
+
+/**
+ * Resolve the best matching Markdown reference from a list of chat prompt references.
+ *
+ * Explicit references (ref.range !== undefined) are tried before implicit ones
+ * (VS Code automatically injects the active editor as an implicit reference).
+ * If ref.value is a string it is returned directly as inline content.
+ */
+/**
+ * Resolve the best matching Markdown reference from a list of chat prompt references.
+ *
+ * Priority order (highest to lowest):
+ *   1. Explicit URI refs  (user typed #file:, ref.range defined, value is Uri/Location)
+ *   2. Explicit string refs (user typed #file:, value is inlined string content)
+ *   3. Implicit URI refs  (VS Code auto-injected active editor, value is Uri)
+ *   4. Implicit string refs (auto-injected, value is inlined string)
+ *
+ * This ordering ensures the user's explicit #file: attachment ALWAYS wins over
+ * whatever VS Code decides to auto-inject, regardless of how VS Code encodes the value.
+ */
+async function resolveMarkdownReference(
+  refs: readonly vscode.ChatPromptReference[],
+  filter: (path: string) => boolean,
+): Promise<{ content: string; uri?: vscode.Uri } | undefined> {
+  const explicit = refs.filter(r => r.range !== undefined);
+  const implicit = refs.filter(r => r.range === undefined);
+
+  // Pass 1: Explicit URI refs
+  for (const ref of explicit) {
+    let uri: vscode.Uri | undefined;
+    if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && filter(uri.fsPath)) {
+      try {
+        const data = await vscode.workspace.fs.readFile(uri);
+        return { content: Buffer.from(data).toString('utf-8'), uri };
+      } catch {
+        // ignore read errors, try next
+      }
+    }
+  }
+
+  // Pass 2: Explicit string refs
+  for (const ref of explicit) {
+    if (typeof ref.value === 'string' && ref.value.trim()) {
+      return { content: ref.value };
+    }
+  }
+
+  // Pass 3: Implicit URI refs
+  for (const ref of implicit) {
+    let uri: vscode.Uri | undefined;
+    if (ref.value instanceof vscode.Uri) {
+      uri = ref.value;
+    } else if (ref.value instanceof vscode.Location) {
+      uri = ref.value.uri;
+    }
+    if (uri && uri.scheme === 'file' && filter(uri.fsPath)) {
+      try {
+        const data = await vscode.workspace.fs.readFile(uri);
+        return { content: Buffer.from(data).toString('utf-8'), uri };
+      } catch {
+        // ignore read errors, try next
+      }
+    }
+  }
+
+  // Pass 4: Implicit string refs (last resort)
+  for (const ref of implicit) {
+    if (typeof ref.value === 'string' && ref.value.trim()) {
+      return { content: ref.value };
+    }
+  }
+
+  return undefined;
 }
