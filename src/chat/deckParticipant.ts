@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 const PARTICIPANT_ID = 'executableTalk.deck';
 
@@ -500,17 +501,24 @@ async function handleConvert(
 
   const resolved = await resolveMarkdownReference(
     request.references,
-    p => p.endsWith('.md') && !p.endsWith('.deck.md'),
+    isConvertibleMd,
   );
 
   if (resolved) {
     sourceContent = resolved.content;
     sourceUri = resolved.uri;
-    // If content came from a string ref (no URI), try active editor as URI
+    // If content came from a string ref (no URI), read the active editor's content
+    // from disk so content and URI are always from the SAME file.
     if (!sourceUri) {
       const activeUri = resolveActiveMdUri();
       if (activeUri) {
-        sourceUri = activeUri;
+        try {
+          const data = await vscode.workspace.fs.readFile(activeUri);
+          sourceContent = Buffer.from(data).toString('utf-8');
+          sourceUri = activeUri;
+        } catch {
+          // keep the string content; no URI → save dialog will prompt
+        }
       }
     }
   } else {
@@ -743,8 +751,19 @@ async function handleFreeform(
   return {};
 }
 
+/** Directories that contain framework/config files — never valid source content. */
+const FRAMEWORK_PATH_SEGMENTS = [
+  `${path.sep}.squad${path.sep}`,
+  `${path.sep}.github${path.sep}agents${path.sep}`,
+  `${path.sep}.copilot${path.sep}`,
+  `${path.sep}node_modules${path.sep}`,
+];
+
 function isConvertibleMd(fsPath: string): boolean {
-  return fsPath.endsWith('.md') && !fsPath.endsWith('.deck.md');
+  if (!fsPath.endsWith('.md') || fsPath.endsWith('.deck.md')) {
+    return false;
+  }
+  return !FRAMEWORK_PATH_SEGMENTS.some(seg => fsPath.includes(seg));
 }
 
 /**
