@@ -459,6 +459,13 @@ async function handleConvert(
   if (resolved) {
     sourceContent = resolved.content;
     sourceUri = resolved.uri;
+    // If content came from a string ref (no URI), try active editor as URI
+    if (!sourceUri) {
+      const activeUri = resolveActiveMdUri();
+      if (activeUri) {
+        sourceUri = activeUri;
+      }
+    }
   } else {
     // Fall back to the active tab — reliable even after chat panel steals focus
     const fallbackUri = resolveActiveMdUri();
@@ -558,6 +565,12 @@ async function handleEnrich(
   if (resolved) {
     deckContent = resolved.content;
     deckUri = resolved.uri;
+    if (!deckUri) {
+      const activeUri = resolveActiveDeckUri();
+      if (activeUri) {
+        deckUri = activeUri;
+      }
+    }
   } else {
     const fallbackUri = resolveActiveDeckUri();
     if (fallbackUri) {
@@ -672,10 +685,8 @@ async function resolveMarkdownReference(
     return aExplicit - bExplicit;
   });
 
+  // First pass: URI-based refs (always preferred — they carry a file path)
   for (const ref of sorted) {
-    if (typeof ref.value === 'string' && ref.value.trim()) {
-      return { content: ref.value };
-    }
     let uri: vscode.Uri | undefined;
     if (ref.value instanceof vscode.Uri) {
       uri = ref.value;
@@ -691,5 +702,13 @@ async function resolveMarkdownReference(
       }
     }
   }
+
+  // Second pass: string refs (inline content — no URI available)
+  for (const ref of sorted) {
+    if (typeof ref.value === 'string' && ref.value.trim()) {
+      return { content: ref.value };
+    }
+  }
+
   return undefined;
 }
