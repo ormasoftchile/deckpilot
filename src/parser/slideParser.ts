@@ -181,6 +181,20 @@ function parseSlideContent(index: number, rawContent: string): Slide {
     } catch {
       // Not valid YAML — treat as regular content
     }
+  } else {
+    // Step 1b: Handle the common LLM-generated pattern where a notes: line
+    // appears at the start of slide content WITHOUT a closing --- fence.
+    // Example (LLM output):
+    //   notes: Speaker reminder text
+    //
+    //   <!-- voice: ... -->
+    //   # Slide Title
+    // The notes value is extracted and stripped; the rest becomes slide content.
+    const extracted = extractLeadingNotesLine(rawContent);
+    if (extracted.notes !== undefined) {
+      frontmatter = { notes: extracted.notes };
+      content = extracted.rest;
+    }
   }
   
   // Step 1.5: Extract checkpoint before any rendering
@@ -373,8 +387,31 @@ function looksLikeBareYaml(raw: string): boolean {
 }
 
 /**
- * Merge two frontmatter objects, with `override` taking precedence.
+ * Extract a leading `notes: <value>` line from raw slide content.
+ * Handles the common LLM error where a notes block is generated without
+ * a closing --- fence, so the notes text lands in the slide body.
+ * Returns { notes, rest } if the very first non-empty line is `notes: …`
+ * followed (after optional blank lines) by markdown content.
+ * Returns { rest: raw } unchanged if the pattern is not found.
  */
+function extractLeadingNotesLine(raw: string): { notes?: string; rest: string } {
+  const trimmed = raw.trimStart();
+  const firstLineMatch = trimmed.match(/^notes:\s*(.+?)(\r?\n|$)/);
+  if (!firstLineMatch) {
+    return { rest: raw };
+  }
+  const notesValue = firstLineMatch[1].trim();
+  // Everything after the notes line
+  const afterNotesLine = trimmed.slice(firstLineMatch[0].length);
+  // Only treat as a notes extraction if there is actual slide content after it
+  // (otherwise looksLikeBareYaml would have caught the pure-YAML case already)
+  if (afterNotesLine.trim().length === 0) {
+    return { rest: raw };
+  }
+  return { notes: notesValue, rest: afterNotesLine.trimStart() };
+}
+
+
 function mergeFrontmatter(
   base: SlideFrontmatter | undefined,
   override: SlideFrontmatter | undefined,

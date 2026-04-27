@@ -37,7 +37,8 @@ options:
 Slides are separated by \`---\` on its own line (horizontal rule).
 
 ### Speaker Notes
-Notes go in a frontmatter block before the slide content:
+Notes go in a frontmatter block **immediately before** the slide content.
+The block requires BOTH an opening AND a closing \`---\`:
 \`\`\`
 ---
 notes: These are speaker notes for the next slide.
@@ -46,6 +47,11 @@ notes: These are speaker notes for the next slide.
 # Slide Title
 \`\`\`
 The notes block merges into the following slide automatically.
+Notes are **never shown to the audience** — they only appear in the presenter view.
+
+⚠️ IMPORTANT: The closing \`---\` after \`notes:\` is required. Without it, the
+notes text will appear as visible content in the slide. Always use the full
+open-notes-close pattern shown above.
 
 ### Action Links (inline)
 \`[Label](action:type?param=value)\`
@@ -125,7 +131,7 @@ voice-over script and SRT captions when recording mode is used.
 3. Use fragments to build up complex ideas step by step
 4. Add action links for live demonstrations — don't just describe, show
 5. Use voice cues on every slide — they drive the narration script
-6. Use speaker notes for presenter reminders (not shown to audience)
+6. Use speaker notes for presenter reminders — always use the \`---notes:---\` block format; never embed notes as visible slide text
 7. End with a summary or closing slide
 8. Terminal commands should use cross-platform YAML blocks when possible
 9. Use \`basePath: ..\` when the deck is in a subdirectory but references root files

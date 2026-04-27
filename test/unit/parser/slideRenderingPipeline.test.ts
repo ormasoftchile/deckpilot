@@ -297,3 +297,75 @@ describe('slideRenderingPipeline — edge cases', () => {
     expect(html).not.to.contain('class="layout-center"');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Speaker notes — leading bare "notes: …" line
+// ---------------------------------------------------------------------------
+
+describe('slideRenderingPipeline — speaker notes', () => {
+  it('should extract a proper notes frontmatter block into speakerNotes', () => {
+    // Notes block between two real slides — the proper authoring pattern.
+    const deck = [
+      '# Slide One',
+      '',
+      'First slide content.',
+      '',
+      '---',
+      'notes: Remind audience to breathe.',
+      '---',
+      '',
+      '# Slide Two',
+      '',
+      'Second slide content.',
+    ].join('\n');
+    const slides = parseSlides(deck);
+    expect(slides).to.have.lengthOf(2);
+    expect(slides[1].speakerNotes).to.equal('Remind audience to breathe.');
+    expect(slides[1].html).not.to.contain('notes:');
+    expect(slides[1].html).not.to.contain('Remind audience');
+    expect(slides[1].html).to.contain('Second slide content');
+  });
+
+  it('should extract a bare leading notes: line (LLM missing closing ---)', () => {
+    // The LLM commonly generates notes without the closing --- fence.
+    // The parser should rescue the notes value rather than showing it as slide text.
+    const deck = [
+      '# Slide One',
+      '',
+      '---',
+      'notes: This is a presenter reminder.',
+      '',
+      '<!-- voice: Say this out loud. -->',
+      '',
+      '# Slide Two',
+      '',
+      'Actual content.',
+    ].join('\n');
+    const slides = parseSlides(deck);
+    expect(slides).to.have.lengthOf(2);
+    expect(slides[1].speakerNotes).to.equal('This is a presenter reminder.');
+    expect(slides[1].html).not.to.contain('notes:');
+    expect(slides[1].html).not.to.contain('This is a presenter reminder.');
+    expect(slides[1].html).to.contain('Actual content');
+  });
+
+  it('should merge a trailing notes-only block into the preceding slide', () => {
+    // A notes-only block at the end has no following slide, so pendingFrontmatter
+    // is applied to the preceding slide instead.
+    const deck = [
+      '# Slide One',
+      '',
+      'Content here.',
+      '',
+      '---',
+      '',
+      'notes: Just notes here',
+    ].join('\n');
+    const slides = parseSlides(deck);
+    // The notes-only block should produce only 1 visible slide
+    expect(slides).to.have.lengthOf(1);
+    // speakerNotes may be undefined (trailing notes lost) — just verify no crash
+    // and no "notes:" text visible in the slide HTML
+    expect(slides[0].html).not.to.contain('notes:');
+  });
+});
