@@ -442,7 +442,6 @@ async function handleCreate(
     const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(saveUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(saveUri, 'Open deck file');
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
 
     if (wantsSidecar) {
       stream.progress('Generating sidecar...');
@@ -471,6 +470,8 @@ async function handleCreate(
       stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
+
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
   } else {
     // User cancelled the save dialog — fall back to showing in chat
     stream.markdown(deckContent);
@@ -614,7 +615,6 @@ async function handleConvert(
     const slideCount = (deckContent.match(/^---$/gm) ?? []).length + 1;
     stream.markdown(`✅ Created \`${vscode.workspace.asRelativePath(outputUri)}\` — **${slideCount} slides**.\n`);
     stream.anchor(outputUri, 'Open deck file');
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
 
     if (wantsSidecar) {
       stream.progress('Generating sidecar...');
@@ -643,6 +643,8 @@ async function handleConvert(
       stream.markdown(`✅ Created sidecar \`${vscode.workspace.asRelativePath(sidecarUri)}\`.\n`);
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
+
+    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
