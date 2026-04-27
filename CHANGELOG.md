@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README now clarifies that marketplace/package identifiers still use `executable-talk` for compatibility after the Deckpilot rename
 - Release pipeline trigger note: patch release requested via `[version:patch]` commit token
 
+### Fixed
+
+- **Speaker notes no longer bleed into slide content**: The parser now rescues notes from LLM-generated
+  decks where the closing `---` fence is missing. Previously `notes: text` appeared as a visible
+  paragraph in the audience view; it now routes correctly to `speakerNotes` and shows only in the
+  Presenter View panel.
+
+- **`@deck` system prompt tightened**: Speaker notes format documentation now includes an explicit
+  warning that the closing `---` is required, reducing the chance of malformed LLM output.
+
+- **Start Presentation button delayed until sidecar is ready**: In `/create` and `/convert`, the
+  button now appears only after sidecar generation completes, not before.
+
 ## [0.7.0] - 2026-04-10
 
 ### Added
