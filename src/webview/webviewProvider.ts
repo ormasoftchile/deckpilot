@@ -91,7 +91,7 @@ export class WebviewProvider implements vscode.Disposable {
 
     // Create new webview panel
     this.panel = vscode.window.createWebviewPanel(
-      'executableTalkPresentation',
+      'deckPilotPresentation',
       deck.title || 'Presentation',
       vscode.ViewColumn.One,
       {

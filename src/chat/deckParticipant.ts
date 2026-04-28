@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
-const PARTICIPANT_ID = 'executableTalk.deck';
+const PARTICIPANT_ID = 'deckPilot.deck';
 
 /**
  * System prompt that teaches the LLM the .deck.md format.
@@ -473,7 +473,7 @@ async function handleCreate(
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
 
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // User cancelled the save dialog — fall back to showing in chat
     stream.markdown(deckContent);
@@ -653,7 +653,7 @@ async function handleConvert(
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
 
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
@@ -747,7 +747,7 @@ async function handleEnrich(
     await vscode.workspace.fs.writeFile(deckUri, Buffer.from(enrichedContent, 'utf-8'));
     await vscode.window.showTextDocument(deckUri, { preview: false });
     stream.markdown(`✅ Enriched \`${vscode.workspace.asRelativePath(deckUri)}\` — saved to disk.\n`);
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No deckUri tracked — fall back to showing in chat
     stream.markdown(enrichedContent);

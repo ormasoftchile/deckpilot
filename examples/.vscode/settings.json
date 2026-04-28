@@ -1,7 +1,7 @@
 {
-    "executableTalk.recording.startCommand": "/opt/homebrew/bin/ffmpeg -f avfoundation -i \"{{screenDevice}}\" -vf crop={{windowWidth}}:{{windowHeight}}:{{windowX}}:{{windowY}} -r 30 -c:v libx264 -preset ultrafast -pix_fmt yuv420p {{outputPath}}",
-    "executableTalk.recording.stopCommand": "",
-    "executableTalk.recording.outputDir": "./recordings",
-    "executableTalk.recording.outputExtension": "mp4",
-    "executableTalk.recording.screenDevice": "2:none"
+    "deckPilot.recording.startCommand": "/opt/homebrew/bin/ffmpeg -f avfoundation -i \"{{screenDevice}}\" -vf crop={{windowWidth}}:{{windowHeight}}:{{windowX}}:{{windowY}} -r 30 -c:v libx264 -preset ultrafast -pix_fmt yuv420p {{outputPath}}",
+    "deckPilot.recording.stopCommand": "",
+    "deckPilot.recording.outputDir": "./recordings",
+    "deckPilot.recording.outputExtension": "mp4",
+    "deckPilot.recording.screenDevice": "2:none"
 }

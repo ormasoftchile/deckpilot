@@ -30,7 +30,7 @@ export interface RecorderConfig {
  * Read recorder configuration from VS Code settings.
  */
 export function getRecorderConfig(): RecorderConfig {
-  const config = vscode.workspace.getConfiguration('executableTalk.recording');
+  const config = vscode.workspace.getConfiguration('deckPilot.recording');
   return {
     startCommand: config.get<string>('startCommand', ''),
     stopCommand: config.get<string>('stopCommand', ''),

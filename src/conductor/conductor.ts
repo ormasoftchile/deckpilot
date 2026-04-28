@@ -612,7 +612,7 @@ export class Conductor implements vscode.Disposable {
   /**
    * Open the slide picker overlay in the Webview.
    * Per contracts/navigation-protocol.md — sends slide list to Webview.
-   * Called by executableTalk.goToSlide command (T014).
+   * Called by deckPilot.goToSlide command (T014).
    */
   openSlidePicker(): void {
     if (!this.deck) {

@@ -51,7 +51,7 @@ export class PresenterViewProvider implements vscode.Disposable {
 
     // Create new webview panel in secondary column
     this.panel = vscode.window.createWebviewPanel(
-      'executableTalkPresenterView',
+      'deckPilotPresenterView',
       'Presenter View',
       vscode.ViewColumn.Two,
       {
