@@ -634,4 +634,181 @@ describe('mergeSidecarDeckMetadata', () => {
       expect(result.export!.voiceScript).to.equal(false);
     });
   });
+
+  describe('autoFragment: false suppression', () => {
+    it('strips all fragment attributes from HTML when autoFragment: false', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'no-fragments',
+        html: '<h1>Title</h1>\n<p class="fragment" data-fragment="1" data-fragment-animation="fade">First point</p>\n<p class="fragment" data-fragment="2" data-fragment-animation="fade">Second point</p>',
+        fragmentCount: 2,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'no-fragments', autoFragment: false }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('class="fragment"');
+      expect(result[0].html).to.not.contain('data-fragment');
+      expect(result[0].html).to.not.contain('data-fragment-animation');
+      // Content should still be present
+      expect(result[0].html).to.contain('First point');
+      expect(result[0].html).to.contain('Second point');
+    });
+
+    it('preserves fragment attributes when autoFragment: true (explicit)', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'with-fragments',
+        html: '<p class="fragment" data-fragment="1" data-fragment-animation="fade">Point 1</p>\n<p class="fragment" data-fragment="2" data-fragment-animation="fade">Point 2</p>',
+        fragmentCount: 2,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'with-fragments', autoFragment: true }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(2);
+      expect(result[0].html).to.contain('class="fragment"');
+      expect(result[0].html).to.contain('data-fragment="1"');
+      expect(result[0].html).to.contain('data-fragment="2"');
+      expect(result[0].html).to.contain('data-fragment-animation="fade"');
+    });
+
+    it('preserves fragment attributes when autoFragment is absent (default behavior)', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'default',
+        html: '<p class="fragment" data-fragment="1" data-fragment-animation="fade">Point 1</p>',
+        fragmentCount: 1,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'default', cues: ['Some cue'] }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(1);
+      expect(result[0].html).to.contain('class="fragment"');
+      expect(result[0].html).to.contain('data-fragment="1"');
+    });
+
+    it('only strips fragments from the targeted slide in a multi-slide deck', () => {
+      const slides = [
+        makeSlide({
+          index: 0,
+          id: 'slide-a',
+          html: '<p class="fragment" data-fragment="1">Slide A fragment</p>',
+          fragmentCount: 1,
+        }),
+        makeSlide({
+          index: 1,
+          id: 'slide-b',
+          html: '<p class="fragment" data-fragment="1">Slide B fragment</p>',
+          fragmentCount: 1,
+        }),
+      ];
+      const sidecar: SidecarFile = {
+        slides: [
+          { id: 'slide-a', autoFragment: false },
+        ],
+      };
+      const result = mergeSidecarIntoSlides(slides, sidecar);
+
+      // slide-a: fragments stripped
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('class="fragment"');
+      expect(result[0].html).to.not.contain('data-fragment');
+      expect(result[0].html).to.contain('Slide A fragment');
+
+      // slide-b: fragments preserved
+      expect(result[1].fragmentCount).to.equal(1);
+      expect(result[1].html).to.contain('class="fragment"');
+      expect(result[1].html).to.contain('data-fragment="1"');
+      expect(result[1].html).to.contain('Slide B fragment');
+    });
+
+    it('handles mixed class attributes correctly — preserves non-fragment classes', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'mixed',
+        html: '<p class="highlight fragment" data-fragment="1" data-fragment-animation="fade">First</p>\n<p class="fragment highlight" data-fragment="2">Second</p>\n<p class="fragment" data-fragment="3">Third</p>',
+        fragmentCount: 3,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'mixed', autoFragment: false }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('fragment');
+      expect(result[0].html).to.not.contain('data-fragment');
+      // Non-fragment classes should be preserved
+      expect(result[0].html).to.contain('class="highlight"');
+    });
+
+    it('strips fragments from slide-group elements', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'group',
+        html: '<div class="slide-group fragment" data-fragment="1" data-fragment-animation="fade"><ul><li>Item A</li><li>Item B</li></ul></div>',
+        fragmentCount: 1,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'group', autoFragment: false }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('fragment');
+      expect(result[0].html).to.not.contain('data-fragment');
+      // Preserve slide-group class
+      expect(result[0].html).to.contain('class="slide-group"');
+      expect(result[0].html).to.contain('Item A');
+    });
+
+    it('handles empty class attribute cleanup — no empty class="" left behind', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'empty-class',
+        html: '<p class="fragment" data-fragment="1">Only fragment class</p>',
+        fragmentCount: 1,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'empty-class', autoFragment: false }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('class="fragment"');
+      expect(result[0].html).to.not.contain('data-fragment');
+      // Should not have empty class="" or dangling class attribute
+      expect(result[0].html).to.not.match(/class="\s*"/);
+      expect(result[0].html).to.contain('Only fragment class');
+    });
+
+    it('strips fragments from various element types (li, h2-h6, pre, blockquote, details)', () => {
+      const slide = makeSlide({
+        index: 0,
+        id: 'various',
+        html: [
+          '<h2 class="fragment" data-fragment="1">Section</h2>',
+          '<ul><li class="fragment" data-fragment="2">Item</li></ul>',
+          '<pre class="fragment" data-fragment="3"><code>code</code></pre>',
+          '<blockquote class="fragment" data-fragment="4"><p>Quote</p></blockquote>',
+          '<details class="disclosure-advanced fragment" data-fragment="5"><summary>Details</summary><p>Content</p></details>',
+        ].join('\n'),
+        fragmentCount: 5,
+      });
+      const sidecar: SidecarFile = {
+        slides: [{ id: 'various', autoFragment: false }],
+      };
+      const result = mergeSidecarIntoSlides([slide], sidecar);
+      expect(result[0].fragmentCount).to.equal(0);
+      expect(result[0].html).to.not.contain('fragment');
+      expect(result[0].html).to.not.contain('data-fragment');
+      // Preserve other classes
+      expect(result[0].html).to.contain('class="disclosure-advanced"');
+      // Content intact
+      expect(result[0].html).to.contain('Section');
+      expect(result[0].html).to.contain('Item');
+      expect(result[0].html).to.contain('code');
+      expect(result[0].html).to.contain('Quote');
+      expect(result[0].html).to.contain('Details');
+    });
+  });
 });
