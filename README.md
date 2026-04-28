@@ -1,50 +1,74 @@
 # Deckpilot
 
-_Formerly Executable Talk._
+_Formerly Executable Talk. Marketplace listing and command IDs still use the `executable-talk` identifier for backward compatibility._
 
-Marketplace listing and command IDs still use the `executable-talk` identifier for backward compatibility.
-
-Executable markdown presentations: transform your slides into live coding demonstrations with VS Code integration. Perfect for demos, onboarding, and hands-on teaching.
+Deckpilot turns `.deck.md` Markdown files into live, executable presentations inside VS Code. Write your slides once, then click action links to open files, run commands, start debuggers, and restore IDE state — all without leaving the presentation. Built for live coding demos, team onboarding, and hands-on teaching.
 
 ## Features
 
-- **Navigate Slides**: Use arrow keys to navigate between slides in a full-screen presentation view
-- **Fragment Animations**: Reveal bullet points one at a time with PowerPoint-like animations
-- **Execute Actions**: Click on action links to open files, highlight code, run terminal commands, or start debug sessions
-- **Dynamic Content**: Embed live file contents, command output, and git diffs directly in your slides
-- **Undo/Redo**: Recover from demo failures by undoing IDE changes with `Cmd+Z` / `Ctrl+Z`
-- **Non-Linear Navigation**: Jump to any slide instantly via slide picker (`Ctrl+G`), digit keys, or go back (`Alt+Left`)
-- **Scene Checkpoints**: Save and restore full IDE state as named scenes (`Ctrl+S` / `Ctrl+R`)
-- **Cross-Platform Commands**: Write terminal commands that adapt to macOS, Windows, and Linux automatically
-- **Navigation History**: Breadcrumb trail of visited slides for quick retracing
-- **Syntax Highlighting**: Full Markdown highlighting in `.deck.md` files with YAML coloring inside `action` blocks
-- **Zen Mode**: Opt-in distraction-free Zen Mode (`zenMode: true` in options)
-- **Presenter View**: Open speaker notes and next slide preview on a secondary panel
-- **Environment Variables**: Parameterize decks with `{{VAR}}` placeholders and `.deck.env` sidecar files for portable onboarding decks
-- **Secret Masking**: Mark variables as `secret` to prevent tokens and credentials from appearing on screen
-- **Workspace Trust**: Actions that execute code require Workspace Trust for security
-- **Themes**: Five built-in themes (dark, light, minimal, contrast) with presentation-grade typography
-- **Layout Directives**: Center content and create two-column layouts with `:::center` and `:::columns`
-- **Slide Transitions**: Configurable fade or slide animations between slides
-- **Onboarding Mode**: Step-by-step guided experiences with checkpoints, validation, and retry/reset
-- **Validation Actions**: Verify setup with `validate.command`, `validate.fileExists`, and `validate.port`
-- **Wait Gates**: Block slide progression until a condition is true with `wait.condition` (great for installers and startup readiness)
-- **Progressive Disclosure**: Collapsible `:::advanced` sections and `:::optional` non-blocking content
-- **Recording Mode**: Capture a live presentation session with timestamped events and export voice-over scripts
-- **Voice-Over Cues**: `<!-- voice: -->` and `<!-- voice[N]: -->` annotations for narration scripting
-- **SRT Captions**: Auto-generated subtitle files timed to your actual presentation pace
-- **External Recorder**: Configurable ffmpeg integration for automatic screen capture
-- **Pause/Resume Timing**: Exclude interruptions from narration pacing with keyboard shortcuts
-- **Retake Markers**: Flag sections for re-recording during post-production
-- **Auto-Pilot Mode**: Hands-free recording that drives the deck at calculated reading pace
-- **@deck Chat Participant**: Generate and convert decks via Copilot Chat (`/create`, `/convert`, `/enrich`)
-- **basePath**: Resolve relative paths from the deck file's directory for decks in subdirectories
+**Core presentation**
+- **Slide navigation** — Full-screen presentation view; arrow keys advance slides and fragments
+- **Fragment animations** — Reveal content step-by-step with fade, slide-up, slide-left, zoom, or highlight effects
+- **Slide transitions** — Horizontal slide-in or crossfade between slides (`slide` / `fade`)
+- **Themes** — Four built-in themes: `dark`, `light`, `minimal`, `contrast`
+- **Non-linear navigation** — Slide picker (`Ctrl+G`), jump by number, go back (`Alt+Left`)
+- **Navigation history** — Breadcrumb trail shows recent slide visits; click to jump back
+- **Floating toolbar** — Bottom-right workspace toggles (sidebar, panel, terminal, activity bar, Zen Mode)
+- **Zen Mode** — Opt-in distraction-free mode via `zenMode: true`
+- **Presenter View** — Speaker notes and next-slide preview on a secondary panel
+- **Undo/redo** — Walk back IDE changes mid-demo with `Cmd+Z` / `Ctrl+Z`
+
+**Actions**
+- **`file.open`** — Opens a file in the editor; no trust required
+- **`editor.highlight`** — Highlights specific lines in an open file; no trust required
+- **`terminal.run`** — Runs a command in the integrated terminal (requires Workspace Trust)
+- **`debug.start`** — Launches a debug configuration (requires Workspace Trust)
+- **`sequence`** — Chains multiple actions into a single click
+- **`vscode.command`** — Executes any VS Code command ID (requires Workspace Trust)
+- **`wait.condition`** — Blocks until a file exists or a port is open; designed for Auto-Pilot and onboarding flows
+- **Validation actions** — `validate.command`, `validate.fileExists`, `validate.port` confirm setup steps
+- **YAML action blocks** — Human-readable fenced ` ```action ` blocks as an alternative to URL-encoded inline links
+
+**Authoring**
+- **`.deck.md` format** — Slides separated by `---`; YAML frontmatter for title, author, options, env, scenes, basePath
+- **Sidecar files** — Split content and metadata across `.deck.md` + `.deck.yaml`; all four deck commands work from an active `.deck.yaml`
+- **Sidecar layout overrides** — Per-slide `layout` field (`center`, `left`, `right`, `columns`) in the sidecar `slides:` list
+- **Environment variables** — `{{VAR}}` placeholders resolved from a `.deck.env` sidecar; validation rules enforce correct values
+- **Secret masking** — Variables marked `secret: true` stay hidden from the audience; terminal output is scrubbed too
+- **Guided setup badge** — Shows env resolution status (🟢/🟡/🔴); opens `.deck.env` for editing when variables are missing
+- **Dynamic content** — `render:file`, `render:command`, `render:diff` embed live file contents, command output, and git diffs
+- **Layout directives** — `:::center`, `:::columns`, `:::advanced` (collapsible), `:::optional` (badge)
+- **Fragment syntax** — `<!-- .fragment -->` and `<!-- .fragment animation -->` on any block element
+- **Speaker notes** — Per-slide `---\nnotes: text\n---` fence; renders only in Presenter View, never in the audience slide
+- **Cross-platform commands** — Per-OS command map (`macos`/`windows`/`linux`/`default`) and path placeholders (`${home}`, `${pathSep}`, …)
+- **basePath** — Resolve relative paths from the deck file's directory for decks in subdirectories
+- **Preflight validation** — `Deckpilot: Validate Deck` catches missing files, bad line ranges, unavailable commands, and trust issues
+- **Authoring assistance** — Syntax highlighting, autocomplete, hover docs, and real-time diagnostics inside ` ```action ` blocks
+
+**AI generation**
+- **`@deck /create`** — Generate a deck from a plain-language description
+- **`@deck /convert`** — Convert existing Markdown into a `.deck.md`
+- **`@deck /enrich`** — Add voice cues, fragments, and actions to an existing deck
+- **Freeform `@deck`** — Ask any deck-related question in Copilot Chat
+
+**Scene checkpoints**
+- **Save/restore scenes** — Capture and recall full IDE state at any point (`Ctrl+S` / `Ctrl+R`)
+- **Pre-authored scenes** — Define named scene anchors in frontmatter; they appear in the scene picker automatically
+
+**Recording**
+- **Voice-over cues** — `<!-- voice: text -->` (slide-level) and `<!-- voice[N]: text -->` (fragment-level) for narration scripts
+- **Manual recording** — Start/stop session; pause/resume timing, retake markers, and narration markers during the recording
+- **Auto-Pilot recording** — Hands-free: the extension drives slides, fragments, and actions at a pace calculated from voice cue word count
+- **SRT caption export** — Subtitle file auto-named to match your video file
+- **External recorder** — Configure ffmpeg (or any tool) to start and stop automatically via settings
+
+**Onboarding**
+- **Onboarding Mode** — `mode: onboarding` activates step tracking, retry/reset buttons, and inline validation results
+- **Checkpoint markers** — `<!-- checkpoint: name -->` auto-saves IDE state; **Reset to Checkpoint** restores it on failure
 
 ## Getting Started
 
-### Create a Presentation
-
-Create a file with the `.deck.md` extension:
+Create a file with the `.deck.md` extension. Slides are separated by `---`. Action links execute IDE commands on click.
 
 ```markdown
 ---
@@ -60,15 +84,11 @@ This is your first slide!
 
 ## Opening a File
 
-Click the action link to see it in action:
-
 [Open Main File](action:file.open?path=src/main.ts)
 
 ---
 
 ## Highlighting Code
-
-Draw attention to specific lines:
 
 [Highlight the function](action:editor.highlight?path=src/main.ts&lines=5-10)
 
@@ -78,25 +98,16 @@ notes: Remember to explain the architecture diagram!
 
 ## Running Commands
 
-Execute terminal commands during your demo:
-
 [Install Dependencies](action:terminal.run?command=npm%20install)
 
 ---
 
 ## Debugging
 
-Start a debug session:
-
 [Launch Debugger](action:debug.start?config=Launch%20Program)
-
 ```
 
-### Start a Presentation
-
-1. Open a `.deck.md` file in VS Code
-2. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-3. Run `Deckpilot: Start Presentation`
+Open the file in VS Code and run **Deckpilot: Start Presentation** from the command palette (`Cmd+Shift+P` / `Ctrl+Shift+P`).
 
 ### Keyboard Shortcuts
 
@@ -121,7 +132,7 @@ Start a debug session:
 
 ### Floating Toolbar
 
-A floating toolbar appears in the bottom-right corner when you hover over the presentation. It provides quick access to VS Code workspace toggles:
+Hover over the presentation to reveal the bottom-right toolbar:
 
 | Icon | Action |
 |------|--------|
@@ -145,6 +156,8 @@ A floating toolbar appears in the bottom-right corner when you hover over the pr
 | `Deckpilot: Restore Scene` | Open the scene picker to restore a saved scene |
 | `Deckpilot: Open Presenter View` | Show speaker notes and next slide preview |
 | `Deckpilot: Validate Deck` | Run preflight checks on the current `.deck.md` file |
+| `Deckpilot: Extract Metadata to Sidecar` | Extract deck frontmatter into a `.deck.yaml` sidecar file |
+| `Deckpilot: Show Resolved Deck Model` | Display the merged deck model (deck + sidecar combined) |
 | `Deckpilot: Start Recording Session` | Begin recording timeline events during presentation |
 | `Deckpilot: Stop Recording Session` | Stop recording and export session artifacts |
 | `Deckpilot: Pause Recording Timing` | Pause narration timing (excluded from pacing) |
@@ -159,8 +172,6 @@ A floating toolbar appears in the bottom-right corner when you hover over the pr
 
 ### `file.open`
 
-Opens a file in the editor.
-
 ```markdown
 [Open File](action:file.open?path=path/to/file.ts)
 ```
@@ -170,8 +181,6 @@ Opens a file in the editor.
 | `path` | Relative path to the file | Yes |
 
 ### `editor.highlight`
-
-Highlights specific lines in a file.
 
 ```markdown
 [Highlight Code](action:editor.highlight?path=path/to/file.ts&lines=5-10)
@@ -192,7 +201,7 @@ Runs a command in the integrated terminal. **Requires Workspace Trust.**
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
-| `command` | URL-encoded command to execute. Supports `{{VAR}}` env placeholders. | Yes |
+| `command` | URL-encoded command. Supports `{{VAR}}` env placeholders and platform maps. | Yes |
 
 ### `debug.start`
 
@@ -208,15 +217,11 @@ Starts a debug session. **Requires Workspace Trust.**
 
 ### `sequence`
 
-Executes multiple actions in order.
+Executes multiple actions in order. Prefer the YAML block syntax for sequences — see [Action Block Syntax](#action-block-syntax-yaml).
 
 ```markdown
 [Demo Flow](action:sequence?actions=file.open%3Ffile%3Dsrc/main.ts,editor.highlight%3Ffile%3Dsrc/main.ts%26lines%3D1-5)
 ```
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `actions` | Comma-separated list of URL-encoded actions | Yes |
 
 ### `vscode.command`
 
@@ -233,7 +238,7 @@ Executes any VS Code command. **Requires Workspace Trust.**
 
 ### `wait.condition`
 
-Waits until a condition is satisfied, then continues. This is useful for Auto-Pilot scenarios where an installer or service startup can take variable time.
+Blocks until a condition is satisfied, then continues. Designed for Auto-Pilot and onboarding flows where an installer or service takes variable time.
 
 ````markdown
 ```action
@@ -249,39 +254,17 @@ label: Wait for installer
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
-| `condition` | Condition to poll. Allowed values: `file.exists`, `port.open` | Yes |
-| `path` | File path to check when `condition=file.exists` | Required for `file.exists` |
-| `port` | Port to check when `condition=port.open` | Required for `port.open` |
-| `host` | Host to check when `condition=port.open` | No (default: `localhost`) |
-| `message` | Progress message shown in output while waiting | No |
+| `condition` | `file.exists` or `port.open` | Yes |
+| `path` | File path to check (`file.exists` only) | Required for `file.exists` |
+| `port` | Port to check (`port.open` only) | Required for `port.open` |
+| `host` | Host to check | No (default: `localhost`) |
+| `message` | Progress message while waiting | No |
 | `timeoutMs` | Maximum wait duration in ms | No (default: `120000`) |
 | `pollIntervalMs` | Poll interval in ms | No (default: `3000`) |
 
-**Inline link examples:**
-
-```markdown
-[Wait For Installer](action:wait.condition?condition=file.exists&path=C%3A%5CProgram%20Files%5CContoso%5Ccontoso.exe&message=Waiting%20for%20installation%20to%20complete...&timeoutMs=300000)
-
-[Wait For Web App](action:wait.condition?condition=port.open&host=localhost&port=3000&message=Waiting%20for%20dev%20server...)
-```
-
-**Examples:**
-
-```markdown
-[Open Settings](action:vscode.command?id=workbench.action.openSettings)
-
-[Toggle Sidebar](action:vscode.command?id=workbench.action.toggleSidebarVisibility)
-
-[Search Extensions](action:vscode.command?id=workbench.extensions.search&args=%22python%22)
-
-[Focus Terminal](action:vscode.command?id=workbench.action.terminal.focus)
-
-[Open Keyboard Shortcuts](action:vscode.command?id=workbench.action.openGlobalKeybindings)
-```
-
 ### `validate.command`
 
-Runs a command and checks its exit code. Optionally checks output content. **Requires Workspace Trust.**
+Runs a command and checks its exit code. **Requires Workspace Trust.**
 
 ````markdown
 ```action
@@ -300,8 +283,6 @@ label: Validate Node.js
 
 ### `validate.fileExists`
 
-Checks whether a file exists (or is absent).
-
 ````markdown
 ```action
 type: validate.fileExists
@@ -317,8 +298,6 @@ label: Check package.json
 
 ### `validate.port`
 
-Checks whether a TCP port is open.
-
 ````markdown
 ```action
 type: validate.port
@@ -333,19 +312,9 @@ label: Check dev server
 | `host` | Hostname to check | No (default: localhost) |
 | `timeout` | Connection timeout in ms | No (default: 5000) |
 
-## Dynamic Content Rendering
+## Action Block Syntax (YAML)
 
-### Action Block Syntax (YAML)
-
-In addition to inline action links, you can define actions using readable YAML fenced code blocks. Both syntaxes coexist — use whichever you prefer:
-
-**Before (inline link — URL-encoded):**
-
-```markdown
-[Open Main](action:file.open?path=src/main.ts)
-```
-
-**After (YAML action block — human-readable):**
+Inline action links are URL-encoded and hard to read. YAML action blocks are the preferred authoring format:
 
 ````markdown
 ```action
@@ -355,7 +324,7 @@ label: Open Main
 ```
 ````
 
-Action blocks support all action types and the following meta-fields:
+Action blocks support all action types and these meta-fields:
 
 | Meta-field | Description |
 |------------|-------------|
@@ -363,46 +332,9 @@ Action blocks support all action types and the following meta-fields:
 | `fragment` | Set `false` to exclude the button from fragment stepping |
 | `showCommand` | Set `true` to display the resolved command below the button |
 
-Example with `showCommand`:
+`showCommand: true` is useful for teaching demos — the audience sees the actual command (with `{{VAR}}` placeholders resolved to display values) beneath the button.
 
-````markdown
-```action
-type: terminal.run
-command: npm test
-label: Run Tests
-showCommand: true
-```
-````
-
-This renders the button with `npm test` shown below it — useful for teaching demos where the audience needs to see the actual command. `{{VAR}}` placeholders are resolved to their display values.
-
-Here are some action type examples:
-
-````markdown
-```action
-type: editor.highlight
-path: src/main.ts
-lines: 5-10
-```
-````
-
-````markdown
-```action
-type: terminal.run
-command: npm test
-label: Run Tests
-```
-````
-
-````markdown
-```action
-type: wait.condition
-condition: file.exists
-path: ./dist/app.exe
-message: Waiting for build artifact...
-timeoutMs: 180000
-```
-````
+The `sequence` action type uses a `steps` list:
 
 ````markdown
 ```action
@@ -419,72 +351,314 @@ steps:
 ```
 ````
 
-### Preflight Deck Validation
+## Dynamic Content Rendering
 
-Before presenting, validate your deck to catch common errors:
+Embed live content in slides using render directives — invisible links replaced with actual content when the slide loads.
 
-1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`
-2. Run **Deckpilot: Validate Deck**
+### `render:file`
 
-The command checks for:
-- **Missing files** — referenced file paths that don't exist
-- **Out-of-range lines** — highlight ranges exceeding file length
-- **Missing debug configurations** — `debug.start` configs not in launch.json
-- **Unavailable commands** — terminal commands not found on PATH
-- **Trust issues** — actions requiring trust in untrusted workspaces
+```markdown
+[](render:file?path=src/main.ts&lines=1-20)
+```
 
-Results appear as:
-- **Inline diagnostics** (squiggly underlines) in the `.deck.md` file
-- **Output channel** (Deckpilot Validation) with a detailed log
-- **Summary notification** with a link to the Problems panel
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `path` | Relative path to the file | Yes |
+| `lines` | Line range (e.g., `1-20` or `5`) | No |
+| `lang` | Language for syntax highlighting | No (auto-detected) |
+| `format` | Output format: `code`, `quote`, or `raw` | No (default: `code`) |
 
-### Error Notifications During Presentation
+### `render:command`
 
-When an action fails during a live presentation, a toast notification appears in the bottom-right corner showing:
+Executes a command and embeds its output. **Requires Workspace Trust.**
 
-- **Action type icon** (📄 file, 🔍 highlight, ▶ terminal, 🐛 debug, 🔗 sequence, ⏳ wait)
-- **Target** (which file, command, or config failed)
-- **Error message** (what went wrong)
-- **Step breakdown** (for sequences: ✅ success, ❌ failed, ⏭ skipped)
+```markdown
+[](render:command?cmd=npm%20--version)
+```
 
-Toasts auto-dismiss after 8 seconds for simple failures. Sequence failures and timeouts persist until manually dismissed. Up to 5 toasts can stack.
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `cmd` | URL-encoded command to execute | Yes |
+| `cwd` | Working directory for the command | No |
+| `timeout` | Timeout in milliseconds | No (default: 30000) |
+| `format` | Output format: `code`, `json`, or `raw` | No (default: `code`) |
+| `cached` | Cache output between renders | No (default: `true`) |
 
-### Authoring Assistance
+### `render:diff`
 
-When editing `.deck.md` files, you get full IDE support inside action blocks:
+```markdown
+[](render:diff?path=src/main.ts&before=HEAD~1)
+```
 
-- **Syntax highlighting**: Full Markdown highlighting with YAML syntax coloring inside ` ```action ` fenced code blocks
-- **Autocomplete**: Type suggestions after `type:`, parameter suggestions scoped to the selected action type, triggered by `:` and `/`
-- **Hover documentation**: Hover on action type keywords to see descriptions and parameter tables. Hover on parameter names for type info and allowed values.
-- **Real-time diagnostics**: Squiggly underlines for unknown action types (error), missing required parameters (error), unknown parameter keys (warning), and invalid YAML syntax (error)
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `path` | File to show git diff for | Yes* |
+| `before` | Git ref to compare against | No (default: `HEAD`) |
+| `after` | Git ref to compare to | No (default: working tree) |
+| `left` | Left file for file-to-file diff | Yes* |
+| `right` | Right file for file-to-file diff | Yes* |
+| `mode` | Display mode: `unified` or `split` | No (default: `unified`) |
+| `context` | Number of context lines | No (default: 3) |
 
-## Non-Linear Navigation
+*Either `path` OR both `left` and `right` are required.
 
-During Q&A or ad-hoc discussion, jump to any slide instantly without sequential clicking.
+## Fragment Animations
 
-### Slide Picker
+Add `<!-- .fragment -->` after any element to reveal it on the next arrow key press:
 
-Press `Ctrl+G` / `Cmd+G` to open a searchable slide picker overlay:
+```markdown
+## Key Features
 
-- **Search by title** — type to filter slides in real time
-- **Jump by number** — type a number and press Enter
-- **Keyboard navigation** — Arrow keys to select, Enter to confirm, Escape to dismiss
+- First point appears <!-- .fragment -->
+- Then the second <!-- .fragment -->
+- And finally the third! <!-- .fragment -->
+```
 
-### Jump by Number
+Specify an animation style after `.fragment`:
 
-From the presentation, type digit keys (e.g., `1`, `5`) and press `Enter` to jump directly to that slide number. Press `Escape` to clear.
+| Animation | Effect |
+|-----------|--------|
+| `fade` | Fade in (default) |
+| `slide-up` | Slide up from below |
+| `slide-left` | Slide in from the right |
+| `zoom` | Zoom in from smaller |
+| `highlight` | Visible but dimmed, then highlighted |
 
-### Go Back
+Fragments work on list items, paragraphs, headings, and block elements. Compatible with [Reveal.js fragment syntax](https://revealjs.com/fragments/).
 
-Press `Alt+Left` to return to the previously viewed slide (not the sequentially previous one). This uses a navigation history stack separate from undo/redo.
+## Layout Directives
 
-### Navigation History Trail
+Markdown-compatible layout helpers that degrade gracefully in plain Markdown viewers.
 
-A breadcrumb trail appears at the bottom of the presentation showing your recent slide visits:
+```markdown
+:::center
+**Big idea goes here**
+:::
+```
 
-- Click any breadcrumb to jump back to that slide
-- Icons show how you reached each slide: → sequential, ⤳ jump, ← go-back, 📌 scene restore
-- Up to 10 recent entries are shown; the trail fades in on hover
+```markdown
+:::columns
+
+:::left
+Text and explanations
+:::
+
+:::right
+Code samples and diagrams
+:::
+
+:::
+```
+
+```markdown
+:::advanced
+Collapsible content for advanced users (renders as `<details>`)
+:::
+
+:::optional
+Non-blocking optional content with a visual badge
+:::
+```
+
+## Speaker Notes
+
+Insert a YAML-only fence between slide separators to attach notes to the next slide:
+
+```markdown
+---
+notes: Remember to explain the architecture here!
+---
+
+## Architecture Deep Dive
+
+Slide content here...
+```
+
+Notes render **only in Presenter View** — they never appear in the audience-facing slide. Open Presenter View with `Deckpilot: Open Presenter View`.
+
+## Presentation Options
+
+```yaml
+---
+title: My Presentation
+author: Your Name
+options:
+  toolbar: true                    # Show toolbar (default: true)
+  zenMode: true                    # Enter Zen Mode on start (default: false)
+  showSlideNumbers: true           # Show slide numbers (default: true)
+  showProgress: false              # Show progress bar (default: false)
+  fontSize: medium                 # Font size: small, medium, large
+  theme: dark                      # Theme: dark, light, minimal, contrast
+  transition: slide                # slide (default) or fade
+---
+```
+
+Set `toolbar: false` to hide the floating toolbar, or supply a list to show only specific buttons (`sidebar`, `panel`, `terminal`, `activityBar`, `zenMode`).
+
+### Themes
+
+| Theme | Description |
+|-------|-------------|
+| `dark` | Default. High-contrast dark background optimized for projectors |
+| `light` | Clean white background for well-lit rooms |
+| `minimal` | Muted, distraction-free aesthetic for code-heavy decks |
+| `contrast` | WCAG AAA high-contrast (black/white/yellow) for accessibility |
+
+## Environment Variables
+
+Parameterize decks with `{{VAR}}` placeholders so the same `.deck.md` works across different machines and users. Declare variables in frontmatter and supply values in a `.deck.env` sidecar:
+
+```yaml
+---
+title: "Team Onboarding"
+env:
+  - name: REPO_PATH
+    description: "Path to the cloned repository"
+    required: true
+    validate: directory
+
+  - name: GH_TOKEN
+    description: "GitHub personal access token"
+    secret: true
+
+  - name: BRANCH
+    description: "Feature branch to work on"
+    default: "main"
+---
+```
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `name` | — | Variable name (letters, digits, underscores) |
+| `description` | `""` | Shown in hover tooltips and guided setup |
+| `required` | `false` | Error if not set |
+| `secret` | `false` | Value masked in the presentation UI; terminal output scrubbed |
+| `validate` | — | `directory`, `file`, `command`, `url`, `port`, or `regex:pattern` |
+| `default` | — | Fallback when not set in `.deck.env` |
+
+Create `onboarding.deck.env` (same base name, gitignored) with your values:
+
+```bash
+REPO_PATH=/home/alice/projects/my-repo
+GH_TOKEN=ghp_abc123def456ghi789
+BRANCH=feature/onboarding
+```
+
+> **⚠️** Add `*.deck.env` to `.gitignore`. Commit `*.deck.env.example` as a template for others.
+
+Use `{{VAR}}` in any action:
+
+````markdown
+```action
+type: terminal.run
+command: cd {{REPO_PATH}} && npm install
+label: Install Dependencies
+```
+````
+
+`{{VAR}}` env placeholders and `${home}` platform placeholders can coexist in the same command.
+
+### Guided Setup
+
+An **env status badge** (🟢/🟡/🔴) appears in the presentation corner. Click it (or **Set Up Now** in the toast) to open `.deck.env` for editing. The presentation refreshes as you save. Validation runs during `Deckpilot: Validate Deck` and issues appear in the Problems panel.
+
+## Sidecar Files (`.deck.yaml`)
+
+Split content and metadata across two files:
+
+```
+my-talk/
+  ├── onboarding.deck.md          ← Slides and Markdown
+  ├── onboarding.deck.yaml        ← Metadata, options, slide overrides
+  └── onboarding.deck.env         ← Environment variables
+```
+
+The sidecar carries any frontmatter field and can override slide-level layout. All four deck commands (**Start Presentation**, **Validate Deck**, **Extract Metadata to Sidecar**, **Show Resolved Deck Model**) work when a `.deck.yaml` file is the active editor — they auto-resolve the paired `.deck.md`.
+
+### Slide-Level Layout
+
+Control visual alignment per slide in the sidecar `slides:` list:
+
+```yaml
+slides:
+  - index: 1
+    layout: center        # Center content vertically and horizontally
+  - index: 3
+    layout: right         # Right-align text content
+  - index: 5
+    layout: left          # Left-align text content
+  - index: 7
+    layout: columns       # Two-column layout
+```
+
+## basePath
+
+When a deck file is in a subdirectory but references files at the repository root, add `basePath` to the frontmatter:
+
+```yaml
+---
+title: My Demo
+basePath: ..
+---
+```
+
+Paths in all actions and render directives resolve relative to the basePath directory.
+
+## Cross-Platform Commands
+
+Write terminal commands that adapt to the presenter's OS automatically:
+
+````markdown
+```action
+type: terminal.run
+command:
+  macos: open .
+  windows: explorer .
+  linux: xdg-open .
+  default: xdg-open .
+label: Open File Browser
+```
+````
+
+Use platform-aware path placeholders in any terminal command:
+
+| Placeholder | macOS/Linux | Windows |
+|-------------|-------------|---------|
+| `${pathSep}` | `/` | `\` |
+| `${home}` | `/Users/you` | `C:\Users\you` |
+| `${shell}` | `/bin/zsh` | `cmd.exe` |
+| `${pathDelimiter}` | `:` | `;` |
+
+`Deckpilot: Validate Deck` warns if a platform command map omits the current OS and has no `default` fallback.
+
+## Scene Checkpoints
+
+Press `Ctrl+S` / `Cmd+S` to save the current IDE state (open files, cursor positions, terminals, active slide) as a named scene. Press `Ctrl+R` / `Cmd+R` to restore a scene from the picker.
+
+### Pre-Authored Scenes
+
+Define scene anchors in your deck's YAML frontmatter:
+
+```yaml
+---
+title: My Presentation
+scenes:
+  - name: intro
+    slide: 1
+  - name: live-demo
+    slide: 8
+  - name: wrap-up
+    slide: 15
+---
+```
+
+Pre-authored scenes appear in the scene picker automatically. They navigate to the anchored slide without capturing full IDE state.
+
+### Scene Limits
+
+- Up to **20** runtime-saved scenes per session
+- Pre-authored scenes don't count against this limit
+- Overwriting an existing scene (same name) doesn't count against the limit
 
 ## Recording Mode
 
@@ -492,7 +666,7 @@ Record a live presentation session and export a time-calibrated voice-over scrip
 
 ### Voice-Over Cues
 
-Add narration annotations to your slides — invisible during presentation, used in exported scripts:
+Add narration annotations — invisible during presentation, used in exported scripts:
 
 ```markdown
 <!-- voice: Welcome to the demo. I'll show you live code execution. -->
@@ -527,13 +701,7 @@ Exported artifacts:
 
 ### Auto-Pilot Recording
 
-Hands-free recording that drives the entire presentation automatically:
-
-1. Start a presentation
-2. Run `Auto-Record Deck`
-3. The extension navigates slides, reveals fragments, triggers actions — all at a pace calculated from voice cue word count (150 WPM)
-4. Files open in a side panel; terminal output is shown then closed automatically
-5. When complete: MP4 + SRT + voiceover script exported
+Run `Auto-Record Deck` and the extension drives the entire presentation hands-free: navigates slides, reveals fragments, and triggers actions at a pace calculated from voice cue word count (150 WPM default). Files open in a side panel; terminal output shows then closes automatically.
 
 ### External Screen Recorder
 
@@ -561,570 +729,9 @@ Generate and convert decks using Copilot Chat:
 | `@deck /enrich` | `@deck /enrich #file:demo.deck.md add voice cues` |
 | `@deck` (freeform) | `@deck how do I add a terminal command to a slide?` |
 
-## basePath
-
-When a deck file is in a subdirectory but references files at the repository root, add `basePath` to the frontmatter:
-
-```yaml
----
-title: My Demo
-basePath: ..
----
-```
-
-Paths in all actions and render directives resolve relative to the basePath directory.
-
-## Scene Checkpoints
-
-Save and restore complete IDE state at any point during your presentation.
-
-### Save a Scene
-
-1. Press `Ctrl+S` / `Cmd+S` during a presentation
-2. Enter a name (e.g., "demo-start")
-3. The current IDE state is captured: open files, cursor positions, terminals, and active slide
-
-### Restore a Scene
-
-1. Press `Ctrl+R` / `Cmd+R` to open the scene picker
-2. Select a scene to restore
-3. The IDE returns to the exact state when the scene was saved
-
-### Pre-Authored Scenes
-
-Define scene anchors in your deck's YAML frontmatter:
-
-```yaml
----
-title: My Presentation
-scenes:
-  - name: intro
-    slide: 1
-  - name: live-demo
-    slide: 8
-  - name: wrap-up
-    slide: 15
----
-```
-
-Pre-authored scenes appear in the scene picker automatically when the presentation opens. They're labeled "authored" and navigate to the anchored slide (without capturing full IDE state).
-
-### Scene Limits
-
-- Up to **20** runtime-saved scenes per session
-- Pre-authored scenes from frontmatter don't count against this limit
-- Overwriting an existing scene (same name) doesn't count against the limit
-- Pre-authored scenes are read-only and cannot be deleted
-
-## Cross-Platform Commands
-
-Write terminal commands that work on every operating system.
-
-### Platform Command Map
-
-Instead of a string, provide an object with per-OS variants:
-
-````markdown
-```action
-type: terminal.run
-command:
-  macos: open .
-  windows: explorer .
-  linux: xdg-open .
-  default: xdg-open .
-label: Open File Browser
-```
-````
-
-The correct command runs automatically based on the presenter's OS. If no specific entry matches, the `default` fallback is used.
-
-### Path Placeholders
-
-Use platform-aware placeholders in any terminal command:
-
-| Placeholder | macOS/Linux | Windows |
-|-------------|-------------|---------|
-| `${pathSep}` | `/` | `\` |
-| `${home}` | `/Users/you` | `C:\Users\you` |
-| `${shell}` | `/bin/zsh` | `cmd.exe` |
-| `${pathDelimiter}` | `:` | `;` |
-
-### Preflight Platform Validation
-
-Run **Deckpilot: Validate Deck** to check cross-platform coverage. The validator warns if any `terminal.run` action with a platform command map doesn't cover the current OS and has no `default` fallback.
-
-## Dynamic Content Rendering (Render Directives)
-
-Embed live content directly in your slides using render directives. These are invisible links that get replaced with actual content when the slide is displayed.
-
-### `render:file`
-
-Embed file contents with optional line range.
-
-```markdown
-[](render:file?path=src/main.ts&lines=1-20)
-```
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `path` | Relative path to the file | Yes |
-| `lines` | Line range (e.g., `1-20` or `5`) | No |
-| `lang` | Language for syntax highlighting | No (auto-detected) |
-| `format` | Output format: `code`, `quote`, or `raw` | No (default: `code`) |
-
-**Examples:**
-
-```markdown
-# Show the first 10 lines of package.json
-[](render:file?path=package.json&lines=1-10)
-
-# Show a specific function with TypeScript highlighting
-[](render:file?path=src/utils.ts&lines=25-40&lang=typescript)
-```
-
-### `render:command`
-
-Execute a command and embed its output. **Requires Workspace Trust.**
-
-```markdown
-[](render:command?cmd=npm%20--version)
-```
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `cmd` | URL-encoded command to execute | Yes |
-| `cwd` | Working directory for the command | No |
-| `timeout` | Timeout in milliseconds | No (default: 30000) |
-| `format` | Output format: `code`, `json`, or `raw` | No (default: `code`) |
-| `cached` | Cache output between renders | No (default: `true`) |
-
-**Examples:**
-
-```markdown
-# Show npm version
-[](render:command?cmd=npm%20--version)
-
-# List source files
-[](render:command?cmd=ls%20-la%20src/)
-
-# Show git status
-[](render:command?cmd=git%20status%20--short)
-```
-
-### `render:diff`
-
-Show git diffs or file comparisons.
-
-```markdown
-[](render:diff?path=src/main.ts&before=HEAD~1)
-```
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `path` | File to show git diff for | Yes* |
-| `before` | Git ref to compare against (e.g., `HEAD~1`, `main`) | No (default: `HEAD`) |
-| `after` | Git ref to compare to | No (default: working tree) |
-| `left` | Left file for file-to-file diff | Yes* |
-| `right` | Right file for file-to-file diff | Yes* |
-| `mode` | Display mode: `unified` or `split` | No (default: `unified`) |
-| `context` | Number of context lines | No (default: 3) |
-
-*Either `path` OR both `left` and `right` are required.
-
-**Examples:**
-
-```markdown
-# Show recent changes to a file
-[](render:diff?path=src/main.ts&before=HEAD~3)
-
-# Compare two files
-[](render:diff?left=old/config.json&right=new/config.json)
-
-# Show changes since a specific branch
-[](render:diff?path=src/feature.ts&before=main)
-```
-
-## Environment Variables
-
-Parameterize your presentations so the same `.deck.md` file works across different machines, users, and environments — without hardcoding paths, tokens, or configuration.
-
-### Declare Variables in Frontmatter
-
-Add an `env:` block to your deck's YAML frontmatter:
-
-```yaml
----
-title: "Team Onboarding"
-env:
-  - name: REPO_PATH
-    description: "Path to the cloned repository"
-    required: true
-    validate: directory
-
-  - name: GH_TOKEN
-    description: "GitHub personal access token"
-    secret: true
-
-  - name: BRANCH
-    description: "Feature branch to work on"
-    default: "main"
----
-```
-
-#### Declaration Properties
-
-| Property | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `name` | ✓ | — | Variable name (letters, digits, underscores) |
-| `description` | | `""` | Shown in hover tooltips and guided setup |
-| `required` | | `false` | Error if not set in `.deck.env` |
-| `secret` | | `false` | Value masked in the presentation UI |
-| `validate` | | — | Validation rule (see below) |
-| `default` | | — | Fallback when not set in `.deck.env` |
-
-### Create a `.deck.env` File
-
-Create a sidecar file with the same base name, replacing `.deck.md` with `.deck.env`:
-
-```
-my-talk/
-  ├── onboarding.deck.md          ← Your presentation
-  ├── onboarding.deck.env         ← Your local values (gitignored!)
-  └── onboarding.deck.env.example ← Template for others (committed)
-```
-
-Fill in your values:
-
-```bash
-# onboarding.deck.env
-REPO_PATH=/home/alice/projects/my-repo
-GH_TOKEN=ghp_abc123def456ghi789
-BRANCH=feature/onboarding
-```
-
-> **⚠️ Important**: Add `*.deck.env` to your `.gitignore` to prevent committing secrets!
-
-### Use `{{VAR}}` in Actions
-
-Reference your variables using double-brace syntax:
-
-````markdown
-```action
-type: file.open
-path: "{{REPO_PATH}}/package.json"
-label: Open package.json
-```
-````
-
-````markdown
-```action
-type: terminal.run
-command: cd {{REPO_PATH}} && npm install
-label: Install Dependencies
-```
-````
-
-Or with inline action links:
-
-```markdown
-[Open File](action:file.open?path={{REPO_PATH}}/package.json)
-[Run Tests](action:terminal.run?command=cd%20{{REPO_PATH}}%20%26%26%20npm%20test)
-```
-
-When the action executes, `{{REPO_PATH}}` is replaced with the real value from `.deck.env`. Both `{{VAR}}` env placeholders and `${home}` platform placeholders can coexist in the same command.
-
-### Secret Masking
-
-Variables with `secret: true` are protected during live presentations:
-
-```yaml
-env:
-  - name: API_TOKEN
-    secret: true
-    required: true
-```
-
-- **Displayed in presentation**: `curl -H "Authorization: Bearer {{API_TOKEN}}" https://api.example.com`
-- **Actually executed**: `curl -H "Authorization: Bearer ghp_abc123..." https://api.example.com`
-- **Terminal output scrubbed**: Secret values replaced with `•••••` before display
-
-### Validation Rules
-
-Catch configuration problems before the presentation starts:
-
-```yaml
-env:
-  - name: REPO_PATH
-    validate: directory      # Must be an existing directory
-
-  - name: CONFIG_FILE
-    validate: file           # Must be an existing file
-
-  - name: NODE_CMD
-    validate: command        # Must be in PATH (e.g., node, git)
-
-  - name: API_URL
-    validate: url            # Must be a valid HTTP/HTTPS URL
-
-  - name: SERVER_PORT
-    validate: port           # Must be 1-65535
-
-  - name: VERSION
-    validate: "regex:^\\d+\\.\\d+\\.\\d+$"  # Must match semver pattern
-```
-
-Validation runs during **preflight check** (`Deckpilot: Validate Deck`). Issues appear in the Problems panel.
-
-### Guided Setup
-
-When a deck has environment variables, the extension helps get set up:
-
-1. **Env status badge** appears in the presentation corner showing resolution status (🟢 all resolved, 🟡 missing optional, 🔴 missing required)
-2. If variables are missing, click the badge or **"Set Up Now"** in the toast notification
-3. The extension generates a `.deck.env.example` template if needed
-4. Opens `.deck.env` in the editor for you to fill in
-5. As you save, the presentation refreshes automatically
-
-### Sharing Decks with Others
-
-To make your deck portable:
-
-1. **Commit** the `.deck.env.example` template:
-   ```bash
-   git add onboarding.deck.env.example
-   ```
-
-2. **Gitignore** the actual values file:
-   ```
-   # .gitignore
-   *.deck.env
-   ```
-
-3. When someone clones your repo, they:
-   1. Copy `.deck.env.example` → `.deck.env`
-   2. Fill in their own values
-   3. Open the deck — ready to present!
-
-## Sidecar Files (`.deck.yaml`)
-
-For more advanced authoring, you can split your presentation into two files:
-- **`.deck.md`** — The main presentation content and Markdown
-- **`.deck.yaml`** — Metadata, frontmatter options, and slide-level overrides
-
-This dual-authoring approach is useful when:
-- Your deck is large and you want to keep metadata separate
-- You're sharing the Markdown content but personalizing metadata per presenter
-- You want to organize slide-level settings separately
-
-### Creating a Sidecar File
-
-Create a `.deck.yaml` file with the same base name as your `.deck.md`:
-
-```
-my-talk/
-  ├── onboarding.deck.md          ← Your presentation content
-  ├── onboarding.deck.yaml        ← Metadata and overrides (optional)
-  └── onboarding.deck.env         ← Environment variables (optional)
-```
-
-### Slide-Level Layout
-
-Use the `layout` field in sidecar slide entries to control visual alignment:
-
-```yaml
-slides:
-  - index: 1
-    layout: center        # Center content vertically and horizontally
-    
-  - index: 3
-    layout: right         # Right-align text content
-    
-  - index: 5
-    layout: left          # Left-align text content
-    
-  - index: 7
-    layout: columns       # Two-column layout
-```
-
-Supported values:
-- `center` — Vertically and horizontally centered content (useful for title slides)
-- `left` — Left-aligned text
-- `right` — Right-aligned text
-- `columns` — Two-column layout helper
-
-### Commands from Sidecar Files
-
-All four deck commands work when a `.deck.yaml` file is the active editor:
-
-- **Start Presentation** — Auto-resolves the paired `.deck.md` and begins presenting
-- **Validate Deck** — Validates the linked presentation
-- **Extract Metadata to Sidecar** — Updates the sidecar from deck metadata
-- **Show Resolved Deck Model** — Displays the merged model
-
-If no paired `.deck.md` exists, a clear error message guides you to create one.
-
-## Fragment Animations
-
-Reveal content step-by-step using fragment markers. Add `<!-- .fragment -->` after any element to make it appear on the next arrow key press:
-
-```markdown
-## Key Features
-
-- First point appears <!-- .fragment -->
-- Then the second <!-- .fragment -->
-- And finally the third! <!-- .fragment -->
-```
-
-### Animation Types
-
-Specify an animation style after `.fragment`:
-
-```markdown
-- Fade in (default) <!-- .fragment fade -->
-- Slide up from below <!-- .fragment slide-up -->
-- Slide in from right <!-- .fragment slide-left -->
-- Zoom in <!-- .fragment zoom -->
-- Dimmed, then highlighted <!-- .fragment highlight -->
-```
-
-| Animation | Effect |
-|-----------|--------|
-| `fade` | Fade in (default) |
-| `slide-up` | Slide up from below |
-| `slide-left` | Slide in from the right |
-| `zoom` | Zoom in from smaller |
-| `highlight` | Visible but dimmed, then highlighted |
-
-Fragments work on list items, paragraphs, headings, and block elements. The syntax is compatible with [Reveal.js](https://revealjs.com/fragments/).
-
-## Layout Directives
-
-Optional Markdown-compatible layout helpers for structuring slide content. These degrade gracefully in plain Markdown viewers.
-
-### Centered Content
-
-```markdown
-:::center
-**Big idea goes here**
-:::
-```
-
-### Two-Column Layout
-
-```markdown
-:::columns
-
-:::left
-Text and explanations
-
-:::
-
-:::right
-Code samples and diagrams
-
-:::
-
-:::
-```
-
-### Progressive Disclosure
-
-```markdown
-:::advanced
-Collapsible content for advanced users (renders as `<details>`)
-:::
-
-:::optional
-Non-blocking optional content with a visual badge
-:::
-```
-
-## Speaker Notes
-
-Add speaker notes to any slide using the `notes` field in YAML frontmatter:
-
-```markdown
----
-notes: |
-  Key points to cover:
-  - Explain the architecture
-  - Show the demo
-  - Answer questions
----
-
-# Slide Title
-
-Slide content goes here...
-```
-
-View speaker notes by running `Deckpilot: Open Presenter View`.
-
-## Presentation Options
-
-Customize the presentation using the `options` field in the deck frontmatter:
-
-```yaml
----
-title: My Presentation
-author: Your Name
-options:
-  toolbar: true                    # Show toolbar (default: true)
-  zenMode: true                    # Enter Zen Mode on start (default: false)
-  showSlideNumbers: true           # Show slide numbers (default: true)
-  showProgress: false              # Show progress bar (default: false)
-  fontSize: medium                 # Font size: small, medium, large
-  theme: dark                      # Theme: dark, light, minimal, contrast
----
-```
-
-### Toolbar Customization
-
-The floating toolbar can be customized to show only specific buttons:
-
-```yaml
-options:
-  toolbar:
-    - sidebar      # Toggle Sidebar
-    - panel        # Toggle Panel
-    - terminal     # Toggle Terminal
-    - activityBar  # Toggle Activity Bar
-    - zenMode      # Toggle Zen Mode
-```
-
-Set `toolbar: false` to hide it completely.
-
-### Themes
-
-Five built-in themes are available:
-
-| Theme | Description |
-|-------|-------------|
-| `dark` | Default. High-contrast dark background optimized for projectors |
-| `light` | Clean white background for well-lit rooms |
-| `minimal` | Muted, distraction-free aesthetic for code-heavy decks |
-| `contrast` | WCAG AAA high-contrast (black/white/yellow) for accessibility |
-
-The default theme (`dark`) features presentation-grade typography: centered titles, large headings, generous spacing, and enlarged code blocks.
-
-### Slide Transitions
-
-Control how slides animate when navigating:
-
-```yaml
-options:
-  transition: slide    # slide (default) or fade
-```
-
-- `slide` — Horizontal slide-in animation (default)
-- `fade` — Smooth opacity crossfade
-
 ## Onboarding Mode
 
-Transform any `.deck.md` file into a guided onboarding experience with step tracking, validation, and recovery.
-
-### Activation
-
-Add `mode: onboarding` to your deck's options:
+Add `mode: onboarding` to the options and your deck becomes a guided step-by-step experience:
 
 ```yaml
 ---
@@ -1134,31 +741,16 @@ options:
 ---
 ```
 
-### Behavior Differences
+Slides become **steps** with a progress counter. No slide transitions. **Retry Step** and **Reset to Checkpoint** buttons appear on failure. Validation results display inline after `validate.*` actions.
 
-In onboarding mode:
-- Slides are treated as **steps** with completion tracking
-- A **step progress indicator** replaces the slide counter (Step 1 of 8)
-- **No slide transitions** — focus is on instructions, not visuals
-- **Retry Step** and **Reset to Checkpoint** buttons appear on failure
-- **Validation results** display inline after `validate.*` actions
-
-### Checkpoints
-
-Add checkpoint markers to slides that represent important milestones:
+Add checkpoint markers at key milestones — the IDE state saves automatically when navigated to:
 
 ```markdown
 # Install Dependencies
 <!-- checkpoint: deps-installed -->
-
-Install the project dependencies:
 ```
 
-When you navigate to a slide with a checkpoint, the IDE state is automatically saved. If something goes wrong, click **Reset to Checkpoint** to restore the workspace to that point.
-
-### Step Validation
-
-Use `validate.*` actions to confirm each step completed successfully:
+Use `validate.*` actions to confirm each step:
 
 ````markdown
 ```action
@@ -1166,42 +758,32 @@ type: validate.command
 command: node --version
 label: Verify Node.js is installed
 ```
-
-```action
-type: validate.fileExists
-path: node_modules/.package-lock.json
-label: Verify dependencies installed
-```
 ````
 
-- ✅ Success marks the step as complete
-- ❌ Failure shows an inline error with **Retry** option
+✅ success marks the step complete; ❌ failure shows an inline error with a **Retry** option.
 
-### Example
+See `examples/onboarding.deck.md` for a complete example.
 
-See `examples/onboarding.deck.md` for a complete onboarding deck demonstrating all features.
+## Preflight Validation
+
+Run **Deckpilot: Validate Deck** before presenting to catch missing files, out-of-range line highlights, unavailable debug configs, PATH-missing commands, and trust issues. Results appear as inline diagnostics (squiggly underlines), in the Deckpilot Validation output channel, and as a summary notification with a link to the Problems panel.
+
+## Authoring Assistance
+
+Inside ` ```action ` blocks, VS Code gives you:
+- **Syntax highlighting** — YAML coloring inside Markdown
+- **Autocomplete** — type suggestions after `type:`, parameter suggestions scoped to the selected action
+- **Hover docs** — descriptions and parameter tables on hover
+- **Diagnostics** — errors for unknown types, missing required params; warnings for unknown keys
 
 ## Workspace Trust
 
-For security, actions that execute code (`terminal.run` and `debug.start`) require [Workspace Trust](https://code.visualstudio.com/docs/editor/workspace-trust). When opening a presentation with executable actions in an untrusted workspace:
-
-1. You'll be prompted to confirm before proceeding
-2. Actions requiring trust will show as blocked
-3. You can still use `file.open` and `editor.highlight` actions
+`terminal.run`, `debug.start`, `render:command`, and `vscode.command` require [Workspace Trust](https://code.visualstudio.com/docs/editor/workspace-trust). In untrusted workspaces those actions show as blocked. `file.open` and `editor.highlight` always work.
 
 ## Requirements
 
 - VS Code 1.85.0 or higher
 - Workspace Trust enabled for `terminal.run` and `debug.start` actions
-
-## Extension Settings
-
-This extension does not contribute any settings.
-
-## Known Issues
-
-- Multi-monitor presenter view requires manual command execution (no automatic detection)
-- Zen Mode state detection is approximate
 
 ## Release Notes
 
