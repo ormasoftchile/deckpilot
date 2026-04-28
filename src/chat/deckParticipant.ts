@@ -114,8 +114,8 @@ voice-over script and SRT captions when recording mode is used.
 2. One concept per slide — keep slides focused
 3. Use fragments to build up complex ideas step by step
 4. Add action links for live demonstrations — don't just describe, show
-5. Use voice cues on every slide (preferably in the sidecar) — they drive the narration script
-6. Use speaker notes for presenter reminders — always use the \`---notes:---\` block format; never embed notes as visible slide text
+5. Use voice cues on every slide — put them in the sidecar \`cues:\` field, NOT inline
+6. Use speaker notes for presenter reminders — put them in the sidecar \`notes:\` field, NOT inline as \`---notes:---\` blocks
 7. End with a summary or closing slide
 8. Terminal commands should use cross-platform YAML blocks when possible
 9. Use \`basePath: ..\` when the deck is in a subdirectory but references root files
@@ -140,7 +140,8 @@ voice-over script and SRT captions when recording mode is used.
 - Include file.open actions for config files and code
 - Include editor.highlight for key code sections
 - Use fragments to reveal steps progressively
-- Write voice cues as natural spoken narration
+- Write voice cues as natural spoken narration — put them in the sidecar \`cues:\` field
+- Put speaker notes in the sidecar \`notes:\` field
 
 ### Sidecar File (.deck.yaml)
 A companion file (same name, .deck.yaml extension) stores operational metadata separately from content.
