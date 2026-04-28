@@ -372,7 +372,7 @@ async function handleCreate(
   }
 
   // Feature preferences
-  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt);
+  const wantsSidecar = !/\bwithout\s+sidecar\b/i.test(rawPrompt);
   const wantsZenMode = /\bzen\s+mode\b/i.test(rawPrompt);
 
   // Strip meta-instructions — leave only the content description
@@ -390,6 +390,12 @@ async function handleCreate(
     ? 'Include `options:\\n  zenMode: true` in the deck frontmatter. '
     : '';
 
+  const sidecarOnlyInstructions = wantsSidecar
+    ? 'DO NOT include inline voice cues (<!-- voice: -->) or speaker notes (---\\nnotes:...\\n---) in the markdown — ' +
+      'these will be placed in the sidecar file. ' +
+      'Add an <!-- id: slug --> comment immediately after each --- slide separator so the sidecar can reference each slide. '
+    : 'Include voice cues on every slide. ';
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
     vscode.LanguageModelChatMessage.User(
@@ -397,7 +403,8 @@ async function handleCreate(
       'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
       'Start directly with the YAML frontmatter (---). ' +
       zenModeInstruction +
-      'Include voice cues on every slide. Use fragments where they help build up ideas. ' +
+      sidecarOnlyInstructions +
+      'Use fragments where they help build up ideas. ' +
       'Use action links and YAML action blocks for any demonstrations.',
     ),
   ];
@@ -487,7 +494,7 @@ async function handleConvert(
 ): Promise<DeckChatResult> {
   // Parse meta-preferences from the raw prompt (same approach as handleCreate)
   const rawPrompt = request.prompt ?? '';
-  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt) || /\bsidecar\b/i.test(rawPrompt);
+  const wantsSidecar = !/\bwithout\s+sidecar\b/i.test(rawPrompt);
   const wantsZenMode = /\bzen\s*mode\b/i.test(rawPrompt);
 
   // ── DEBUG: dump every ref VS Code sends ──────────────────────────────────
@@ -567,12 +574,19 @@ async function handleConvert(
 
   stream.progress('Converting to deck format...');
 
+  const convertSidecarInstructions = wantsSidecar
+    ? 'DO NOT include inline voice cues (<!-- voice: -->) or speaker notes (---\\nnotes:...\\n---) — ' +
+      'these will be placed in the sidecar file. ' +
+      'Add an <!-- id: slug --> comment immediately after each --- slide separator. '
+    : 'Add voice cues on every slide. ';
+
   let convertUserMsg =
     'Convert this Markdown content into a .deck.md presentation:\n\n' +
     '```markdown\n' + sourceContent + '\n```\n\n' +
     'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
     'Start directly with the YAML frontmatter (---). ' +
-    'Split on natural heading boundaries. Add voice cues on every slide. ' +
+    'Split on natural heading boundaries. ' +
+    convertSidecarInstructions +
     'Convert code references into action links. Add fragments for lists. ' +
     'Keep the original content and structure but make it presentation-friendly.';
 
