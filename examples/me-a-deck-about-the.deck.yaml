@@ -1,0 +1,59 @@
+deck:
+  title: BYOK Feature in Copilot CLI
+  theme: dark
+
+slides:
+  - id: intro
+    cues:
+      - "Welcome to this presentation on the Bring Your Own Key feature in Copilot CLI."
+      - "This feature was released on April 7, 2026, and supports BYOK and local models."
+    duration: 10s
+  - id: what-is-byok
+    cues:
+      - "BYOK stands for Bring Your Own Key, allowing users to manage their encryption keys."
+      - "This enhances security and ensures compliance with regulations."
+    duration: 12s
+  - id: benefits
+    cues:
+      - "Using BYOK gives you full control over encryption keys."
+      - "It helps meet regulatory requirements and protects sensitive data."
+    duration: 10s
+  - id: setup-overview
+    cues:
+      - "Setting up BYOK involves three steps: generating a key, configuring the CLI, and verifying the setup."
+      - "Let’s go through each step in detail."
+    duration: 15s
+  - id: generate-key
+    cues:
+      - "The first step is to generate an encryption key using your preferred key management tool."
+      - "Follow the command provided for your operating system."
+    duration: 12s
+  - id: configure-cli
+    cues:
+      - "Next, update the Copilot CLI configuration file to use the generated key."
+      - "You can view the relevant section of the configuration file here."
+    duration: 10s
+  - id: verify-setup
+    cues:
+      - "Finally, verify the setup by running the provided command."
+      - "This ensures that BYOK is correctly configured in your environment."
+    duration: 10s
+  - id: local-models
+    cues:
+      - "Copilot CLI also supports local models hosted on your infrastructure."
+      - "You can combine this with BYOK for complete control over your setup."
+    duration: 12s
+  - id: summary
+    cues:
+      - "In summary, BYOK enhances security and compliance by giving you full control over encryption keys."
+      - "It also supports local models for added flexibility in your workflows."
+    duration: 10s
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
+  srtFormat: srt

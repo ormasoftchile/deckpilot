@@ -46,7 +46,7 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onCommand:executableTalk.openPresentation",
+    "onCommand:deckPilot.openPresentation",
     "onLanguage:markdown",
     "onChatParticipant:executable-talk.deck",
     "workspaceContains:**/*.deck.md"
@@ -55,123 +55,123 @@
   "contributes": {
     "commands": [
       {
-        "command": "executableTalk.openPresentation",
+        "command": "deckPilot.openPresentation",
         "title": "Deckpilot: Start Presentation"
       },
       {
-        "command": "executableTalk.closePresentation",
+        "command": "deckPilot.closePresentation",
         "title": "Deckpilot: Stop Presentation"
       },
       {
-        "command": "executableTalk.resetPresentation",
+        "command": "deckPilot.resetPresentation",
         "title": "Deckpilot: Reset Presentation"
       },
       {
-        "command": "executableTalk.nextSlide",
+        "command": "deckPilot.nextSlide",
         "title": "Deckpilot: Next Slide"
       },
       {
-        "command": "executableTalk.previousSlide",
+        "command": "deckPilot.previousSlide",
         "title": "Deckpilot: Previous Slide"
       },
       {
-        "command": "executableTalk.openPresenterView",
+        "command": "deckPilot.openPresenterView",
         "title": "Deckpilot: Open Presenter View"
       },
       {
-        "command": "executableTalk.validateDeck",
+        "command": "deckPilot.validateDeck",
         "title": "Deckpilot: Validate Deck"
       },
       {
-        "command": "executableTalk.goToSlide",
+        "command": "deckPilot.goToSlide",
         "title": "Deckpilot: Go to Slide"
       },
       {
-        "command": "executableTalk.saveScene",
+        "command": "deckPilot.saveScene",
         "title": "Deckpilot: Save Scene"
       },
       {
-        "command": "executableTalk.restoreScene",
+        "command": "deckPilot.restoreScene",
         "title": "Deckpilot: Restore Scene"
       },
       {
-        "command": "executableTalk.startRecording",
+        "command": "deckPilot.startRecording",
         "title": "Deckpilot: Start Recording Session"
       },
       {
-        "command": "executableTalk.stopRecording",
+        "command": "deckPilot.stopRecording",
         "title": "Deckpilot: Stop Recording Session"
       },
       {
-        "command": "executableTalk.pauseRecordingTiming",
+        "command": "deckPilot.pauseRecordingTiming",
         "title": "Deckpilot: Pause Recording Timing"
       },
       {
-        "command": "executableTalk.resumeRecordingTiming",
+        "command": "deckPilot.resumeRecordingTiming",
         "title": "Deckpilot: Resume Recording Timing"
       },
       {
-        "command": "executableTalk.toggleRecordingPause",
+        "command": "deckPilot.toggleRecordingPause",
         "title": "Deckpilot: Toggle Recording Pause"
       },
       {
-        "command": "executableTalk.markRetake",
+        "command": "deckPilot.markRetake",
         "title": "Deckpilot: Mark Retake Point"
       },
       {
-        "command": "executableTalk.insertNarrationMarker",
+        "command": "deckPilot.insertNarrationMarker",
         "title": "Deckpilot: Insert Narration Marker"
       },
       {
-        "command": "executableTalk.autoRecord",
+        "command": "deckPilot.autoRecord",
         "title": "Deckpilot: Auto-Record Deck"
       },
       {
-        "command": "executableTalk.cancelAutoRecord",
+        "command": "deckPilot.cancelAutoRecord",
         "title": "Deckpilot: Cancel Auto-Record"
       }
     ],
     "keybindings": [
       {
-        "command": "executableTalk.goToSlide",
+        "command": "deckPilot.goToSlide",
         "key": "ctrl+g",
         "mac": "cmd+g",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "executableTalk.saveScene",
+        "command": "deckPilot.saveScene",
         "key": "ctrl+s",
         "mac": "cmd+s",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "executableTalk.restoreScene",
+        "command": "deckPilot.restoreScene",
         "key": "ctrl+r",
         "mac": "cmd+r",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "executableTalk.toggleRecordingPause",
+        "command": "deckPilot.toggleRecordingPause",
         "key": "ctrl+shift+space",
         "mac": "cmd+shift+space",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "executableTalk.markRetake",
+        "command": "deckPilot.markRetake",
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "executableTalk.insertNarrationMarker",
+        "command": "deckPilot.insertNarrationMarker",
         "key": "ctrl+shift+m",
         "mac": "cmd+shift+m",
-        "when": "activeWebviewPanelId == 'executableTalkPresentation'"
+        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       }
     ],
     "chatParticipants": [
       {
-        "id": "executableTalk.deck",
+        "id": "deckPilot.deck",
         "fullName": "Deck Creator",
         "name": "deck",
         "description": "Create and convert Markdown presentations into interactive Deckpilot decks",
@@ -215,27 +215,27 @@
     "configuration": {
       "title": "Deckpilot",
       "properties": {
-        "executableTalk.recording.startCommand": {
+        "deckPilot.recording.startCommand": {
           "type": "string",
           "default": "",
           "description": "Shell command to launch an external screen recorder when recording starts. Use {{outputPath}} for the video file path and {{sessionId}} for the session identifier."
         },
-        "executableTalk.recording.stopCommand": {
+        "deckPilot.recording.stopCommand": {
           "type": "string",
           "default": "",
           "description": "Shell command to stop the external screen recorder when recording ends."
         },
-        "executableTalk.recording.outputDir": {
+        "deckPilot.recording.outputDir": {
           "type": "string",
           "default": "",
           "description": "Directory for recorder output files. Defaults to the deck file's directory if empty."
         },
-        "executableTalk.recording.outputExtension": {
+        "deckPilot.recording.outputExtension": {
           "type": "string",
           "default": "mp4",
           "description": "File extension for the recorder output file (e.g., mp4, mkv, webm)."
         },
-        "executableTalk.recording.screenDevice": {
+        "deckPilot.recording.screenDevice": {
           "type": "string",
           "default": "0:none",
           "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '0:none', '1:none', etc. For directshow (Windows) use the display name."

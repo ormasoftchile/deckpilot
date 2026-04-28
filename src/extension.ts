@@ -63,7 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Register commands
     const openPresentationDisposable = vscode.commands.registerCommand(
-        'executableTalk.openPresentation',
+        'deckPilot.openPresentation',
         async () => {
             const editor = vscode.window.activeTextEditor;
             
@@ -109,7 +109,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const closePresentationDisposable = vscode.commands.registerCommand(
-        'executableTalk.closePresentation',
+        'deckPilot.closePresentation',
         async () => {
             if (conductor?.isActive()) {
                 await conductor.close();
@@ -118,7 +118,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const resetPresentationDisposable = vscode.commands.registerCommand(
-        'executableTalk.resetPresentation',
+        'deckPilot.resetPresentation',
         async () => {
             if (conductor?.isActive()) {
                 await conductor.reset();
@@ -127,7 +127,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const nextSlideDisposable = vscode.commands.registerCommand(
-        'executableTalk.nextSlide',
+        'deckPilot.nextSlide',
         async () => {
             if (conductor?.isActive()) {
                 await conductor.nextSlide();
@@ -136,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const previousSlideDisposable = vscode.commands.registerCommand(
-        'executableTalk.previousSlide',
+        'deckPilot.previousSlide',
         async () => {
             if (conductor?.isActive()) {
                 await conductor.previousSlide();
@@ -145,7 +145,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const openPresenterViewDisposable = vscode.commands.registerCommand(
-        'executableTalk.openPresenterView',
+        'deckPilot.openPresenterView',
         () => {
             conductor?.openPresenterView();
         }
@@ -153,7 +153,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // T014: Go to slide command — opens slide picker in the Webview
     const goToSlideDisposable = vscode.commands.registerCommand(
-        'executableTalk.goToSlide',
+        'deckPilot.goToSlide',
         () => {
             conductor?.openSlidePicker();
         }
@@ -161,21 +161,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // T024/T025: Save/Restore scene commands — send messages to Webview
     const saveSceneDisposable = vscode.commands.registerCommand(
-        'executableTalk.saveScene',
+        'deckPilot.saveScene',
         () => {
             conductor?.requestSaveScene();
         }
     );
 
     const restoreSceneDisposable = vscode.commands.registerCommand(
-        'executableTalk.restoreScene',
+        'deckPilot.restoreScene',
         () => {
             conductor?.requestRestoreScene();
         }
     );
 
     const validateDeckDisposable = vscode.commands.registerCommand(
-        'executableTalk.validateDeck',
+        'deckPilot.validateDeck',
         async () => {
             const editor = vscode.window.activeTextEditor;
             
@@ -201,7 +201,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const startRecordingDisposable = vscode.commands.registerCommand(
-        'executableTalk.startRecording',
+        'deckPilot.startRecording',
         async () => {
             if (!conductor?.isActive()) {
                 void vscode.window.showWarningMessage('Start a presentation first before recording.');
@@ -217,7 +217,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const stopRecordingDisposable = vscode.commands.registerCommand(
-        'executableTalk.stopRecording',
+        'deckPilot.stopRecording',
         async () => {
             if (!conductor?.isRecording()) {
                 void vscode.window.showWarningMessage('No active recording to stop.');
@@ -263,7 +263,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Recording marker commands (Phase 2)
     const pauseTimingDisposable = vscode.commands.registerCommand(
-        'executableTalk.pauseRecordingTiming',
+        'deckPilot.pauseRecordingTiming',
         async () => {
             if (!conductor?.isRecording()) {
                 void vscode.window.showWarningMessage('No active recording.');
@@ -279,7 +279,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const resumeTimingDisposable = vscode.commands.registerCommand(
-        'executableTalk.resumeRecordingTiming',
+        'deckPilot.resumeRecordingTiming',
         async () => {
             if (!conductor?.isRecording()) {
                 void vscode.window.showWarningMessage('No active recording.');
@@ -295,7 +295,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const markRetakeDisposable = vscode.commands.registerCommand(
-        'executableTalk.markRetake',
+        'deckPilot.markRetake',
         async () => {
             if (!conductor?.isRecording()) {
                 void vscode.window.showWarningMessage('No active recording.');
@@ -311,7 +311,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const insertNarrationMarkerDisposable = vscode.commands.registerCommand(
-        'executableTalk.insertNarrationMarker',
+        'deckPilot.insertNarrationMarker',
         async () => {
             if (!conductor?.isRecording()) {
                 void vscode.window.showWarningMessage('No active recording.');
@@ -327,7 +327,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const toggleRecordingPauseDisposable = vscode.commands.registerCommand(
-        'executableTalk.toggleRecordingPause',
+        'deckPilot.toggleRecordingPause',
         async () => {
             if (!conductor?.isRecording()) {
                 return;
@@ -343,7 +343,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const autoRecordDisposable = vscode.commands.registerCommand(
-        'executableTalk.autoRecord',
+        'deckPilot.autoRecord',
         async () => {
             if (!conductor?.isActive()) {
                 await vscode.window.showErrorMessage('Start a presentation first before auto-recording.', { modal: true });
@@ -401,7 +401,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const cancelAutoRecordDisposable = vscode.commands.registerCommand(
-        'executableTalk.cancelAutoRecord',
+        'deckPilot.cancelAutoRecord',
         () => {
             if (conductor?.isAutoPilotActive()) {
                 conductor.cancelAutoPilot();
@@ -482,7 +482,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const diagnosticProvider = new ActionDiagnosticProvider();
-    const diagnosticCollection = vscode.languages.createDiagnosticCollection('executableTalkActions');
+    const diagnosticCollection = vscode.languages.createDiagnosticCollection('deckPilotActions');
 
     function updateDiagnostics(document: vscode.TextDocument): void {
         if (document.languageId !== 'deck-markdown') {

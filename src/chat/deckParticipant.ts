@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
-const PARTICIPANT_ID = 'executableTalk.deck';
+const PARTICIPANT_ID = 'deckPilot.deck';
 
 /**
  * System prompt that teaches the LLM the .deck.md format.
@@ -88,33 +88,17 @@ command:
 \`\`\`
 
 ### Fragments (progressive reveal)
-Add \`<!-- .fragment -->\` after an element to reveal it on click:
-\`\`\`markdown
-- First point <!-- .fragment -->
-- Second point <!-- .fragment -->
-- Third point <!-- .fragment -->
+All block elements (headings, paragraphs, bullet items, code blocks) are automatically
+revealed one at a time — **no markup required**. The parser handles fragmentation
+automatically.
 
-**Key takeaway:** shown after all bullets <!-- .fragment -->
-\`\`\`
-
-**IMPORTANT**: Once any element on a slide is a fragment, every element that comes after it must also be a fragment. Non-fragment content after a fragment list renders immediately — before any fragment is revealed — which breaks the reveal order.
-
-For action blocks, wrap in a div:
-\`\`\`markdown
-<div class="fragment"> <!-- .fragment -->
-
-\`\`\`action
-type: terminal.run
-command: echo "revealed!"
-label: Run
-\`\`\`
-
-</div>
-\`\`\`
+To **suppress** fragmentation on a slide (title slides, recap slides), set
+\`autoFragment: false\` in the sidecar for that slide's entry.
 
 ### Voice-Over Cues (for recording mode)
-Slide-level: \`<!-- voice: What to say on this slide -->\`
-Fragment-level: \`<!-- voice[1]: What to say when fragment 1 reveals -->\`
+**Preferred**: Put voice cues in the sidecar file under \`cues:\` for each slide.
+**Inline fallback**: \`<!-- voice: What to say on this slide -->\` (sidecar wins when both exist)
+**Fragment-level** (inline only): \`<!-- voice[1]: What to say when fragment 1 reveals -->\`
 
 Voice cues are invisible during presentation. They appear in the exported
 voice-over script and SRT captions when recording mode is used.
@@ -130,8 +114,8 @@ voice-over script and SRT captions when recording mode is used.
 2. One concept per slide — keep slides focused
 3. Use fragments to build up complex ideas step by step
 4. Add action links for live demonstrations — don't just describe, show
-5. Use voice cues on every slide — they drive the narration script
-6. Use speaker notes for presenter reminders — always use the \`---notes:---\` block format; never embed notes as visible slide text
+5. Use voice cues on every slide — put them in the sidecar \`cues:\` field, NOT inline
+6. Use speaker notes for presenter reminders — put them in the sidecar \`notes:\` field, NOT inline as \`---notes:---\` blocks
 7. End with a summary or closing slide
 8. Terminal commands should use cross-platform YAML blocks when possible
 9. Use \`basePath: ..\` when the deck is in a subdirectory but references root files
@@ -141,8 +125,9 @@ voice-over script and SRT captions when recording mode is used.
 
 - Split on natural heading boundaries (# and ##)
 - Convert code blocks into action links or render directives where appropriate
-- Convert bullet lists into fragments for progressive reveal
-- **Fragment consistency rule**: once a slide uses \`<!-- .fragment -->\`, ALL content that appears AFTER the first fragment marker must also be a fragment. Non-fragment content (paragraphs, bold text, callouts) that follows a fragment list would appear on screen BEFORE the fragments are revealed, which is confusing. Mark them with \`<!-- .fragment -->\` too.
+- Put speaker notes in the sidecar \`notes:\` field (not inline frontmatter blocks)
+- Put voice cues in the sidecar \`cues:\` field (not inline \`<!-- voice: -->\`)
+- Do NOT generate \`<!-- .fragment -->\` comments — auto-fragmentation handles progressive reveal automatically
 - Add voice cues that paraphrase each slide's content in spoken language
 - Add a frontmatter block with title and author
 - Keep the original content structure but make it presentation-friendly
@@ -155,10 +140,13 @@ voice-over script and SRT captions when recording mode is used.
 - Include file.open actions for config files and code
 - Include editor.highlight for key code sections
 - Use fragments to reveal steps progressively
-- Write voice cues as natural spoken narration
+- Write voice cues as natural spoken narration — put them in the sidecar \`cues:\` field
+- Put speaker notes in the sidecar \`notes:\` field
 
 ### Sidecar File (.deck.yaml)
-A companion file (same name, .deck.yaml extension) stores operational metadata separately from content:
+A companion file (same name, .deck.yaml extension) stores operational metadata separately from content.
+**This is the preferred location for notes, voice cues, and slide-level configuration.**
+
 \`\`\`yaml
 deck:
   title: Presentation Title
@@ -169,6 +157,7 @@ slides:
     cues:
       - "What to say when this slide appears"
     duration: 10s
+    autoFragment: false    # optional: suppress auto-fragmentation for this slide
     actions:
       - type: terminal.run
         cmd: npm start
@@ -384,7 +373,7 @@ async function handleCreate(
   }
 
   // Feature preferences
-  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt);
+  const wantsSidecar = !/\bwithout\s+sidecar\b/i.test(rawPrompt);
   const wantsZenMode = /\bzen\s+mode\b/i.test(rawPrompt);
 
   // Strip meta-instructions — leave only the content description
@@ -402,6 +391,12 @@ async function handleCreate(
     ? 'Include `options:\\n  zenMode: true` in the deck frontmatter. '
     : '';
 
+  const sidecarOnlyInstructions = wantsSidecar
+    ? 'DO NOT include inline voice cues (<!-- voice: -->) or speaker notes (---\\nnotes:...\\n---) in the markdown — ' +
+      'these will be placed in the sidecar file. ' +
+      'Add an <!-- id: slug --> comment immediately after each --- slide separator so the sidecar can reference each slide. '
+    : 'Include voice cues on every slide. ';
+
   const messages = [
     vscode.LanguageModelChatMessage.User(DECK_SYSTEM_PROMPT),
     vscode.LanguageModelChatMessage.User(
@@ -409,7 +404,8 @@ async function handleCreate(
       'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
       'Start directly with the YAML frontmatter (---). ' +
       zenModeInstruction +
-      'Include voice cues on every slide. Use fragments where they help build up ideas. ' +
+      sidecarOnlyInstructions +
+      'Use fragments where they help build up ideas. ' +
       'Use action links and YAML action blocks for any demonstrations.',
     ),
   ];
@@ -477,7 +473,7 @@ async function handleCreate(
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
 
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // User cancelled the save dialog — fall back to showing in chat
     stream.markdown(deckContent);
@@ -499,7 +495,7 @@ async function handleConvert(
 ): Promise<DeckChatResult> {
   // Parse meta-preferences from the raw prompt (same approach as handleCreate)
   const rawPrompt = request.prompt ?? '';
-  const wantsSidecar = /\bwith\s+sidecar\b/i.test(rawPrompt) || /\bsidecar\b/i.test(rawPrompt);
+  const wantsSidecar = !/\bwithout\s+sidecar\b/i.test(rawPrompt);
   const wantsZenMode = /\bzen\s*mode\b/i.test(rawPrompt);
 
   // ── DEBUG: dump every ref VS Code sends ──────────────────────────────────
@@ -579,12 +575,19 @@ async function handleConvert(
 
   stream.progress('Converting to deck format...');
 
+  const convertSidecarInstructions = wantsSidecar
+    ? 'DO NOT include inline voice cues (<!-- voice: -->) or speaker notes (---\\nnotes:...\\n---) — ' +
+      'these will be placed in the sidecar file. ' +
+      'Add an <!-- id: slug --> comment immediately after each --- slide separator. '
+    : 'Add voice cues on every slide. ';
+
   let convertUserMsg =
     'Convert this Markdown content into a .deck.md presentation:\n\n' +
     '```markdown\n' + sourceContent + '\n```\n\n' +
     'Output ONLY the .deck.md file content — no explanations, no wrapping code fences around the entire file. ' +
     'Start directly with the YAML frontmatter (---). ' +
-    'Split on natural heading boundaries. Add voice cues on every slide. ' +
+    'Split on natural heading boundaries. ' +
+    convertSidecarInstructions +
     'Convert code references into action links. Add fragments for lists. ' +
     'Keep the original content and structure but make it presentation-friendly.';
 
@@ -650,7 +653,7 @@ async function handleConvert(
       stream.anchor(sidecarUri, 'Open sidecar file');
     }
 
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No source URI tracked (shouldn't happen) — fall back to showing in chat
     stream.markdown(deckContent);
@@ -744,7 +747,7 @@ async function handleEnrich(
     await vscode.workspace.fs.writeFile(deckUri, Buffer.from(enrichedContent, 'utf-8'));
     await vscode.window.showTextDocument(deckUri, { preview: false });
     stream.markdown(`✅ Enriched \`${vscode.workspace.asRelativePath(deckUri)}\` — saved to disk.\n`);
-    stream.button({ command: 'executableTalk.openPresentation', title: '▶ Start Presentation' });
+    stream.button({ command: 'deckPilot.openPresentation', title: '▶ Start Presentation' });
   } else {
     // No deckUri tracked — fall back to showing in chat
     stream.markdown(enrichedContent);

@@ -222,7 +222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Parse errors reported at deck level without blocking presentation loading
 
 - **Preflight Deck Validation** (US2): Validate entire deck before presenting
-  - New command: `Executable Talk: Validate Deck` (`executableTalk.validateDeck`)
+  - New command: `Executable Talk: Validate Deck` (`deckPilot.validateDeck`)
   - File path validation — checks referenced files exist
   - Line range validation — checks highlight ranges don't exceed file length
   - Debug config validation — verifies launch configurations exist

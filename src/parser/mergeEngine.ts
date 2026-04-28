@@ -76,6 +76,23 @@ export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): S
       merged.html = `<div class="${layoutClass}">${merged.html}</div>`;
     }
 
+    // autoFragment: when explicitly false, strip all fragment attributes from HTML
+    if (sidecarSlide.autoFragment === false) {
+      let h = merged.html;
+      // Strip fragment class from elements that had ONLY "fragment" as their class
+      h = h.replace(/\sclass="fragment"/g, '');
+      // Strip fragment class from elements that had it appended to other classes
+      h = h.replace(/(\sclass="[^"]*)\bfragment\b\s*/g, '$1');
+      // Clean up trailing spaces in class attributes
+      h = h.replace(/\sclass="\s+/g, ' class="');
+      h = h.replace(/\s+"/g, '"');
+      // Strip data-fragment attributes
+      h = h.replace(/\s+data-fragment="\d+"/g, '');
+      h = h.replace(/\s+data-fragment-animation="[\w-]+"/g, '');
+      merged.html = h;
+      merged.fragmentCount = 0;
+    }
+
     // sidecarActions: store raw entries, then render as clickable interactive elements
     // (source='sidecar') appended after slide content. This ensures the presenter
     // controls when actions fire — never auto-executed on slide entry.

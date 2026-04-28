@@ -1,0 +1,228 @@
+1
+00:00:00,000 --> 00:00:08,000
+Welcome to Executable Talk — a VS Code
+extension that turns Markdown
+presentations into interactive demos with
+live code execution.
+
+2
+00:00:11,500 --> 00:00:15,500
+Executable Talk lets you open files
+directly from your slides.
+
+3
+00:00:24,900 --> 00:00:28,100
+Let's open package.json to see the project
+configuration.
+
+4
+00:00:27,400 --> 00:00:30,600
+And here's the README with the project
+documentation.
+
+5
+00:00:29,900 --> 00:00:35,900
+You can highlight specific lines in a
+file. Great for drawing attention to key
+code.
+
+6
+00:00:46,100 --> 00:00:50,100
+Highlight a range of lines — lines one
+through ten.
+
+7
+00:00:48,600 --> 00:00:51,800
+Or highlight a single line — line twenty.
+
+8
+00:00:51,100 --> 00:00:55,500
+Terminal commands run directly from your
+slides. They require Workspace Trust.
+
+9
+00:01:01,000 --> 00:01:03,500
+Check the installed npm version.
+
+10
+00:01:03,800 --> 00:01:06,600
+List the files in the project directory.
+
+11
+00:01:09,300 --> 00:01:16,500
+Sequences let you chain multiple actions
+together — open a file and highlight
+specific lines in one click.
+
+12
+00:01:24,000 --> 00:01:31,600
+You can embed live file content directly
+in your slides. This always shows the
+current version of the file.
+
+13
+00:01:36,600 --> 00:01:45,000
+Command output rendering executes a
+command and embeds the result right in the
+slide. Useful for showing versions or
+directory listings.
+
+14
+00:01:52,500 --> 00:01:58,500
+Diff rendering shows git changes inline.
+You can compare any file against a
+previous commit.
+
+15
+00:02:03,500 --> 00:02:07,500
+Any VS Code command can be triggered from
+a slide.
+
+16
+00:02:17,800 --> 00:02:20,300
+Open the VS Code settings panel.
+
+17
+00:02:20,300 --> 00:02:22,800
+Toggle the sidebar visibility.
+
+18
+00:02:22,800 --> 00:02:25,600
+Search for markdown extensions in the
+marketplace.
+
+19
+00:02:25,300 --> 00:02:35,300
+New in version 0.2 — YAML action blocks.
+Instead of URL-encoded links, you can
+write actions as readable YAML. Both
+formats work side by side.
+
+20
+00:02:53,800 --> 00:03:01,000
+YAML blocks make complex actions much
+easier to read. Here we highlight lines in
+the extension entry point.
+
+21
+00:03:09,000 --> 00:03:19,000
+Sequences are dramatically cleaner in
+YAML. This one opens a file, highlights
+key lines, and runs a terminal command —
+all in a single block.
+
+22
+00:03:26,500 --> 00:03:30,900
+Terminal and VS Code commands in YAML are
+just as clean.
+
+23
+00:03:30,900 --> 00:03:33,400
+Run an echo command from YAML.
+
+24
+00:03:36,600 --> 00:03:39,800
+Toggle the sidebar with a single YAML
+block.
+
+25
+00:03:41,600 --> 00:03:46,000
+Preflight validation catches errors before
+you present. The validator checks for:
+
+26
+00:03:51,000 --> 00:03:53,500
+Missing files in your action links.
+
+27
+00:03:53,500 --> 00:03:56,000
+Out-of-range line numbers in highlight
+actions.
+
+28
+00:03:56,000 --> 00:03:58,500
+Missing debug configurations.
+
+29
+00:03:58,500 --> 00:04:01,000
+Unavailable terminal commands on your
+platform.
+
+30
+00:04:01,000 --> 00:04:04,200
+Trust issues when running in an untrusted
+workspace.
+
+31
+00:04:04,200 --> 00:04:08,600
+These action blocks have intentional
+errors. The validator will catch them.
+
+32
+00:04:11,100 --> 00:04:14,700
+This file doesn't exist — the validator
+flags it.
+
+33
+00:04:17,900 --> 00:04:21,100
+These line numbers are way out of range.
+
+34
+00:04:23,400 --> 00:04:27,800
+When actions fail during a presentation,
+you see a toast notification.
+
+35
+00:04:30,300 --> 00:04:33,900
+File open errors show which file couldn't
+be found.
+
+36
+00:04:33,900 --> 00:04:37,500
+Highlight errors show which lines are out
+of range.
+
+37
+00:04:37,500 --> 00:04:40,000
+Terminal errors show the failing command.
+
+38
+00:04:40,000 --> 00:04:42,500
+Sequence errors show a step-by-step
+breakdown.
+
+39
+00:04:42,500 --> 00:04:46,500
+Toasts auto-dismiss after eight seconds.
+Hover to pause the timer.
+
+40
+00:04:46,500 --> 00:04:50,100
+When editing deck files you get full IDE
+support.
+
+41
+00:04:52,600 --> 00:04:56,200
+Autocomplete suggests action types and
+parameters as you type.
+
+42
+00:04:56,200 --> 00:04:59,000
+Hover docs show descriptions and parameter
+tables.
+
+43
+00:04:59,000 --> 00:05:01,800
+Real-time diagnostics show red squiggles
+for errors.
+
+44
+00:05:01,800 --> 00:05:06,600
+Try it yourself — open this file and edit
+an action block.
+
+45
+00:05:06,600 --> 00:05:15,000
+That's the end of the demo. Press Escape
+to exit, or Ctrl+Z to undo any IDE changes
+made during the presentation.

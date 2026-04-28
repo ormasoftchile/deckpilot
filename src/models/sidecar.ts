@@ -22,6 +22,13 @@ export interface SidecarSlide {
   notes?: string;
   /** Slide-level layout: 'center' | 'columns' | 'left' | 'right' | 'group'. Applied by wrapping slide HTML. */
   layout?: string;
+  /**
+   * When false, auto-fragmentation is suppressed for this slide.
+   * All elements render visible immediately — no progressive reveal.
+   * Useful for title slides, recap slides, and reference tables.
+   * Default: true (auto-fragment is on for all slides unless overridden).
+   */
+  autoFragment?: boolean;
 }
 
 export interface SidecarDeck {
