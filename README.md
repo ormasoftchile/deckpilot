@@ -2,15 +2,29 @@
 
 > Formerly Executable Talk. Marketplace/package identifiers still use `executable-talk` for backward compatibility.
 
-Deckpilot turns `.deck.md` Markdown files into live, executable presentations inside VS Code. Write slides in Markdown, wire up action links to open files, highlight code, run terminal commands, or launch the debugger — then present without switching windows.
+Deckpilot is a **programmable deck system** for VS Code.
 
-Built for live coding demos, hands-on teaching, and team onboarding.
+Write decks in Markdown, attach actions, and use them to:
+- present live demos
+- automate IDE workflows
+- guide onboarding and setup
+- record demos into video + narration artifacts
+
+From one deck, you can present, execute, onboard, and produce content.
+
+---
+
+## Why Deckpilot?
+
+Most slide tools show content.
+Deckpilot decks can **drive the IDE**, run commands, validate setup, and record what happened — all from the same file.
 
 ---
 
 ## What's in the box
 
-**Presentation**
+### 1. Presentation
+
 - Reveal.js-powered full-screen webview; arrow keys + Space navigate slides and fragments
 - Fragment animations — elements reveal step-by-step (no markup required; auto-fragmentation is on by default)
 - Five themes: `dark`, `light`, `minimal`, `contrast` — set in frontmatter
@@ -20,47 +34,39 @@ Built for live coding demos, hands-on teaching, and team onboarding.
 - Undo/redo IDE state during a demo (`Cmd+Z` / `Ctrl+Z`, up to 50 snapshots)
 - Floating toolbar — toggle sidebar, panel, terminal, activity bar, Zen Mode
 
-**Actions**
+### 2. Execution
+
+Trigger IDE actions directly from slide content:
+
 - `file.open` — open a file in the editor
 - `editor.highlight` — highlight specific lines
 - `terminal.run` — run a terminal command *(requires Workspace Trust)*
 - `debug.start` — launch a debug config *(requires Workspace Trust)*
 - `sequence` — chain multiple actions into one click
 - `vscode.command` — run any VS Code command *(requires Workspace Trust)*
-- `wait.condition` — block until a file exists or a port opens (Auto-Pilot / onboarding)
-- `validate.command / .fileExists / .port` — inline setup verification for onboarding decks
+- `wait.condition` — block until a file exists or a port opens
 - YAML action blocks (` ```action `) as a readable alternative to URL-encoded inline links
+- Scene checkpoints — save/restore full IDE state (`Ctrl+S` / `Ctrl+R`); pre-authored scenes declared in frontmatter appear in the picker automatically
 
-**Authoring**
-- Sidecar `.deck.yaml` — keep notes, cues, layout overrides, and actions separate from content
-- Environment variables — `{{VAR}}` placeholders from a `.deck.env` sidecar; `secret: true` masks values in the UI and terminal output
-- Dynamic content — `render:file`, `render:command`, `render:diff` embed live file contents or output
-- Layout directives — `:::center`, `:::columns`, `:::left / :::right`, `:::advanced`, `:::optional`
-- Cross-platform terminal commands — per-OS command map (`macos` / `windows` / `linux` / `default`) + path placeholders
-- `basePath` frontmatter — resolve relative paths when the deck lives in a subdirectory
-- Preflight validation — catches missing files, bad line ranges, PATH issues, trust problems
-- IDE authoring assistance — syntax highlighting, autocomplete, hover docs, real-time diagnostics inside ` ```action ` blocks
+### 3. Recording & media
 
-**AI generation (`@deck`)**
-- `/create` — generate a `.deck.md` + `.deck.yaml` from a plain-language description
-- `/convert` — convert an existing Markdown file into a deck
-- `/enrich` — add voice cues, fragments, and actions to an existing deck
-- Freeform questions — ask anything deck-related in Copilot Chat
+Deckpilot can auto-present your deck and coordinate with an external recorder to produce video and narration artifacts.
 
-**Recording & narration**
 - Voice-over cues — `<!-- voice: text -->` per slide, `<!-- voice[N]: text -->` per fragment
 - Manual recording — start/stop session; pause/resume timing, retake markers, narration markers
-- Auto-Pilot — hands-free: drives slides, fragments, and actions at a pace computed from cue word count
-- Exports — `voiceover-script.md`, SRT captions, event JSON
+- **Auto-Pilot** — hands-free: drives slides, fragments, and actions at a pace computed from voice cue word count
 - External recorder — configure ffmpeg (or any tool) to start/stop automatically via settings
+- Exports — `voiceover-script.md`, SRT captions, event JSON, MP4 video (via external recorder)
 
-**Onboarding mode**
-- `mode: onboarding` in options — step counter replaces slide numbers; retry/reset on validation failure
+### 4. Onboarding & validation
+
+- `mode: onboarding` in frontmatter options — step counter replaces slide numbers; retry/reset on validation failure
+- `validate.command` — verify a CLI tool is installed before proceeding
+- `validate.fileExists` — confirm required files are present
+- `validate.port` — check that a required service is reachable
+- `wait.condition` — block until a condition is met
 - Checkpoint markers — `<!-- checkpoint: name -->` captures IDE state; **Reset to Checkpoint** restores on failure
-
-**Scene checkpoints**
-- Save/restore full IDE state as named scenes (`Ctrl+S` / `Ctrl+R`)
-- Pre-authored scenes — declare named anchors in frontmatter; they appear in the picker automatically
+- Preflight validation — catches missing files, bad line ranges, PATH issues, and trust problems at load time
 
 ---
 
@@ -117,7 +123,23 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
 
 ---
 
-## Sidecar files (`.deck.yaml`)
+## Example workflow: record a demo
+
+1. Write a `.deck.md` deck with slides, actions, and voice cues
+2. Configure an external recorder in VS Code settings (e.g. ffmpeg)
+3. Run **Deckpilot: Auto-Record Deck** from the command palette
+4. Deckpilot drives the presentation automatically, coordinating with the recorder
+5. When done, export:
+   - MP4 video (captured by the external recorder)
+   - SRT captions
+   - `voiceover-script.md`
+   - Event JSON (full timing log)
+
+---
+
+## Authoring
+
+### Sidecar files (`.deck.yaml`)
 
 Keep metadata and presenter content out of the Markdown. The merge engine combines the two files at load time; inline values always win over sidecar values.
 
@@ -148,7 +170,48 @@ export:
 
 Slide IDs are set with `<!-- id: slug -->` comments in the Markdown right after `---`.
 
-All four deck commands work when a `.deck.yaml` file is the active editor — they auto-resolve the paired `.deck.md`.
+All deck commands work when a `.deck.yaml` file is the active editor — they auto-resolve the paired `.deck.md`.
+
+### Environment variables
+
+Use `{{VAR}}` placeholders in your deck, resolved from a `.deck.env` sidecar file. Mark sensitive values with `secret: true` to mask them in the UI and terminal output.
+
+### Dynamic content
+
+Embed live file contents or command output directly in slides:
+
+- `render:file` — inline a file's contents
+- `render:command` — run a command and embed its output *(requires Workspace Trust)*
+- `render:diff` — show a git diff inline
+
+### Layout directives
+
+Structure slide content with layout containers:
+
+- `:::center` — center content vertically and horizontally
+- `:::columns` / `:::left` / `:::right` — two-column grid
+- `:::advanced` — collapsible disclosure for advanced content
+- `:::optional` — callout block for optional steps
+
+### Cross-platform terminal commands
+
+Define per-OS commands in a YAML action block:
+
+````markdown
+```action
+type: terminal.run
+label: Open folder
+command:
+  macos: open .
+  windows: explorer .
+  linux: xdg-open .
+```
+````
+
+### Other authoring features
+
+- `basePath` frontmatter — resolve relative paths when the deck lives in a subdirectory
+- IDE authoring assistance — syntax highlighting, autocomplete, hover docs, real-time diagnostics inside ` ```action ` blocks
 
 ---
 
@@ -167,15 +230,20 @@ By default `/create` and `/convert` produce a sidecar file alongside the Markdow
 
 ---
 
-## Action reference (quick)
+## Action reference
 
-### Inline links
+### Core actions
 
 ```markdown
 [Open file](action:file.open?path=src/main.ts)
 [Highlight](action:editor.highlight?path=src/main.ts&lines=5-20)
 [Run](action:terminal.run?command=npm%20test)
 [Debug](action:debug.start?configName=Launch%20Program)
+```
+
+### Advanced actions
+
+```markdown
 [VS Code command](action:vscode.command?id=workbench.action.openSettings)
 ```
 
@@ -189,19 +257,6 @@ type: terminal.run
 label: Run tests
 command: npm test
 showCommand: true   # display resolved command below the button
-```
-````
-
-Cross-platform commands:
-
-````markdown
-```action
-type: terminal.run
-label: Open folder
-command:
-  macos: open .
-  windows: explorer .
-  linux: xdg-open .
 ```
 ````
 
@@ -222,6 +277,16 @@ steps:
 ```
 ````
 
+Validation (onboarding decks):
+
+````markdown
+```action
+type: validate.command
+command: node --version
+label: Check Node.js
+```
+````
+
 ---
 
 ## Workspace Trust
@@ -233,6 +298,12 @@ steps:
 ## Requirements
 
 VS Code 1.95.0 or higher.
+
+---
+
+## Compatibility
+
+The product and repository are branded **Deckpilot**. Marketplace and package identifiers continue to use `executable-talk` for backward compatibility — existing users receive updates normally without any action required.
 
 ---
 
