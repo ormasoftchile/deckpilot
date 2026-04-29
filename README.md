@@ -178,11 +178,25 @@ Use `{{VAR}}` placeholders in your deck, resolved from a `.deck.env` sidecar fil
 
 ### Dynamic content
 
-Embed live file contents or command output directly in slides:
+Embed live file contents or command output directly in slides. Syntax uses empty Markdown links:
 
-- `render:file` — inline a file's contents
-- `render:command` — run a command and embed its output *(requires Workspace Trust)*
-- `render:diff` — show a git diff inline
+```markdown
+[](render:file?path=src/main.ts&lines=1-30&format=typescript)
+[](render:file?path=package.json&format=json)
+```
+
+```markdown
+[](render:command?cmd=node%20--version)
+[](render:command?cmd=git%20branch%20--show-current)
+```
+
+```markdown
+[](render:diff?path=src/extension.ts&ref=HEAD~1)
+```
+
+- `render:file` — inline a file's contents; `path` is required, `lines` (`1-30`) and `format` are optional
+- `render:command` — run a command and embed its output *(requires Workspace Trust)*; `cmd` is URL-encoded
+- `render:diff` — show a git diff inline; `path` is required, `ref` defaults to `HEAD~1`
 
 ### Layout directives
 
@@ -245,7 +259,54 @@ By default `/create` and `/convert` produce a sidecar file alongside the Markdow
 
 ```markdown
 [VS Code command](action:vscode.command?id=workbench.action.openSettings)
+[Open docs](action:browser.open?url=https://example.com&title=Docs&column=2)
 ```
+
+**`browser.open` parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | yes | `https://` URL, or `http://localhost`/`http://127.0.0.1` |
+| `title` | no | Panel tab title. Default: `"Browser"` |
+| `column` | no | ViewColumn: `1`, `2`, `3`, or `-1` (beside). Default: `2` |
+
+As a YAML block:
+
+````markdown
+```action
+type: browser.open
+label: Open local server
+url: http://localhost:3000
+title: Dev Server
+column: 2
+```
+````
+
+**`wait.condition` parameters:**
+
+````markdown
+```action
+type: wait.condition
+label: Wait for server
+condition: port.open
+port: 3000
+host: localhost        # optional, default: localhost
+message: Waiting for dev server…
+timeoutMs: 60000       # optional, default: 120000
+pollIntervalMs: 2000   # optional, default: 3000
+```
+````
+
+````markdown
+```action
+type: wait.condition
+label: Wait for output file
+condition: file.exists
+path: dist/bundle.js
+```
+````
+
+`wait.condition` does not require Workspace Trust.
 
 ### YAML action blocks
 
@@ -292,6 +353,14 @@ label: Check Node.js
 ## Workspace Trust
 
 `terminal.run`, `debug.start`, `render:command`, and `vscode.command` require [Workspace Trust](https://code.visualstudio.com/docs/editor/workspace-trust). In untrusted workspaces those actions are blocked with a clear message. `file.open` and `editor.highlight` always work.
+
+---
+
+## Debug commands
+
+| Command | Description |
+|---------|-------------|
+| `deckpilot.showResolvedDeckModel` | Opens the fully merged `Deck` model for the active `.deck.md` as a read-only JSON document — useful for inspecting how sidecar merges, env vars, and action blocks resolve. Run from the command palette. |
 
 ---
 
