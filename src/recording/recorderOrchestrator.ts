@@ -31,12 +31,21 @@ export interface RecorderConfig {
  */
 export function getRecorderConfig(): RecorderConfig {
   const config = vscode.workspace.getConfiguration('deckPilot.recording');
+  // Legacy fallback: read executableTalk.recording.* if deckPilot.recording.* are not set
+  const legacy = vscode.workspace.getConfiguration('executableTalk.recording');
+  function get<T>(key: string, def: T): T {
+    const v = config.get<T>(key);
+    if (v !== undefined && v !== '') { return v; }
+    const lv = legacy.get<T>(key);
+    if (lv !== undefined && lv !== '') { return lv; }
+    return def;
+  }
   return {
-    startCommand: config.get<string>('startCommand', ''),
-    stopCommand: config.get<string>('stopCommand', ''),
-    outputDir: config.get<string>('outputDir', ''),
-    outputExtension: config.get<string>('outputExtension', 'mp4'),
-    screenDevice: config.get<string>('screenDevice', '0:none'),
+    startCommand: get('startCommand', ''),
+    stopCommand: get('stopCommand', ''),
+    outputDir: get('outputDir', ''),
+    outputExtension: get('outputExtension', 'mp4'),
+    screenDevice: get('screenDevice', '0:none'),
   };
 }
 
