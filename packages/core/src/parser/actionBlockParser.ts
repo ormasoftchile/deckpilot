@@ -6,7 +6,7 @@
 
 import * as yaml from 'js-yaml';
 import { InteractiveElement, ContentPosition } from '../models/slide';
-import { ActionType, createAction } from '../models/action';
+import { createAction } from '../models/action';
 import { isKnownActionType, getRequiredParams } from '../models/actionSchema';
 
 /**
@@ -147,7 +147,7 @@ export function parseActionBlocks(
     }
 
     // Validate required parameters
-    const requiredParams = getRequiredParams(actionType as ActionType);
+    const requiredParams = getRequiredParams(actionType);
     const missingParams = requiredParams.filter((p) => yamlObj[p] === undefined || yamlObj[p] === null);
 
     if (missingParams.length > 0) {
@@ -175,7 +175,7 @@ export function parseActionBlocks(
     }
 
     // Create the Action model
-    const action = createAction(actionType as ActionType, params, slideIndex);
+    const action = createAction(actionType, params, slideIndex);
 
     // Determine label
     const label = typeof yamlObj.label === 'string'

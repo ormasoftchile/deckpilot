@@ -31,5 +31,10 @@ export default defineConfig({
   server: {
     port: 5173,
     open: false,
+    fs: {
+      // Allow Vite to serve files from the workspace root so `@deckpilot/core`
+      // source (in ../../packages/core) can be loaded via /@fs/... in dev mode.
+      allow: [path.resolve(__dirname, '../..')],
+    },
   },
 });

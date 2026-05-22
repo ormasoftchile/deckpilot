@@ -5,7 +5,7 @@ import 'reveal.js/dist/theme/black.css';
 import type { LoadedDeck } from '../lib/deckLoader';
 import { sanitizeSlideHtml } from '../lib/sanitize';
 import { rewriteActionLinks } from '../lib/actionRenderer';
-import { readSlideFromHash, writeSlideToHash } from '../lib/hashRouter';
+import { readSlideFromHash, writeSlideToHash, onHashChange } from '../lib/hashRouter';
 import { PresenterNotes } from './PresenterNotes';
 
 interface DeckViewerProps {
@@ -82,7 +82,16 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       handleChange();
     });
 
+    // External hash changes (deep link refresh, manual edits) drive reveal.
+    const unsubscribeHash = onHashChange((idx) => {
+      const clamped = Math.min(Math.max(idx, 0), slides.length - 1);
+      if (revealRef.current && revealRef.current.getIndices().h !== clamped) {
+        revealRef.current.slide(clamped);
+      }
+    });
+
     return () => {
+      unsubscribeHash();
       try {
         reveal.destroy();
       } catch {
