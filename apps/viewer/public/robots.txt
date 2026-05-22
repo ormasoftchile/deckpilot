@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /?url=
+
+Sitemap: https://viewer.deckpilot.cl/sitemap.xml
