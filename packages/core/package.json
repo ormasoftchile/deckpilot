@@ -1,0 +1,68 @@
+{
+  "name": "@deckpilot/core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared Deckpilot logic (parser, models, env, validation, pure renderer pieces). Used by the VS Code extension and the web app.",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "default": "./dist/models/index.js"
+    },
+    "./models/*": {
+      "types": "./dist/models/*.d.ts",
+      "default": "./dist/models/*.js"
+    },
+    "./parser": {
+      "types": "./dist/parser/index.d.ts",
+      "default": "./dist/parser/index.js"
+    },
+    "./parser/*": {
+      "types": "./dist/parser/*.d.ts",
+      "default": "./dist/parser/*.js"
+    },
+    "./env": {
+      "types": "./dist/env/index.d.ts",
+      "default": "./dist/env/index.js"
+    },
+    "./env/*": {
+      "types": "./dist/env/*.d.ts",
+      "default": "./dist/env/*.js"
+    },
+    "./validation": {
+      "types": "./dist/validation/index.d.ts",
+      "default": "./dist/validation/index.js"
+    },
+    "./validation/*": {
+      "types": "./dist/validation/*.d.ts",
+      "default": "./dist/validation/*.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "default": "./dist/renderer/index.js"
+    },
+    "./renderer/*": {
+      "types": "./dist/renderer/*.d.ts",
+      "default": "./dist/renderer/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.1",
+    "markdown-it": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/markdown-it": "^14.1.2"
+  }
+}

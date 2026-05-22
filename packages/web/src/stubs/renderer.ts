@@ -6,9 +6,9 @@
  * needed at compile time and main.ts doesn't import them as values.
  */
 
-export { parseRenderDirectives } from '../../src/renderer/renderDirectiveParser';
-export { renderFile } from '../../src/renderer/fileRenderer';
-export { renderCommand, clearCommandCache, invalidateCommand } from '../../src/renderer/commandRenderer';
-export { renderDiff, parseDiff } from '../../src/renderer/diffRenderer';
-export { resolveDirective, createLoadingPlaceholder, formatAsCommandBlock } from '../../src/renderer/contentRenderer';
-export { renderBlockElements, injectBlockElements, injectBlockElementsFromParsed } from '../../src/renderer/blockElementRenderer';
+export { parseRenderDirectives } from '../../../core/src/renderer/renderDirectiveParser';
+export { renderFile } from '../../../extension/src/renderer/fileRenderer';
+export { renderCommand, clearCommandCache, invalidateCommand } from '../../../extension/src/renderer/commandRenderer';
+export { renderDiff, parseDiff } from '../../../extension/src/renderer/diffRenderer';
+export { resolveDirective, createLoadingPlaceholder, formatAsCommandBlock } from '../../../extension/src/renderer/contentRenderer';
+export { renderBlockElements, injectBlockElements, injectBlockElementsFromParsed } from '../../../core/src/renderer/blockElementRenderer';

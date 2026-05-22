@@ -1,7 +1,9 @@
 .vscode/**
 .vscode-test/**
-src/**
-!src/webview/assets/**
+packages/extension/src/**
+!packages/extension/src/webview/assets/**
+packages/core/src/**
+packages/web/**
 test/**
 .gitignore
 .eslintrc.json
@@ -18,3 +20,5 @@ specs/**
 !node_modules
 !node_modules/gray-matter/**
 !node_modules/markdown-it/**
+!node_modules/@deckpilot/core/dist/**
+!node_modules/@deckpilot/core/package.json

@@ -7,7 +7,7 @@
  */
 
 import { expect } from 'chai';
-import { NavigationHistory } from '../../../src/conductor/navigationHistory';
+import { NavigationHistory } from '../../../packages/extension/src/conductor/navigationHistory';
 
 describe('NavigationHistory', () => {
   let history: NavigationHistory;

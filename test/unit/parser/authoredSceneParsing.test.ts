@@ -7,7 +7,7 @@
  */
 
 import { expect } from 'chai';
-import { SceneDefinition } from '../../../src/models/deck';
+import { SceneDefinition } from '../../../packages/core/src/models/deck';
 
 /**
  * Parse and validate scenes from frontmatter metadata.

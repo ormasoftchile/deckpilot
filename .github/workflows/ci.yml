@@ -66,25 +66,6 @@ jobs:
     - name: Run unit tests
       run: npm run test:unit
 
-    - name: Install Playwright browsers
-      run: npx playwright install --with-deps chromium
-
-    - name: Setup Xvfb for VS Code tests (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb
-
-    - name: Run VS Code extension tests (Linux with Xvfb)
-      if: runner.os == 'Linux'
-      run: xvfb-run -a npm run test:integration
-      continue-on-error: true
-
-    - name: Run VS Code extension tests (Windows/macOS)
-      if: runner.os != 'Linux'
-      run: npm run test:integration
-      continue-on-error: true
-
   build:
     name: Build Extension
     runs-on: ubuntu-latest

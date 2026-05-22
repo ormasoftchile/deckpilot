@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'chai';
-import { parseCues } from '../../../src/recording/cueParser';
+import { parseCues } from '../../../packages/extension/src/recording/cueParser';
 import { createMockSlide } from './helpers';
 
 describe('CueParser', () => {

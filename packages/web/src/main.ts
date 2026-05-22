@@ -12,10 +12,10 @@
  *  6. Navigate messages are handled here and slideChanged is sent back
  */
 
-import { parseDeck } from '../../../src/parser/deckParser';
-import { injectBlockElements } from '../../../src/renderer/blockElementRenderer';
-import type { Deck } from '../../../src/models/deck';
-import type { Slide } from '../../../src/models/slide';
+import { parseDeck } from '@deckpilot/core/parser/deckParser';
+import { injectBlockElements } from '@deckpilot/core/renderer/blockElementRenderer';
+import type { Deck } from '@deckpilot/core/models/deck';
+import type { Slide } from '@deckpilot/core/models/slide';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

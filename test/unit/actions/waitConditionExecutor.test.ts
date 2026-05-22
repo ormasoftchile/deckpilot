@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as net from 'net';
-import { WaitConditionExecutor } from '../../../src/actions/waitConditionExecutor';
-import { Action } from '../../../src/models/action';
+import { WaitConditionExecutor } from '../../../packages/extension/src/actions/waitConditionExecutor';
+import { Action } from '../../../packages/core/src/models/action';
 
 function createAction(params: Record<string, unknown>): Action {
   return {

@@ -8,8 +8,8 @@
  */
 
 import { expect } from 'chai';
-import { EnvResolver } from '../../../src/env/envResolver';
-import { EnvDeclaration, EnvFile } from '../../../src/models/env';
+import { EnvResolver } from '../../../packages/core/src/env/envResolver';
+import { EnvDeclaration, EnvFile } from '../../../packages/core/src/models/env';
 
 function makeDeclaration(overrides: Partial<EnvDeclaration> & { name: string }): EnvDeclaration {
   return {

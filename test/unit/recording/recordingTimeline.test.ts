@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'chai';
-import { RecordingTimeline } from '../../../src/recording/recordingTimeline';
+import { RecordingTimeline } from '../../../packages/extension/src/recording/recordingTimeline';
 import { createMockEvent } from './helpers';
 
 describe('RecordingTimeline', () => {

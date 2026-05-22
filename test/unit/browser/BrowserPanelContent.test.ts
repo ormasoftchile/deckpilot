@@ -6,7 +6,7 @@
  */
 
 import { expect } from 'chai';
-import { BrowserPanelContent } from '../../../src/browser/BrowserPanelContent';
+import { BrowserPanelContent } from '../../../packages/extension/src/browser/BrowserPanelContent';
 
 // Minimal webview mock — only cspSource is read by getHtmlContent.
 const mockWebview = { cspSource: 'https://vscode-resource.vscode-cdn.net' } as Parameters<

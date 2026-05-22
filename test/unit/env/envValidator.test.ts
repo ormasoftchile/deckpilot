@@ -11,10 +11,10 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PreflightValidator } from '../../../src/validation/preflightValidator';
-import { ValidationContext } from '../../../src/validation/types';
-import { Deck } from '../../../src/models/deck';
-import { EnvDeclaration, ResolvedEnv, ResolvedVar } from '../../../src/models/env';
+import { PreflightValidator } from '../../../packages/extension/src/validation/preflightValidator';
+import { ValidationContext } from '../../../packages/extension/src/validation/types';
+import { Deck } from '../../../packages/core/src/models/deck';
+import { EnvDeclaration, ResolvedEnv, ResolvedVar } from '../../../packages/core/src/models/env';
 
 /**
  * Build a minimal Deck object for validation context.

@@ -8,8 +8,8 @@
  */
 
 import { expect } from 'chai';
-import { SecretScrubber } from '../../../src/env/secretScrubber';
-import { ResolvedEnv, ResolvedVar, EnvDeclaration } from '../../../src/models/env';
+import { SecretScrubber } from '../../../packages/core/src/env/secretScrubber';
+import { ResolvedEnv, ResolvedVar, EnvDeclaration } from '../../../packages/core/src/models/env';
 
 /**
  * Build a ResolvedEnv with given secrets.

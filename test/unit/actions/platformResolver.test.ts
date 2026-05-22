@@ -9,7 +9,7 @@ import {
   PlatformResolver,
   PlatformKey,
   PlatformCommandMap,
-} from '../../../src/actions/platformResolver';
+} from '../../../packages/extension/src/actions/platformResolver';
 
 describe('PlatformResolver', () => {
   let resolver: PlatformResolver;

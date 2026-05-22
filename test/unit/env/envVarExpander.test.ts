@@ -13,7 +13,7 @@
  */
 
 import { expect } from 'chai';
-import { expandEnvVars, expandEnvVarsInMap } from '../../../src/env/envVarExpander';
+import { expandEnvVars, expandEnvVarsInMap } from '../../../packages/core/src/env/envVarExpander';
 
 describe('EnvVarExpander', () => {
   // Save original process.env state

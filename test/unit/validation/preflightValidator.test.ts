@@ -4,11 +4,11 @@
  */
 
 import { expect } from 'chai';
-import { PreflightValidator } from '../../../src/validation/preflightValidator';
-import { ValidationContext, ValidationReport } from '../../../src/validation/types';
-import { Deck } from '../../../src/models/deck';
-import { Slide, createSlide } from '../../../src/models/slide';
-import { createAction, ActionType } from '../../../src/models/action';
+import { PreflightValidator } from '../../../packages/extension/src/validation/preflightValidator';
+import { ValidationContext, ValidationReport } from '../../../packages/extension/src/validation/types';
+import { Deck } from '../../../packages/core/src/models/deck';
+import { Slide, createSlide } from '../../../packages/core/src/models/slide';
+import { createAction, ActionType } from '../../../packages/core/src/models/action';
 
 function makeDeck(slides: Slide[], filePath = '/workspace/test.deck.md'): Deck {
   return {

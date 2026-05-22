@@ -39,7 +39,6 @@ coverage/
 *.temp
 
 # Test output
-playwright-report/
 test-results/
 
 # Recording binaries and transcripts

@@ -8,7 +8,7 @@
  */
 
 import { expect } from 'chai';
-import { EnvDeclarationParser } from '../../../src/env/envDeclarationParser';
+import { EnvDeclarationParser } from '../../../packages/core/src/env/envDeclarationParser';
 
 describe('EnvDeclarationParser', () => {
   let parser: EnvDeclarationParser;

@@ -5,7 +5,7 @@
  * These interfaces are never used as runtime values so undefined is safe.
  */
 
-export { parseRenderDirectives } from '../../src/renderer/renderDirectiveParser';
+export { parseRenderDirectives } from '../../../core/src/renderer/renderDirectiveParser';
 
 // Dummy exports for TypeScript interfaces — never used as values at runtime
 export const RenderDirective = undefined;

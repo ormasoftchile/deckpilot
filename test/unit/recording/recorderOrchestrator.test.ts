@@ -8,7 +8,7 @@
  */
 
 import { expect } from 'chai';
-import { RecorderMetadata } from '../../../src/models/recording';
+import { RecorderMetadata } from '../../../packages/core/src/models/recording';
 
 describe('RecorderOrchestrator — metadata model', () => {
   describe('RecorderMetadata', () => {

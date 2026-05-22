@@ -13,7 +13,7 @@
  */
 
 import { expect } from 'chai';
-import { processFragments } from '../../../src/parser/fragmentProcessor';
+import { processFragments } from '../../../packages/core/src/parser/fragmentProcessor';
 
 // Helper: count occurrences of a substring
 function countOccurrences(str: string, sub: string): number {

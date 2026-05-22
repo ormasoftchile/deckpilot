@@ -1,6 +1,6 @@
 import { expect } from 'chai';
-import { extractCheckpoint } from '../../../src/parser/checkpointParser';
-import { createSlide } from '../../../src/models/slide';
+import { extractCheckpoint } from '../../../packages/core/src/parser/checkpointParser';
+import { createSlide } from '../../../packages/core/src/models/slide';
 import MarkdownIt from 'markdown-it';
 
 const md = new MarkdownIt({ html: true });

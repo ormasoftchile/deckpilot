@@ -5,8 +5,8 @@
  */
 
 import { expect } from 'chai';
-import { buildSegments } from '../../../src/recording/segmentBuilder';
-import { RecordingEvent, VoiceOverCue, IgnoredInterval } from '../../../src/models/recording';
+import { buildSegments } from '../../../packages/extension/src/recording/segmentBuilder';
+import { RecordingEvent, VoiceOverCue, IgnoredInterval } from '../../../packages/core/src/models/recording';
 import { createMockEvent, createMockSlide } from './helpers';
 
 describe('SegmentBuilder', () => {

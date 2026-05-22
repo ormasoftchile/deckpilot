@@ -7,8 +7,8 @@
  */
 
 import { expect } from 'chai';
-import { SceneStore } from '../../../src/conductor/sceneStore';
-import { createSnapshot } from '../../../src/models/snapshot';
+import { SceneStore } from '../../../packages/extension/src/conductor/sceneStore';
+import { createSnapshot } from '../../../packages/core/src/models/snapshot';
 
 function makeSnapshot(slideIndex: number) {
   return createSnapshot(slideIndex, `Test snapshot at slide ${slideIndex}`);

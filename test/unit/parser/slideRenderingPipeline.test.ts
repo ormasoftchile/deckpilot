@@ -12,7 +12,7 @@
  */
 
 import { expect } from 'chai';
-import { parseSlides } from '../../../src/parser/slideParser';
+import { parseSlides } from '../../../packages/core/src/parser/slideParser';
 
 // ---------------------------------------------------------------------------
 // Helpers

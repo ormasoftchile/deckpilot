@@ -1,6 +1,6 @@
 import { expect } from 'chai';
-import { extractIdComment, generateSlideId, resolveUniqueIds, slugify } from '../../../src/parser/slideIdParser';
-import { parseSlides } from '../../../src/parser/slideParser';
+import { extractIdComment, generateSlideId, resolveUniqueIds, slugify } from '../../../packages/core/src/parser/slideIdParser';
+import { parseSlides } from '../../../packages/core/src/parser/slideParser';
 
 describe('slideIdParser — unit', () => {
   // ── slugify ─────────────────────────────────────────────────────────────

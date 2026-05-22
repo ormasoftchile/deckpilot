@@ -19,12 +19,12 @@
 import { expect } from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseDeck } from '../../../src/parser/deckParser';
-import { buildAutoPilotPlan } from '../../../src/recording/autoPilot';
-import { buildSegments } from '../../../src/recording/segmentBuilder';
-import { parseCues } from '../../../src/recording/cueParser';
-import { CaptionsScaffoldGenerator } from '../../../src/recording/captionsScaffoldGenerator';
-import { RecordingEvent, RecordingSession } from '../../../src/models/recording';
+import { parseDeck } from '../../../packages/core/src/parser/deckParser';
+import { buildAutoPilotPlan } from '../../../packages/extension/src/recording/autoPilot';
+import { buildSegments } from '../../../packages/extension/src/recording/segmentBuilder';
+import { parseCues } from '../../../packages/extension/src/recording/cueParser';
+import { CaptionsScaffoldGenerator } from '../../../packages/extension/src/recording/captionsScaffoldGenerator';
+import { RecordingEvent, RecordingSession } from '../../../packages/core/src/models/recording';
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 

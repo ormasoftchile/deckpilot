@@ -10,7 +10,7 @@
  */
 
 import { expect } from 'chai';
-import { serializeDeck } from '../../../src/commands/showResolvedModel';
+import { serializeDeck } from '../../../packages/extension/src/commands/showResolvedModel';
 
 describe('serializeDeck', () => {
     describe('valid objects', () => {

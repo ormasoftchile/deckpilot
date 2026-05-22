@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "composite": true,
     "module": "commonjs",
     "target": "ES2022",
     "lib": ["ES2022"],
@@ -18,14 +19,24 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "exactOptionalPropertyTypes": false,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "baseUrl": ".",
+    "paths": {
+      "@deckpilot/core": ["packages/core/src/index.ts"],
+      "@deckpilot/core/*": ["packages/core/src/*"]
+    }
   },
+  "references": [
+    { "path": "packages/core" }
+  ],
   "include": [
-    "src/**/*",
+    "packages/extension/src/**/*",
     "test/**/*"
   ],
   "exclude": [
     "node_modules",
-    "out"
+    "out",
+    "packages/core",
+    "packages/web"
   ]
 }

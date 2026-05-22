@@ -6,7 +6,7 @@
 import { expect } from 'chai';
 
 // This import will FAIL until T039 is implemented
-import { ActionDiagnosticProvider } from '../../../src/providers/actionDiagnosticProvider';
+import { ActionDiagnosticProvider } from '../../../packages/extension/src/providers/actionDiagnosticProvider';
 
 /**
  * Mock TextDocument for provider testing.

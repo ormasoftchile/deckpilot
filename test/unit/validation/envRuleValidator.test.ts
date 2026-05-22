@@ -7,8 +7,8 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { EnvRuleValidator } from '../../../src/validation/envRuleValidator';
-import { EnvValidationContext } from '../../../src/models/env';
+import { EnvRuleValidator } from '../../../packages/extension/src/validation/envRuleValidator';
+import { EnvValidationContext } from '../../../packages/core/src/models/env';
 
 describe('EnvRuleValidator', () => {
   let validator: EnvRuleValidator;

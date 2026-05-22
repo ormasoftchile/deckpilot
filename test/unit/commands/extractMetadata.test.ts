@@ -6,11 +6,11 @@
 
 import { expect } from 'chai';
 import * as yaml from 'js-yaml';
-import { buildSidecarContent } from '../../../src/commands/extractMetadata';
-import { createDeck } from '../../../src/models/deck';
-import { createSlide } from '../../../src/models/slide';
-import type { Deck } from '../../../src/models/deck';
-import type { Slide } from '../../../src/models/slide';
+import { buildSidecarContent } from '../../../packages/extension/src/commands/extractMetadata';
+import { createDeck } from '../../../packages/core/src/models/deck';
+import { createSlide } from '../../../packages/core/src/models/slide';
+import type { Deck } from '../../../packages/core/src/models/deck';
+import type { Slide } from '../../../packages/core/src/models/slide';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -194,7 +194,7 @@ describe('buildSidecarContent — output validity', () => {
 describe('buildSidecarContent — edge cases', () => {
     it('handles a deck with a truly empty slides array without crashing', () => {
         // Bypass makeDeck helper to get a deck with zero slides
-        const { createDeck } = require('../../../src/models/deck');
+        const { createDeck } = require('../../../packages/core/src/models/deck');
         const deck = createDeck('/test.deck.md', [], { title: 'Empty' }) as Deck;
         expect(() => buildSidecarContent(deck)).not.to.throw();
         const result = parse(buildSidecarContent(deck));

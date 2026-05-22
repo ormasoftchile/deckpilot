@@ -6,7 +6,7 @@
 import { expect } from 'chai';
 
 // This import will FAIL until T038 is implemented
-import { ActionHoverProvider } from '../../../src/providers/actionHoverProvider';
+import { ActionHoverProvider } from '../../../packages/extension/src/providers/actionHoverProvider';
 
 /**
  * Mock TextDocument for provider testing.

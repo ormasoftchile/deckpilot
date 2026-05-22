@@ -3,7 +3,7 @@
  */
 
 import { expect } from 'chai';
-import { isAllowedUrl } from '../../../src/browser/urlValidator';
+import { isAllowedUrl } from '../../../packages/extension/src/browser/urlValidator';
 
 describe('isAllowedUrl', () => {
   describe('allowed URLs', () => {

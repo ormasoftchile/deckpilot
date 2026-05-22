@@ -6,7 +6,7 @@
 
 import { expect } from 'chai';
 import * as yaml from 'js-yaml';
-import { PlatformCommandMap } from '../../../src/actions/platformResolver';
+import { PlatformCommandMap } from '../../../packages/extension/src/actions/platformResolver';
 
 /**
  * Helper: determine if a parsed command value is a PlatformCommandMap

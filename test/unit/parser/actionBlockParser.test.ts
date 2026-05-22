@@ -17,7 +17,7 @@
  */
 
 import { expect } from 'chai';
-import { parseActionBlocks, ActionBlockParseResult, ActionBlockParseError } from '../../../src/parser/actionBlockParser';
+import { parseActionBlocks, ActionBlockParseResult, ActionBlockParseError } from '../../../packages/core/src/parser/actionBlockParser';
 
 describe('Action Block Parser', () => {
   describe('valid single action', () => {

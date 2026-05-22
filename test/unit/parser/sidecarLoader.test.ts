@@ -11,7 +11,7 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { resolveSidecarPath, sidecarExists, loadSidecar } from '../../../src/parser/sidecarLoader';
+import { resolveSidecarPath, sidecarExists, loadSidecar } from '../../../packages/core/src/parser/sidecarLoader';
 
 describe('sidecarLoader', () => {
   // =========================================================================

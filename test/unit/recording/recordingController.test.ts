@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'chai';
-import { RecordingController } from '../../../src/recording/recordingController';
+import { RecordingController } from '../../../packages/extension/src/recording/recordingController';
 import { createMockEvent } from './helpers';
 
 describe('RecordingController', () => {

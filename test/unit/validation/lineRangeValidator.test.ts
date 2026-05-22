@@ -4,11 +4,11 @@
  */
 
 import { expect } from 'chai';
-import { LineRangeValidator } from '../../../src/validation/lineRangeValidator';
-import { ValidationContext } from '../../../src/validation/types';
-import { Deck } from '../../../src/models/deck';
-import { Slide, createSlide } from '../../../src/models/slide';
-import { createAction, ActionType } from '../../../src/models/action';
+import { LineRangeValidator } from '../../../packages/extension/src/validation/lineRangeValidator';
+import { ValidationContext } from '../../../packages/extension/src/validation/types';
+import { Deck } from '../../../packages/core/src/models/deck';
+import { Slide, createSlide } from '../../../packages/core/src/models/slide';
+import { createAction, ActionType } from '../../../packages/core/src/models/action';
 
 function makeContext(slides: Slide[], workspaceRoot = '/workspace'): ValidationContext {
   const deck: Deck = {

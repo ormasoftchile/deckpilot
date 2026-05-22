@@ -12,8 +12,8 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { EnvFileLoader } from '../../../src/env/envFileLoader';
-import { EnvDeclaration } from '../../../src/models/env';
+import { EnvFileLoader } from '../../../packages/core/src/env/envFileLoader';
+import { EnvDeclaration } from '../../../packages/core/src/models/env';
 
 describe('EnvFileLoader', () => {
   let loader: EnvFileLoader;

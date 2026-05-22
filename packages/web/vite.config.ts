@@ -7,6 +7,7 @@ const workspaceRoot = path.resolve(__dirname, '../..');
 export default defineConfig({
   resolve: {
     alias: {
+      '@deckpilot/core': path.resolve(__dirname, '../core/src'),
       vscode: path.resolve(__dirname, 'src/stubs/vscode.ts'),
       child_process: path.resolve(__dirname, 'src/stubs/child_process.ts'),
       path: path.resolve(__dirname, 'src/stubs/path.ts'),
@@ -21,11 +22,11 @@ export default defineConfig({
         return html
           .replace(
             /\/@fs\/[^"]+\/src\/webview\/assets\/presentation\.css/g,
-            `/@fs${workspaceRoot}/src/webview/assets/presentation.css`
+            `/@fs${workspaceRoot}/packages/extension/src/webview/assets/presentation.css`
           )
           .replace(
             /\/@fs\/[^"]+\/src\/webview\/assets\/presentation\.js/g,
-            `/@fs${workspaceRoot}/src/webview/assets/presentation.js`
+            `/@fs${workspaceRoot}/packages/extension/src/webview/assets/presentation.js`
           );
       },
     },
@@ -37,7 +38,7 @@ export default defineConfig({
       // to use `import type` so esbuild treats them as erased.
       name: 'fix-type-only-reexports',
       transform(code, id) {
-        if (!id.includes('/src/renderer/')) return null;
+        if (!id.includes('/src/renderer/') && !id.includes('/packages/core/src/renderer/')) return null;
         // Rewrite: import { Foo, Bar } from './renderDirectiveParser'
         // to:      import type { Foo, Bar } from './renderDirectiveParser'
         return code.replace(

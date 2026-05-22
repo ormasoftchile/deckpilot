@@ -9,10 +9,10 @@
  */
 
 import { expect } from 'chai';
-import { validateSlideIds, validateSidecarSlideIds, validateSidecarSchema, SlideDiagnosticSeverity } from '../../../src/parser/deckValidator';
-import { parseSlides, getLastValidationDiagnostics } from '../../../src/parser/slideParser';
-import { Slide } from '../../../src/models/slide';
-import { SidecarFile } from '../../../src/models/sidecar';
+import { validateSlideIds, validateSidecarSlideIds, validateSidecarSchema, SlideDiagnosticSeverity } from '../../../packages/core/src/parser/deckValidator';
+import { parseSlides, getLastValidationDiagnostics } from '../../../packages/core/src/parser/slideParser';
+import { Slide } from '../../../packages/core/src/models/slide';
+import { SidecarFile } from '../../../packages/core/src/models/sidecar';
 
 // ---------------------------------------------------------------------------
 // Helpers

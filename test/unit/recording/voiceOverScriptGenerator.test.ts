@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'chai';
-import { VoiceOverScriptGenerator } from '../../../src/recording/voiceOverScriptGenerator';
+import { VoiceOverScriptGenerator } from '../../../packages/extension/src/recording/voiceOverScriptGenerator';
 import { createMockSession, createMockSegment } from './helpers';
 
 describe('VoiceOverScriptGenerator', () => {

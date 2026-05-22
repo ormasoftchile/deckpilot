@@ -16,8 +16,8 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { resolveEnvironment } from '../../../src/env/envMerger';
-import type { SidecarFile } from '../../../src/models/sidecar';
+import { resolveEnvironment } from '../../../packages/core/src/env/envMerger';
+import type { SidecarFile } from '../../../packages/core/src/models/sidecar';
 
 describe('resolveEnvironment', () => {
   let tmpDir: string;

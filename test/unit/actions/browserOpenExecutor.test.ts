@@ -6,13 +6,13 @@
  */
 
 import { expect } from 'chai';
-import { BrowserOpenExecutor } from '../../../src/actions/browserOpenExecutor';
-import { ValidationError } from '../../../src/actions/errors';
-import { Action } from '../../../src/models/action';
+import { BrowserOpenExecutor } from '../../../packages/extension/src/actions/browserOpenExecutor';
+import { ValidationError } from '../../../packages/extension/src/actions/errors';
+import { Action } from '../../../packages/core/src/models/action';
 
 // Obtain the BrowserPanel module's exports object so we can swap getOrCreateBrowserPanel.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const browserPanelMod = require('../../../src/browser/BrowserPanel') as Record<string, unknown>;
+const browserPanelMod = require('../../../packages/extension/src/browser/BrowserPanel') as Record<string, unknown>;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

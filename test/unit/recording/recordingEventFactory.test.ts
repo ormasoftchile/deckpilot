@@ -19,8 +19,8 @@ import {
   createTimingPausedEvent,
   createTimingResumedEvent,
   createRetakeMarkedEvent,
-} from '../../../src/recording/recordingEventFactory';
-import { RecordingEvent } from '../../../src/models/recording';
+} from '../../../packages/extension/src/recording/recordingEventFactory';
+import { RecordingEvent } from '../../../packages/core/src/models/recording';
 
 describe('RecordingEventFactory', () => {
   /** Helper to assert common event properties */

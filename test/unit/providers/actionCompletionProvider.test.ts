@@ -6,7 +6,7 @@
 import { expect } from 'chai';
 
 // This import will FAIL until T037 is implemented
-import { ActionCompletionProvider } from '../../../src/providers/actionCompletionProvider';
+import { ActionCompletionProvider } from '../../../packages/extension/src/providers/actionCompletionProvider';
 
 /**
  * Mock TextDocument for provider testing.

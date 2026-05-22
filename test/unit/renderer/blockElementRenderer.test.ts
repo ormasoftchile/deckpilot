@@ -7,9 +7,9 @@
  */
 
 import { expect } from 'chai';
-import { injectBlockElements } from '../../../src/renderer/blockElementRenderer';
-import { Slide, InteractiveElement } from '../../../src/models/slide';
-import { createAction } from '../../../src/models/action';
+import { injectBlockElements } from '../../../packages/core/src/renderer/blockElementRenderer';
+import { Slide, InteractiveElement } from '../../../packages/core/src/models/slide';
+import { createAction } from '../../../packages/core/src/models/action';
 
 // ---------------------------------------------------------------------------
 // Helpers

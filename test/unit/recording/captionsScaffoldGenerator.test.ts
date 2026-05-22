@@ -4,7 +4,7 @@
  */
 
 import { expect } from 'chai';
-import { CaptionsScaffoldGenerator } from '../../../src/recording/captionsScaffoldGenerator';
+import { CaptionsScaffoldGenerator } from '../../../packages/extension/src/recording/captionsScaffoldGenerator';
 import { createMockSession, createMockSegment } from './helpers';
 
 describe('CaptionsScaffoldGenerator', () => {

@@ -4,11 +4,11 @@
  */
 
 import { expect } from 'chai';
-import { FilePathValidator } from '../../../src/validation/filePathValidator';
-import { ValidationContext } from '../../../src/validation/types';
-import { Deck } from '../../../src/models/deck';
-import { Slide, createSlide } from '../../../src/models/slide';
-import { createAction } from '../../../src/models/action';
+import { FilePathValidator } from '../../../packages/extension/src/validation/filePathValidator';
+import { ValidationContext } from '../../../packages/extension/src/validation/types';
+import { Deck } from '../../../packages/core/src/models/deck';
+import { Slide, createSlide } from '../../../packages/core/src/models/slide';
+import { createAction } from '../../../packages/core/src/models/action';
 
 function makeContext(slides: Slide[], workspaceRoot = '/workspace'): ValidationContext {
   const deck: Deck = {
@@ -29,7 +29,7 @@ function makeContext(slides: Slide[], workspaceRoot = '/workspace'): ValidationC
 
 function makeSlideWithAction(type: string, params: Record<string, unknown>, index = 0): Slide {
   const slide = createSlide(index, '', '');
-  const action = createAction(type as import('../../../src/models/action').ActionType, params, index);
+  const action = createAction(type as import('../../../packages/core/src/models/action').ActionType, params, index);
   slide.interactiveElements = [{
     id: `el-${index}`,
     label: 'test',
@@ -87,7 +87,7 @@ describe('FilePathValidator', () => {
   });
 
   it('should resolve paths relative to workspaceRoot', async () => {
-    const slide = makeSlideWithAction('file.open', { path: 'src/extension.ts' });
+    const slide = makeSlideWithAction('file.open', { path: 'packages/extension/src/extension.ts' });
     const context = makeContext([slide], process.cwd());
 
     const issues = await validator.run(context);

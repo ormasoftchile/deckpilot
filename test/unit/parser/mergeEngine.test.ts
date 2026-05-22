@@ -7,10 +7,10 @@
  */
 
 import { expect } from 'chai';
-import { mergeSidecarIntoSlides, mergeSidecarDeckMetadata } from '../../../src/parser/mergeEngine';
-import type { Slide } from '../../../src/models/slide';
-import type { DeckMetadata } from '../../../src/models/deck';
-import type { SidecarFile } from '../../../src/models/sidecar';
+import { mergeSidecarIntoSlides, mergeSidecarDeckMetadata } from '../../../packages/core/src/parser/mergeEngine';
+import type { Slide } from '../../../packages/core/src/models/slide';
+import type { DeckMetadata } from '../../../packages/core/src/models/deck';
+import type { SidecarFile } from '../../../packages/core/src/models/sidecar';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -14,13 +14,13 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { parseDeck } from '../../../src/parser/deckParser';
-import { loadSidecar } from '../../../src/parser/sidecarLoader';
+import { parseDeck } from '../../../packages/core/src/parser/deckParser';
+import { loadSidecar } from '../../../packages/core/src/parser/sidecarLoader';
 import {
   validateSidecarSlideIds,
   validateSidecarSchema,
   SlideDiagnosticSeverity,
-} from '../../../src/parser/deckValidator';
+} from '../../../packages/core/src/parser/deckValidator';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

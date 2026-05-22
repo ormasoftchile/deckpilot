@@ -15,8 +15,8 @@
  */
 
 import { expect } from 'chai';
-import { mapSidecarActionsToInteractiveElements } from '../../../src/parser/sidecarActionMapper';
-import type { SidecarAction } from '../../../src/models/sidecar';
+import { mapSidecarActionsToInteractiveElements } from '../../../packages/core/src/parser/sidecarActionMapper';
+import type { SidecarAction } from '../../../packages/core/src/models/sidecar';
 
 // ---------------------------------------------------------------------------
 // Console.warn capture helper

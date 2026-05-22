@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { processLayoutComments } from '../../../src/parser/layoutCommentProcessor';
+import { processLayoutComments } from '../../../packages/core/src/parser/layoutCommentProcessor';
 
 describe('Layout Comment Processor', () => {
   describe('processLayoutComments', () => {

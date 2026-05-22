@@ -6,8 +6,8 @@
  */
 
 import { expect } from 'chai';
-import { ActionCompletionProvider } from '../../../src/providers/actionCompletionProvider';
-import { ActionHoverProvider } from '../../../src/providers/actionHoverProvider';
+import { ActionCompletionProvider } from '../../../packages/extension/src/providers/actionCompletionProvider';
+import { ActionHoverProvider } from '../../../packages/extension/src/providers/actionHoverProvider';
 
 /**
  * Mock TextDocument for provider testing.

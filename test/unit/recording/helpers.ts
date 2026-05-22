@@ -7,8 +7,8 @@ import {
   RecordingEvent,
   RecordingSession,
   RecordingSegment,
-} from '../../../src/models/recording';
-import { Slide } from '../../../src/models/slide';
+} from '../../../packages/core/src/models/recording';
+import { Slide } from '../../../packages/core/src/models/slide';
 
 let mockIdCounter = 0;
 

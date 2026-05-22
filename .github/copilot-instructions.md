@@ -28,14 +28,49 @@ Conductor Layer (Orchestration)
 VS Code API Layer (window, workspace, debug, terminal)
 ```
 
+## Repository Layout
+
+This is an npm monorepo (workspaces). The VS Code extension and the web app share a `@deckpilot/core` package.
+
+```
+packages/
+  core/        # @deckpilot/core — pure, platform-agnostic
+    src/
+      models/        # action, deck, slide, env, sidecar, recording, onboarding, snapshot, actionSchema
+      parser/        # gray-matter / markdown-it parsing of .deck.md + sidecars
+      env/           # env file loaders, resolver, scrubber, expander
+      renderer/      # pure renderer pieces: renderDirectiveParser, blockElementRenderer
+    dist/            # tsc output (referenced via package.json exports)
+  extension/   # VS Code extension source (compiled to /out)
+    src/
+      extension.ts
+      conductor/, actions/, browser/, chat/, commands/,
+      providers/, recording/, renderer/ (vscode-coupled), validation/,
+      webview/, utils/
+  web/         # Vite-based public web app (work in progress)
+    src/
+
+test/          # unit + integration tests (stays at repo root)
+out/           # compiled extension output (./out/packages/extension/src/extension.js)
+```
+
+The root `package.json` is the VS Code extension manifest; it depends on `@deckpilot/core` via npm workspaces. Extension code imports shared logic as:
+
+```ts
+import { parseDeck } from '@deckpilot/core/parser';
+import type { Deck } from '@deckpilot/core/models/deck';
+```
+
+Core MUST NOT import from extension code. If a piece of logic needs `vscode`, `child_process`, or other VS Code-only APIs, it belongs in `packages/extension`.
+
 ## Key Files
 
-- `src/extension.ts` - Extension entry point
-- `src/conductor/Conductor.ts` - Main orchestrator
-- `src/conductor/StateStack.ts` - Undo/redo management
-- `src/actions/ActionRegistry.ts` - Action executor registry
-- `src/parser/DeckParser.ts` - .deck.md file parser
-- `src/webview/WebviewProvider.ts` - Presentation UI
+- `packages/extension/src/extension.ts` - Extension entry point
+- `packages/extension/src/conductor/conductor.ts` - Main orchestrator
+- `packages/extension/src/conductor/stateStack.ts` - Undo/redo management
+- `packages/extension/src/actions/registry.ts` - Action executor registry
+- `packages/core/src/parser/deckParser.ts` - .deck.md file parser
+- `packages/extension/src/webview/webviewProvider.ts` - Presentation UI
 
 ## Action Types
 

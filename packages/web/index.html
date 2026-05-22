@@ -8,7 +8,7 @@
     Serve presentation.css directly from source via Vite's /@fs/ virtual path.
     This guarantees the web app always reflects the canonical styles.
   -->
-  <link rel="stylesheet" href="/@fs/Volumes/Projects/deckpilot/src/webview/assets/presentation.css">
+  <link rel="stylesheet" href="/@fs/Volumes/Projects/deckpilot/packages/extension/src/webview/assets/presentation.css">
   <style>
     /* ── Layout ──────────────────────────────────────────────────── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -176,7 +176,7 @@
     3. presentation.js last — by the time it runs, acquireVsCodeApi is defined.
        Uses defer so it executes after the inline scripts above.
   -->
-  <script defer src="/@fs/Volumes/Projects/deckpilot/src/webview/assets/presentation.js"></script>
+  <script defer src="/@fs/Volumes/Projects/deckpilot/packages/extension/src/webview/assets/presentation.js"></script>
 
 </body>
 </html>

@@ -4,7 +4,7 @@
  */
 
 import { expect } from 'chai';
-import { RecordingSerializer } from '../../../src/recording/recordingSerializer';
+import { RecordingSerializer } from '../../../packages/extension/src/recording/recordingSerializer';
 import { createMockSession, createMockEvent, createMockSegment } from './helpers';
 
 describe('RecordingSerializer', () => {

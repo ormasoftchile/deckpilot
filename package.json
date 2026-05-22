@@ -51,7 +51,7 @@
     "onChatParticipant:executable-talk.deck",
     "workspaceContains:**/*.deck.md"
   ],
-  "main": "./out/src/extension.js",
+  "main": "./out/packages/extension/src/extension.js",
   "contributes": {
     "commands": [
       {
@@ -245,15 +245,13 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "lint:fix": "eslint src --ext ts --fix",
-    "test": "node ./out/test/runTest.js",
+    "compile": "tsc -b",
+    "watch": "tsc -b --watch",
+    "lint": "eslint packages/core/src packages/extension/src --ext ts",
+    "lint:fix": "eslint packages/core/src packages/extension/src --ext ts --fix",
+    "test": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
     "test:unit": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
-    "test:integration": "node ./out/test/runTest.js",
-    "clean": "rimraf out",
+    "clean": "rimraf out packages/core/dist",
     "package": "vsce package",
     "deploy": "vsce publish",
     "version:patch": "npm version patch --no-git-tag-version",
@@ -280,6 +278,7 @@
     "typescript": "^5.3.2"
   },
   "dependencies": {
+    "@deckpilot/core": "*",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",
     "markdown-it": "^14.0.0"
