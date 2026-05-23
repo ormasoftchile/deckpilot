@@ -7,7 +7,6 @@ import { registerAllExecutors } from './actions';
 import { ActionCompletionProvider } from './providers/actionCompletionProvider';
 import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
-import { registerDeckParticipant } from './chat/deckParticipant';
 import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
 import { extractMetadataToSidecar } from './commands/extractMetadata';
 
@@ -53,9 +52,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Register all action executors
     registerAllExecutors();
-
-    // Register @deck chat participant
-    registerDeckParticipant(context);
 
     // Initialize conductor
     conductor = new Conductor(context.extensionUri);
