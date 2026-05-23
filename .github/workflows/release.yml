@@ -84,7 +84,12 @@ jobs:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
       run: |
         if [ -n "$VSCE_PAT" ]; then
-          npx vsce publish -p "$VSCE_PAT"
+          # Publish the .vsix produced by `npm run package` (which uses
+          # --no-dependencies) instead of letting vsce repackage with its
+          # default settings — those would re-include the entire workspace
+          # node_modules tree and balloon the artifact back to ~16 MB.
+          VSIX_FILE=$(ls *.vsix | head -n1)
+          npx vsce publish --no-dependencies --packagePath "$VSIX_FILE" -p "$VSCE_PAT"
         else
           echo "Skipping VS Code Marketplace publish - VSCE_PAT not configured"
         fi
