@@ -56,7 +56,14 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         npx prettier --write . --loglevel error
-        
+
+    # Build composite projects first so @deckpilot/core's published exports
+    # (./dist/*.d.ts) exist. Without this, type-aware ESLint rules and
+    # `tsc --noEmit` resolve every '@deckpilot/core/*' import to the `error`
+    # type, producing hundreds of false-positive lint/type errors.
+    - name: Compile (build composite projects)
+      run: npm run compile
+
     - name: Run linting
       run: npm run lint
 
