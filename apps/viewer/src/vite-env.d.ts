@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __DECKPILOT_VERSION__: string;
+
 declare module 'reveal.js' {
   interface RevealConfig {
     hash?: boolean;
