@@ -129,6 +129,10 @@
       {
         "command": "deckPilot.cancelAutoRecord",
         "title": "Deckpilot: Cancel Auto-Record"
+      },
+      {
+        "command": "deckPilot.installAuthoringSkills",
+        "title": "Deckpilot: Install Authoring Skills"
       }
     ],
     "keybindings": [

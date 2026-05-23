@@ -9,6 +9,10 @@ import { ActionHoverProvider } from './providers/actionHoverProvider';
 import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
 import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
 import { extractMetadataToSidecar } from './commands/extractMetadata';
+import {
+    installAuthoringSkills,
+    maybeOfferAuthoringSkillsInstall
+} from './commands/installAuthoringSkills';
 
 let conductor: Conductor | undefined;
 
@@ -412,6 +416,12 @@ export function activate(context: vscode.ExtensionContext): void {
         () => extractMetadataToSidecar()
     );
 
+    // Install authoring skills (SKILL.md bundle) into the workspace
+    const installAuthoringSkillsDisposable = vscode.commands.registerCommand(
+        'deckPilot.installAuthoringSkills',
+        () => installAuthoringSkills(context)
+    );
+
     // DA-24: Show Resolved Deck Model — virtual read-only JSON document
     const deckModelProvider = new DeckModelContentProvider();
     const deckModelProviderDisposable = vscode.workspace.registerTextDocumentContentProvider(
@@ -556,6 +566,7 @@ export function activate(context: vscode.ExtensionContext): void {
         autoRecordDisposable,
         cancelAutoRecordDisposable,
         extractMetadataToSidecarDisposable,
+        installAuthoringSkillsDisposable,
         deckModelProviderDisposable,
         showResolvedDeckModelDisposable,
         completionDisposable,
@@ -568,6 +579,9 @@ export function activate(context: vscode.ExtensionContext): void {
         sidecarFileWatcher,
         { dispose() { diagnosticProvider.dispose(); } }
     );
+
+    // First-run: offer to install authoring skills into the workspace
+    void maybeOfferAuthoringSkillsInstall(context);
 }
 
 export function deactivate(): void {
