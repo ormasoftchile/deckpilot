@@ -93,3 +93,11 @@ jobs:
         else
           echo "Skipping VS Code Marketplace publish - VSCE_PAT not configured"
         fi
+
+    - name: Trigger viewer deploy
+      # The version bump commit uses [skip ci], which suppresses the
+      # deploy-viewer workflow's push trigger. Dispatch it explicitly so the
+      # viewer's footer version stays in sync with the extension version.
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: gh workflow run deploy-viewer.yml --ref main
