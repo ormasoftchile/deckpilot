@@ -1,8 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
+
+// Single source of truth: the root extension package.json version is what
+// users see in the marketplace; the viewer surfaces the same string so the
+// two stay visibly in sync.
+const rootPkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'),
+) as { version: string };
 
 export default defineConfig({
+  define: {
+    __DECKPILOT_VERSION__: JSON.stringify(rootPkg.version),
+  },
   plugins: [react()],
   resolve: {
     alias: {

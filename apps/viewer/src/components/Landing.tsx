@@ -74,6 +74,7 @@ export function Landing({ recent, onOpen }: LandingProps): JSX.Element {
           Actions (terminal, debug, VS Code commands) are <strong>displayed only</strong>. They never
           execute in the browser — open the deck in Deckpilot for VS Code to run them.
         </p>
+        <p className="dp-landing-version">Deckpilot v{__DECKPILOT_VERSION__}</p>
       </footer>
     </main>
   );
