@@ -16,6 +16,7 @@ import { parseDeck } from '@deckpilot/core/parser/deckParser';
 import { injectBlockElements } from '@deckpilot/core/renderer/blockElementRenderer';
 import type { Deck } from '@deckpilot/core/models/deck';
 import type { Slide } from '@deckpilot/core/models/slide';
+import { getActiveSource } from './sources';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,9 +96,7 @@ export async function loadDeck(filePath: string): Promise<void> {
   if (indicator) indicator.style.display = 'block';
 
   try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const content = await res.text();
+    const content = await getActiveSource().readFile(filePath);
 
     const result = await parseDeck(content, filePath);
     if (!result.deck) {
@@ -172,8 +171,8 @@ export async function initDeckPicker(): Promise<void> {
 
   let decks: string[] = [];
   try {
-    const res = await fetch('/api/decks');
-    decks = await res.json() as string[];
+    const refs = await getActiveSource().listDecks();
+    decks = refs.map((r) => r.path);
   } catch {
     list.innerHTML = '<li class="deck-picker-error">Could not load deck list</li>';
     return;

@@ -50,6 +50,14 @@
     "./renderer/*": {
       "types": "./dist/renderer/*.d.ts",
       "default": "./dist/renderer/*.js"
+    },
+    "./sources": {
+      "types": "./dist/sources/index.d.ts",
+      "default": "./dist/sources/index.js"
+    },
+    "./sources/*": {
+      "types": "./dist/sources/*.d.ts",
+      "default": "./dist/sources/*.js"
     }
   },
   "scripts": {
