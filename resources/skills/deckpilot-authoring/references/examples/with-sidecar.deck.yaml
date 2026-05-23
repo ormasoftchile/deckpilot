@@ -1,0 +1,45 @@
+# Companion sidecar for with-sidecar.deck.md
+# Slide IDs must match <!-- id: ... --> anchors in the .deck.md.
+
+deck:
+  title: Recorded Walkthrough
+  theme: dark
+
+slides:
+  - id: intro
+    cues:
+      - Welcome the audience and frame the demo in one sentence
+    duration: 8s
+
+  - id: setup
+    actions:
+      - type: terminal.run
+        command: npm install
+    cues:
+      - Mention the lockfile commit while the install runs
+    duration: 18s
+    checkpoint: deps-installed
+
+  - id: demo
+    actions:
+      - type: terminal.run
+        command: npm start
+    cues:
+      - Point out the port it binds to
+      - Mention the hot-reload behaviour
+    duration: 15s
+
+  - id: outro
+    cues:
+      - Recap the three things they saw
+      - Point at the repo
+    duration: 10s
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  srtFormat: srt
+  video: true

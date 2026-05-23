@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Authoring skills bundle (`Deckpilot: Install Authoring Skills`)**: A new command copies a curated `SKILL.md` bundle (plus format/action/sidecar references and example decks) into `.github/skills/deckpilot-authoring/` in the current workspace. VS Code Copilot Chat picks it up automatically, so prompts like *"create a deck about X"*, *"convert this markdown to a deck"*, or *"add a terminal action here"* operate with full Deckpilot format knowledge. A first-run toast offers installation; the command remains in the palette for re-running and updates. Replaces the removed `@deck` chat participant.
+
 - **External content import (`content:` frontmatter)**: A deck can now declare `content: <relative-path>` in its frontmatter and load slide content from an external Markdown file. The wrapper deck remains the source of truth for metadata; the imported file's own frontmatter (if any) is discarded. Works in both the VS Code extension (filesystem) and the public viewer (HTTP fetch).
 
 - **`wait.condition` action**: Add conditional wait gates for deterministic deck automation
