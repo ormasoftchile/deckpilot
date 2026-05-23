@@ -63,3 +63,6 @@ examples/recordings/*.mp4
 .commit-msg.txt
 .gitattributes
 .squad-workstream
+
+# Generated extension packages
+*.vsix
