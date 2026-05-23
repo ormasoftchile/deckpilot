@@ -283,7 +283,6 @@
   },
   "dependencies": {
     "@deckpilot/core": "*",
-    "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",
     "markdown-it": "^14.0.0"
   }
