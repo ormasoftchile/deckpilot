@@ -150,7 +150,7 @@ function extractDeckFrontmatter(content: string): { data: Record<string, unknown
   try {
     const parsed = matter(content);
     return {
-      data: parsed.data as Record<string, unknown>,
+      data: parsed.data,
       content: parsed.content,
     };
   } catch (error) {
