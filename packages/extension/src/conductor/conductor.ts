@@ -46,6 +46,42 @@ import { disposeBrowserPanel } from '../browser';
 const TRUSTED_ACTION_TYPES: ActionType[] = ['terminal.run', 'debug.start'];
 
 /**
+ * Merge the attributes of an enclosing <p> (class/data-fragment*) onto the
+ * outer <div> of a render-block placeholder so the placeholder participates in
+ * the slide's fragment sequence after we drop the invalid <p><div></div></p>.
+ */
+function mergePAttrsIntoPlaceholder(placeholderHtml: string, pAttrs: string): string {
+  const classMatch = pAttrs.match(/\bclass="([^"]*)"/);
+  const fragMatch = pAttrs.match(/\bdata-fragment="(\d+)"/);
+  const animMatch = pAttrs.match(/\bdata-fragment-animation="([\w-]+)"/);
+
+  if (!classMatch && !fragMatch && !animMatch) {
+    return placeholderHtml;
+  }
+
+  let merged = placeholderHtml;
+  if (classMatch) {
+    const extraClasses = classMatch[1].trim();
+    if (extraClasses) {
+      merged = merged.replace(
+        /class="render-block render-block-loading"/,
+        `class="render-block render-block-loading ${extraClasses}"`,
+      );
+    }
+  }
+  const dataAttrs: string[] = [];
+  if (fragMatch) { dataAttrs.push(`data-fragment="${fragMatch[1]}"`); }
+  if (animMatch) { dataAttrs.push(`data-fragment-animation="${animMatch[1]}"`); }
+  if (dataAttrs.length > 0) {
+    merged = merged.replace(
+      /(<div class="render-block render-block-loading[^"]*")/,
+      `$1 ${dataAttrs.join(' ')}`,
+    );
+  }
+  return merged;
+}
+
+/**
  * Main orchestrator for presentation lifecycle
  */
 export class Conductor implements vscode.Disposable {
@@ -1937,10 +1973,24 @@ export class Conductor implements vscode.Disposable {
       // The URL in HTML has & encoded as &amp;
       const url = urlMatch[1].replace(/&/g, '&amp;');
       const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
-      // Match <a href="url">label</a> - the markdown renderer creates this
+
+      // Prefer matching the enclosing <p>…<a>…</a>…</p> so we can replace the
+      // whole paragraph with the render-block <div>. A <div> inside <p> is
+      // invalid HTML — browsers auto-close the <p>, which would strip away the
+      // fragment class/attrs the fragment processor placed on it and cause the
+      // block to render immediately instead of as a fragment step.
+      const paragraphPattern = new RegExp(
+        `<p\\b([^>]*)>\\s*<a\\s+href="${escapedUrl}"[^>]*>[^<]*</a>\\s*</p>`,
+      );
+      const pMatch = html.match(paragraphPattern);
+      if (pMatch) {
+        const pAttrs = pMatch[1];
+        html = html.replace(paragraphPattern, mergePAttrsIntoPlaceholder(placeholder.html, pAttrs));
+        continue;
+      }
+
+      // Fallback: just replace the <a> if the directive isn't in its own paragraph.
       const pattern = new RegExp(`<a\\s+href="${escapedUrl}"[^>]*>[^<]*</a>`);
-      
       if (pattern.test(html)) {
         html = html.replace(pattern, placeholder.html);
       }

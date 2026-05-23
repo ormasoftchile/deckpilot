@@ -885,6 +885,25 @@
           const newBlock = temp.firstElementChild;
           if (newBlock) {
             newBlock.setAttribute('data-render-id', blockId);
+            // Preserve fragment participation from the placeholder so the
+            // resolved block stays hidden until its fragment step is reached.
+            if (block.classList.contains('fragment')) {
+              newBlock.classList.add('fragment');
+              if (block.classList.contains('visible')) {
+                newBlock.classList.add('visible');
+              }
+              if (block.classList.contains('current-fragment')) {
+                newBlock.classList.add('current-fragment');
+              }
+            }
+            const fragIdx = block.getAttribute('data-fragment');
+            if (fragIdx !== null) {
+              newBlock.setAttribute('data-fragment', fragIdx);
+            }
+            const fragAnim = block.getAttribute('data-fragment-animation');
+            if (fragAnim !== null) {
+              newBlock.setAttribute('data-fragment-animation', fragAnim);
+            }
             block.replaceWith(newBlock);
           }
         }
