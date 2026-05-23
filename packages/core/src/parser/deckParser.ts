@@ -1,9 +1,9 @@
 /**
  * Deck parser for .deck.md files
- * Uses gray-matter for YAML frontmatter extraction
+ * Uses the in-tree YAML frontmatter parser (replaces gray-matter)
  */
 
-import matter from 'gray-matter';
+import { matter } from './frontmatter';
 import { Deck, DeckMetadata, SceneDefinition, createDeck } from '../models/deck';
 import { parseSlides, getLastParseWarnings } from './slideParser';
 import { EnvDeclarationParser } from '../env/envDeclarationParser';

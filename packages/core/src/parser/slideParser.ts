@@ -3,7 +3,7 @@
  * Splits content on `---` delimiter (horizontal rule)
  */
 
-import matter from 'gray-matter';
+import { matter } from './frontmatter';
 import MarkdownIt from 'markdown-it';
 import { Slide, SlideFrontmatter, createSlide } from '../models/slide';
 import { parseActionLinks } from './actionLinkParser';
