@@ -11,3 +11,4 @@ export * from './models';
 export * from './parser';
 export * from './env';
 export * from './renderer';
+export * from './sources';

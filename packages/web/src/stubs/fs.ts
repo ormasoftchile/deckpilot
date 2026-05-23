@@ -1,25 +1,33 @@
 /**
  * Minimal fs stub for Vite (browser environment).
- * Routes file existence checks and reads through the Vite dev-server /api/file endpoint.
- * Absolute paths are converted to workspace-relative paths by stripping the leading slash.
+ *
+ * The parser and a few helpers in @deckpilot/core import `fs` to read
+ * sidecars, env files, etc. In the browser we route those reads through
+ * the active DeckSource so there is exactly one place where "where do
+ * files come from?" is answered. See packages/web/src/sources/index.ts.
  */
 
-const API_BASE = '/api/file?path=';
+import { getActiveSource } from '../sources';
 
 function toRelative(p: string): string {
-  // Strip leading slash so it becomes a relative path the server accepts
   return p.startsWith('/') ? p.slice(1) : p;
 }
 
 async function readFile(p: string, _encoding: string): Promise<string> {
-  const res = await fetch(`${API_BASE}${encodeURIComponent(toRelative(p))}`);
-  if (!res.ok) throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
-  return res.text();
+  try {
+    return await getActiveSource().readFile(toRelative(p));
+  } catch (err) {
+    const e = err as { code?: string };
+    if (e?.code !== 'ENOENT') {
+      throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
+    }
+    throw err;
+  }
 }
 
 async function access(p: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${encodeURIComponent(toRelative(p))}`, { method: 'HEAD' });
-  if (!res.ok) throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
+  const ok = await getActiveSource().exists(toRelative(p));
+  if (!ok) throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
 }
 
 export const promises = { readFile, access };
