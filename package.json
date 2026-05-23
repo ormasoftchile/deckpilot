@@ -52,7 +52,7 @@
     "onChatParticipant:executable-talk.deck",
     "workspaceContains:**/*.deck.md"
   ],
-  "main": "./out/packages/extension/src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -245,16 +245,18 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run bundle -- --production",
     "compile": "tsc -b",
     "watch": "tsc -b --watch",
+    "bundle": "node esbuild.mjs",
+    "bundle:watch": "node esbuild.mjs --watch",
     "lint": "eslint packages/core/src packages/extension/src --ext ts",
     "lint:fix": "eslint packages/core/src packages/extension/src --ext ts --fix",
     "test": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
     "test:unit": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
-    "clean": "rimraf out packages/core/dist",
-    "package": "vsce package",
-    "deploy": "vsce publish",
+    "clean": "rimraf out dist packages/core/dist",
+    "package": "vsce package --no-dependencies",
+    "deploy": "vsce publish --no-dependencies",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:major": "npm version major --no-git-tag-version"
@@ -271,6 +273,7 @@
     "@vscode/test-electron": "^2.3.8",
     "@vscode/vsce": "^2.22.0",
     "chai": "^4.5.0",
+    "esbuild": "^0.25.12",
     "eslint": "^8.54.0",
     "mocha": "^10.2.0",
     "prettier": "^3.1.0",

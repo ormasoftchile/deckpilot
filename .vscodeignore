@@ -1,24 +1,34 @@
-.vscode/**
-.vscode-test/**
-packages/extension/src/**
-!packages/extension/src/webview/assets/**
-packages/core/src/**
-packages/web/**
-test/**
-.gitignore
-.eslintrc.json
-tsconfig.json
-**/*.ts
-**/*.map
-.specify/**
-specs/**
-*.deck.md
-.github/**
-# Design Specification: Deckpilot.md
+# Inverse-pattern .vscodeignore: ignore everything by default, then re-include
+# only what the bundled extension actually ships. The extension entry is a
+# single esbuild-bundled file at dist/extension.js (see esbuild.mjs); workspace
+# packages, node_modules, tests, build outputs other than dist/, and the public
+# web viewer are all left out of the .vsix.
 
-# Include production dependencies
-!node_modules
-!node_modules/gray-matter/**
-!node_modules/markdown-it/**
-!node_modules/@deckpilot/core/dist/**
-!node_modules/@deckpilot/core/package.json
+# Ignore everything by default
+**
+
+# Re-include the bundled extension entry (and its source map)
+!dist/extension.js
+!dist/extension.js.map
+
+# Webview assets loaded via vscode.Uri.joinPath(extensionUri, …)
+!packages/extension/src/webview/assets/**
+
+# Static assets shipped with the extension
+!resources/**
+!syntaxes/**
+!language-configuration.json
+
+# Marketplace metadata
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+
+# Defensive: never re-ship anything that slips through the re-includes above
+**/.DS_Store
+**/Thumbs.db
+**/*.tsbuildinfo
+**/node_modules/**
+**/*.test.*
+**/__tests__/**
