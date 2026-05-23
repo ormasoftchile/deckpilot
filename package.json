@@ -49,7 +49,6 @@
   "activationEvents": [
     "onCommand:deckPilot.openPresentation",
     "onLanguage:markdown",
-    "onChatParticipant:executable-talk.deck",
     "workspaceContains:**/*.deck.md"
   ],
   "main": "./dist/extension.js",
@@ -168,29 +167,6 @@
         "key": "ctrl+shift+m",
         "mac": "cmd+shift+m",
         "when": "activeWebviewPanelId == 'deckPilotPresentation'"
-      }
-    ],
-    "chatParticipants": [
-      {
-        "id": "deckPilot.deck",
-        "fullName": "Deck Creator",
-        "name": "deck",
-        "description": "Create and convert Markdown presentations into interactive Deckpilot decks",
-        "isSticky": true,
-        "commands": [
-          {
-            "name": "create",
-            "description": "Create a new deck from a description (e.g., 'installation guide for Docker')"
-          },
-          {
-            "name": "convert",
-            "description": "Convert an existing Markdown file into a .deck.md presentation"
-          },
-          {
-            "name": "enrich",
-            "description": "Add voice cues, fragments, and actions to an existing deck"
-          }
-        ]
       }
     ],
     "languages": [
