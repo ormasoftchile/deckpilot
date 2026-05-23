@@ -374,7 +374,7 @@ export class Conductor implements vscode.Disposable {
       const title = this.deck.slides[0]?.frontmatter?.title;
       this.navigationHistory.push(0, 'sequential', title);
     }
-    await this.goToSlide(0);
+    await this.goToSlide(0, true);
   }
 
   /**
@@ -385,7 +385,7 @@ export class Conductor implements vscode.Disposable {
       const lastIndex = this.deck.slides.length - 1;
       const title = this.deck.slides[lastIndex]?.frontmatter?.title;
       this.navigationHistory.push(lastIndex, 'sequential', title);
-      await this.goToSlide(lastIndex);
+      await this.goToSlide(lastIndex, true);
     }
   }
 
@@ -412,6 +412,8 @@ export class Conductor implements vscode.Disposable {
           slideHtml: resolvedHtml,
           canUndo: this.stateStack.canUndo(),
           canRedo: this.stateStack.canRedo(),
+          showAllFragments: true,
+          fragmentCount: slide.fragmentCount,
           navigationHistory: this.navigationHistory.getRecent(10),
           canGoBack: this.navigationHistory.canGoBack(),
           totalHistoryEntries: this.navigationHistory.length,
@@ -428,7 +430,7 @@ export class Conductor implements vscode.Disposable {
     if (snapshot) {
       // For redo, we just navigate to the slide
       // The actions will need to be re-executed
-      await this.goToSlide(snapshot.slideIndex);
+      await this.goToSlide(snapshot.slideIndex, true);
     }
   }
 
@@ -1116,7 +1118,7 @@ export class Conductor implements vscode.Disposable {
     );
 
     // Navigate
-    await this.goToSlide(slideIndex);
+    await this.goToSlide(slideIndex, true);
   }
 
   /**
@@ -1126,7 +1128,7 @@ export class Conductor implements vscode.Disposable {
   private handleGoBack(): void {
     const previousSlideIndex = this.navigationHistory.goBack();
     if (previousSlideIndex !== null) {
-      void this.goToSlide(previousSlideIndex);
+      void this.goToSlide(previousSlideIndex, true);
     } else {
       this.webviewProvider.sendWarning({
         code: 'NO_HISTORY',
@@ -1209,7 +1211,7 @@ export class Conductor implements vscode.Disposable {
       );
     }
 
-    await this.goToSlide(entry.slideIndex);
+    await this.goToSlide(entry.slideIndex, true);
 
     // Notify Webview
     this.sendSceneChanged(sceneName);
