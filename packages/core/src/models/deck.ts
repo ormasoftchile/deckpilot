@@ -71,6 +71,10 @@ export interface DeckMetadata {
   /** Base path for resolving relative paths in actions and render directives.
    *  Resolved relative to the deck file's directory. */
   basePath?: string;
+  /** Optional path/URL of an external markdown file whose body provides the
+   *  slide content. Resolved relative to the deck file. The imported file's
+   *  own frontmatter (if any) is ignored. */
+  content?: string;
   /** Presentation display options */
   options?: PresentationOptions;
   /** Authored scenes from deck frontmatter */

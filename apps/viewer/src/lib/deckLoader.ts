@@ -92,8 +92,28 @@ export async function loadDeckFromUrl(rawUrl: string, signal?: AbortSignal): Pro
   }
 
   // 2. Split deck-level frontmatter from body
-  const { data: rawMetadata, content: body } = matter(deckBody) as { data: Record<string, unknown>; content: string };
+  const { data: rawMetadata, content: initialBody } = matter(deckBody) as { data: Record<string, unknown>; content: string };
   let metadata = rawMetadata as DeckMetadata;
+  let body = initialBody;
+
+  // 2b. If frontmatter declares `content: <url-or-path>`, fetch that file's body.
+  //     URL is resolved relative to the deck URL. Imported frontmatter is ignored.
+  const importPath = typeof rawMetadata.content === 'string' ? rawMetadata.content.trim() : '';
+  if (importPath) {
+    try {
+      const importUrl = new URL(importPath, deckUrl);
+      const res = await fetchText(importUrl, signal);
+      if (res.status >= 200 && res.status < 300 && res.text.trim()) {
+        const { content: importedBody } = matter(res.text) as { data: Record<string, unknown>; content: string };
+        body = importedBody;
+      } else {
+        warnings.push(`[content] could not import '${importPath}' (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      warnings.push(`[content] import failed for '${importPath}': ${msg}`);
+    }
+  }
 
   // 3. Parse slides via core (browser-safe — uses gray-matter stub + markdown-it).
   let slides: Slide[];

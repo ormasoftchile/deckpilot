@@ -3,6 +3,8 @@
  * Uses the in-tree YAML frontmatter parser (replaces gray-matter)
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { matter } from './frontmatter';
 import { Deck, DeckMetadata, SceneDefinition, createDeck } from '../models/deck';
 import { parseSlides, getLastParseWarnings } from './slideParser';
@@ -32,8 +34,27 @@ export async function parseDeck(content: string, filePath: string): Promise<Pars
     // Extract deck-level frontmatter (before first slide delimiter)
     const { data: metadata, content: bodyContent } = extractDeckFrontmatter(content);
 
+    // If frontmatter declares `content: <path>`, load that file's body instead.
+    // Imported file's frontmatter (if any) is discarded — wrapper is source of truth.
+    let effectiveBody = bodyContent;
+    const importWarnings: string[] = [];
+    const importPath = typeof metadata.content === 'string' ? metadata.content.trim() : '';
+    if (importPath) {
+      try {
+        const resolved = path.isAbsolute(importPath)
+          ? importPath
+          : path.resolve(path.dirname(filePath), importPath);
+        const imported = await fs.promises.readFile(resolved, 'utf-8');
+        const { content: importedBody } = extractDeckFrontmatter(imported);
+        effectiveBody = importedBody;
+      } catch (importError) {
+        const msg = importError instanceof Error ? importError.message : 'Unknown import error';
+        importWarnings.push(`[content] could not import '${importPath}': ${msg}`);
+      }
+    }
+
     // Parse slides from body content
-    let slides = parseSlides(bodyContent);
+    let slides = parseSlides(effectiveBody);
 
     if (slides.length === 0) {
       return {
@@ -104,6 +125,11 @@ export async function parseDeck(content: string, filePath: string): Promise<Pars
 
     // Add sidecar warnings
     for (const w of sidecarWarnings) {
+      warnings.push(w);
+    }
+
+    // Add content-import warnings
+    for (const w of importWarnings) {
       warnings.push(w);
     }
 
