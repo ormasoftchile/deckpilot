@@ -1,0 +1,9 @@
+{
+  "name": "@deckpilot/shortener",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Short-URL redirector for Deckpilot decks (d3ck.md).",
+  "scripts": {
+    "build": "node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').cpSync('public','dist',{recursive:true})\""
+  }
+}

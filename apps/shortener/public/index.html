@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>d3ck.md — Deckpilot short URLs</title>
+    <meta name="description" content="Short URLs for Deckpilot decks. Share Markdown presentations with a tidy link." />
+    <link rel="canonical" href="https://d3ck.md/" />
+    <meta name="theme-color" content="#1e1e1e" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="d3ck.md" />
+    <meta property="og:title" content="d3ck.md — Deckpilot short URLs" />
+    <meta property="og:description" content="Tidy short URLs for Deckpilot decks." />
+    <meta property="og:url" content="https://d3ck.md/" />
+    <meta name="twitter:card" content="summary" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1115;
+        --fg: #e6e6e6;
+        --muted: #9aa0a6;
+        --accent: #7aa2f7;
+        --card: #161a22;
+        --border: #232936;
+      }
+      @media (prefers-color-scheme: light) {
+        :root { --bg: #fafafa; --fg: #1a1a1a; --muted: #555; --accent: #2563eb; --card: #ffffff; --border: #e5e7eb; }
+      }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem; }
+      h1 { font-size: 2rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+      .tag { color: var(--muted); margin: 0 0 2rem; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin: 1rem 0; }
+      code, pre { font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace; font-size: 0.9em; }
+      pre { background: rgba(127,127,127,0.08); padding: 0.75rem 1rem; border-radius: 8px; overflow-x: auto; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+      .muted { color: var(--muted); }
+      footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+    </style>
+    <script>
+      (function () {
+        var VIEWER = 'https://viewer.deckpilot.cl/';
+        var path = location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+        if (!path) return; // landing page
+
+        var hash = location.hash || '';
+        var search = location.search || '';
+        var raw = null;
+
+        var segs = path.split('/');
+        var kind = segs.shift();
+
+        try {
+          if (kind === 'gh' && segs.length >= 3) {
+            // gh/<owner>/<repo>[@<ref>]/<path...>
+            var owner = segs.shift();
+            var repoRef = segs.shift();
+            var ref = 'HEAD';
+            var at = repoRef.indexOf('@');
+            var repo = repoRef;
+            if (at >= 0) { repo = repoRef.slice(0, at); ref = repoRef.slice(at + 1) || 'HEAD'; }
+            raw = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + ref + '/' + segs.map(encodeURIComponent).join('/');
+          } else if (kind === 'gist' && segs.length >= 2) {
+            // gist/<user>/<id>[/<file>]
+            var gistUser = segs.shift();
+            var gistId = segs.shift();
+            var file = segs.length ? '/raw/' + segs.map(encodeURIComponent).join('/') : '/raw';
+            raw = 'https://gist.githubusercontent.com/' + gistUser + '/' + gistId + file;
+          } else if (kind === 'gl' && segs.length >= 3) {
+            // gl/<owner>/<repo>[@<ref>]/<path...>
+            var glOwner = segs.shift();
+            var glRepoRef = segs.shift();
+            var glRef = 'HEAD';
+            var glAt = glRepoRef.indexOf('@');
+            var glRepo = glRepoRef;
+            if (glAt >= 0) { glRepo = glRepoRef.slice(0, glAt); glRef = glRepoRef.slice(glAt + 1) || 'HEAD'; }
+            raw = 'https://gitlab.com/' + glOwner + '/' + glRepo + '/-/raw/' + glRef + '/' + segs.map(encodeURIComponent).join('/');
+          } else if (kind === 'u' && segs.length >= 1) {
+            // u/<base64url-encoded https URL>
+            var b64 = segs.join('/').replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            var decoded = atob(b64);
+            if (/^https?:\/\//.test(decoded)) raw = decoded;
+          }
+        } catch (_) { /* fall through */ }
+
+        if (raw) {
+          var target = VIEWER + '?url=' + encodeURIComponent(raw) + (search ? '&' + search.slice(1) : '') + hash;
+          location.replace(target);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>d3ck.md</h1>
+      <p class="tag">Short URLs for <a href="https://deckpilot.cl/">Deckpilot</a> decks.</p>
+
+      <div class="card">
+        <h2>GitHub</h2>
+        <pre>https://d3ck.md/gh/&lt;owner&gt;/&lt;repo&gt;/&lt;path&gt;
+https://d3ck.md/gh/&lt;owner&gt;/&lt;repo&gt;@&lt;branch|tag|sha&gt;/&lt;path&gt;</pre>
+        <p class="muted">Resolves <code>raw.githubusercontent.com/&lt;owner&gt;/&lt;repo&gt;/&lt;ref&gt;/&lt;path&gt;</code> and opens it in the viewer.</p>
+      </div>
+
+      <div class="card">
+        <h2>Gist</h2>
+        <pre>https://d3ck.md/gist/&lt;user&gt;/&lt;id&gt;
+https://d3ck.md/gist/&lt;user&gt;/&lt;id&gt;/&lt;file&gt;</pre>
+      </div>
+
+      <div class="card">
+        <h2>GitLab</h2>
+        <pre>https://d3ck.md/gl/&lt;owner&gt;/&lt;repo&gt;/&lt;path&gt;
+https://d3ck.md/gl/&lt;owner&gt;/&lt;repo&gt;@&lt;ref&gt;/&lt;path&gt;</pre>
+      </div>
+
+      <div class="card">
+        <h2>Arbitrary URL</h2>
+        <pre>https://d3ck.md/u/&lt;base64url-of-https-url&gt;</pre>
+        <p class="muted">Escape hatch for any HTTPS-hosted <code>.deck.md</code>.</p>
+      </div>
+
+      <footer>
+        Open source &middot; <a href="https://github.com/ormasoftchile/deckpilot">github.com/ormasoftchile/deckpilot</a>
+      </footer>
+    </main>
+  </body>
+</html>
