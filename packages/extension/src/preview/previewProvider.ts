@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseDeck } from '@deckpilot/core/parser/deckParser';
+import { matter } from '@deckpilot/core/parser/frontmatter';
 import { collectWatchPaths } from './collectWatchPaths';
 import { renderPreviewError, renderPreviewHtml, RenderPreviewOptions } from './previewRenderer';
 import { WatchedSources } from './watchedSources';
@@ -111,13 +112,57 @@ export class PreviewProvider implements vscode.Disposable {
   }
 
   private async readDeckContent(uri: vscode.Uri): Promise<string> {
+    const raw = await this.readLive(uri.fsPath);
+    return this.inlineContentImport(raw, uri.fsPath);
+  }
+
+  private async readLive(fsPath: string): Promise<string> {
     const openDoc = vscode.workspace.textDocuments.find(
-      (d) => d.uri.fsPath === uri.fsPath,
+      (d) => d.uri.fsPath === fsPath,
     );
     if (openDoc) {
       return openDoc.getText();
     }
-    return fs.promises.readFile(uri.fsPath, 'utf-8');
+    return fs.promises.readFile(fsPath, 'utf-8');
+  }
+
+  /**
+   * If the wrapper deck declares `content: <path>` and that imported file is
+   * currently open in an editor with unsaved edits, splice its live body into
+   * the wrapper so the preview reflects keystrokes (not just saves). When the
+   * import file isn't open, we leave the directive in place and let parseDeck
+   * read it from disk.
+   */
+  private async inlineContentImport(raw: string, deckPath: string): Promise<string> {
+    let parsed: { data: Record<string, unknown>; content: string };
+    try {
+      parsed = matter(raw);
+    } catch {
+      return raw;
+    }
+    const importPath = typeof parsed.data.content === 'string' ? parsed.data.content.trim() : '';
+    if (!importPath) {
+      return raw;
+    }
+    const resolved = path.isAbsolute(importPath)
+      ? importPath
+      : path.resolve(path.dirname(deckPath), importPath);
+    const openDoc = vscode.workspace.textDocuments.find(
+      (d) => d.uri.fsPath === resolved,
+    );
+    if (!openDoc) {
+      return raw;
+    }
+    let importedBody: string;
+    try {
+      importedBody = matter(openDoc.getText()).content;
+    } catch {
+      return raw;
+    }
+    const { content: _drop, ...rest } = parsed.data;
+    const fmLines = Object.entries(rest).map(([k, v]) => `${k}: ${serializeYamlScalar(v)}`);
+    const fm = fmLines.length > 0 ? `---\n${fmLines.join('\n')}\n---\n` : '';
+    return `${fm}${importedBody}`;
   }
 
   private buildRenderOptions(): RenderPreviewOptions {
@@ -188,4 +233,23 @@ function generateNonce(): string {
     out += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return out;
+}
+
+/**
+ * Minimal YAML scalar serializer for the few values we round-trip when
+ * stripping the `content:` directive. Strings get quoted, primitives stringified,
+ * everything else falls back to JSON. Good enough — this output is fed straight
+ * back into the deck parser, not persisted.
+ */
+function serializeYamlScalar(v: unknown): string {
+  if (v === null || v === undefined) {
+    return '';
+  }
+  if (typeof v === 'string') {
+    return JSON.stringify(v);
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') {
+    return String(v);
+  }
+  return JSON.stringify(v);
 }
