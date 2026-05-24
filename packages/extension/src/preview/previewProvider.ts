@@ -159,9 +159,22 @@ export class PreviewProvider implements vscode.Disposable {
     } catch {
       return raw;
     }
-    const { content: _drop, ...rest } = parsed.data;
-    const fmLines = Object.entries(rest).map(([k, v]) => `${k}: ${serializeYamlScalar(v)}`);
-    const fm = fmLines.length > 0 ? `---\n${fmLines.join('\n')}\n---\n` : '';
+
+    // Preserve the wrapper's original frontmatter byte-for-byte (it may carry
+    // sidecar references, env declarations, etc. that don't survive a naive
+    // YAML round-trip). We only strip the `content:` line so the parser
+    // doesn't try to re-import from disk, then replace the wrapper body with
+    // the live imported body.
+    const fenceMatch = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(raw);
+    if (!fenceMatch) {
+      return raw;
+    }
+    const yamlBlock = fenceMatch[1];
+    const strippedYaml = yamlBlock
+      .split(/\r?\n/)
+      .filter((line) => !/^\s*content\s*:/.test(line))
+      .join('\n');
+    const fm = `---\n${strippedYaml}\n---\n`;
     return `${fm}${importedBody}`;
   }
 
@@ -233,23 +246,4 @@ function generateNonce(): string {
     out += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return out;
-}
-
-/**
- * Minimal YAML scalar serializer for the few values we round-trip when
- * stripping the `content:` directive. Strings get quoted, primitives stringified,
- * everything else falls back to JSON. Good enough — this output is fed straight
- * back into the deck parser, not persisted.
- */
-function serializeYamlScalar(v: unknown): string {
-  if (v === null || v === undefined) {
-    return '';
-  }
-  if (typeof v === 'string') {
-    return JSON.stringify(v);
-  }
-  if (typeof v === 'number' || typeof v === 'boolean') {
-    return String(v);
-  }
-  return JSON.stringify(v);
 }
