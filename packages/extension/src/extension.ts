@@ -13,8 +13,10 @@ import {
     installAuthoringSkills,
     maybeOfferAuthoringSkillsInstall
 } from './commands/installAuthoringSkills';
+import { PreviewProvider } from './preview';
 
 let conductor: Conductor | undefined;
+let previewProvider: PreviewProvider | undefined;
 
 /**
  * Resolves a deck URI from the active editor, supporting both .deck.md and .deck.yaml files.
@@ -156,6 +158,23 @@ export function activate(context: vscode.ExtensionContext): void {
         'deckPilot.goToSlide',
         () => {
             conductor?.openSlidePicker();
+        }
+    );
+
+    const openPreviewDisposable = vscode.commands.registerCommand(
+        'deckPilot.openPreview',
+        async () => {
+            const editor = vscode.window.activeTextEditor;
+            const deckUri = resolveDeckUri(editor);
+            if (!deckUri) {
+                void vscode.window.showWarningMessage('Open a .deck.md or .deck.yaml file first to preview.');
+                return;
+            }
+            if (!previewProvider) {
+                previewProvider = new PreviewProvider(context.extensionUri);
+                context.subscriptions.push(previewProvider);
+            }
+            await previewProvider.show(deckUri);
         }
     );
 
@@ -490,6 +509,7 @@ export function activate(context: vscode.ExtensionContext): void {
         previousSlideDisposable,
         openPresenterViewDisposable,
         goToSlideDisposable,
+        openPreviewDisposable,
         validateDeckDisposable,
         startRecordingDisposable,
         stopRecordingDisposable,
