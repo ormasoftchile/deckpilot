@@ -83,9 +83,9 @@ export class PreviewProvider implements vscode.Disposable {
       return;
     }
     const renderOpts = this.buildRenderOptions();
-    let content: string;
+    let raw: string;
     try {
-      content = await this.readDeckContent(this.deckUri);
+      raw = await this.readLive(this.deckUri.fsPath);
     } catch (err) {
       this.panel.webview.html = renderPreviewError(
         `Failed to read deck file: ${(err as Error).message}`,
@@ -94,13 +94,16 @@ export class PreviewProvider implements vscode.Disposable {
       return;
     }
 
+    const content = await this.inlineContentImport(raw, this.deckUri.fsPath);
     const result = await parseDeck(content, this.deckUri.fsPath);
     if (result.error || !result.deck) {
       this.panel.webview.html = renderPreviewError(
         result.error ?? 'Parse failed',
         renderOpts,
       );
-      this.watched.sync([]);
+      // Even on parse failure, keep watching the raw deck's referenced files
+      // so the next save/keystroke in them retriggers a refresh.
+      this.watched.sync(this.extraWatchPathsFromRaw(raw));
       return;
     }
 
@@ -108,12 +111,31 @@ export class PreviewProvider implements vscode.Disposable {
       ...renderOpts,
       warnings: result.warnings,
     });
-    this.watched.sync(collectWatchPaths(result.deck));
+    const paths = new Set(collectWatchPaths(result.deck));
+    for (const extra of this.extraWatchPathsFromRaw(raw)) {
+      paths.add(extra);
+    }
+    this.watched.sync([...paths]);
   }
 
-  private async readDeckContent(uri: vscode.Uri): Promise<string> {
-    const raw = await this.readLive(uri.fsPath);
-    return this.inlineContentImport(raw, uri.fsPath);
+  /**
+   * Extract paths the synthetic (post-inline) parsed deck would no longer
+   * surface — currently just the `content:` import target, which we strip
+   * before parsing so we always need to re-add it here.
+   */
+  private extraWatchPathsFromRaw(raw: string): string[] {
+    let parsed: { data: Record<string, unknown> };
+    try {
+      parsed = matter(raw);
+    } catch {
+      return [];
+    }
+    const importPath = typeof parsed.data.content === 'string' ? parsed.data.content.trim() : '';
+    if (!importPath) {
+      return [];
+    }
+    const deckDir = path.dirname(this.deckUri!.fsPath);
+    return [path.isAbsolute(importPath) ? importPath : path.resolve(deckDir, importPath)];
   }
 
   private async readLive(fsPath: string): Promise<string> {
