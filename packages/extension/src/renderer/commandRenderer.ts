@@ -73,6 +73,14 @@ function getCachedResult(cmd: string, cwd: string): CommandRenderResult | undefi
 }
 
 /**
+ * Read-only cache peek for non-executing surfaces (e.g. the live preview).
+ * Returns the cached result if present and still valid; never spawns.
+ */
+export function peekCommandCache(cmd: string, cwd: string): CommandRenderResult | undefined {
+  return getCachedResult(cmd, cwd);
+}
+
+/**
  * Store result in cache
  */
 function cacheResult(cmd: string, cwd: string, result: CommandRenderResult): void {

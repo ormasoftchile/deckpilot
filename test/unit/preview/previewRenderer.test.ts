@@ -130,4 +130,49 @@ describe('renderPreviewHtml', () => {
     expect(html).to.include('&lt;oops&gt;');
     expect(html).to.not.include('<oops>');
   });
+
+  it('interpolates {{VAR}} from deck.resolvedEnvironment', () => {
+    const slide = makeSlide(0, {
+      content: '',
+      html: '<p>hello {{NAME}}</p>',
+    });
+    const deck = makeDeck([slide]);
+    deck.resolvedEnvironment = { NAME: 'world' };
+    const html = renderPreviewHtml(deck, opts);
+    expect(html).to.include('hello world');
+    expect(html).to.not.include('{{NAME}}');
+  });
+
+  it('leaves unknown {{VAR}} placeholders untouched', () => {
+    const slide = makeSlide(0, {
+      content: '',
+      html: '<p>{{MISSING}}</p>',
+    });
+    const deck = makeDeck([slide]);
+    deck.resolvedEnvironment = { OTHER: 'x' };
+    const html = renderPreviewHtml(deck, opts);
+    expect(html).to.include('{{MISSING}}');
+  });
+
+  it('html-escapes interpolated env values', () => {
+    const slide = makeSlide(0, {
+      content: '',
+      html: '<p>{{XSS}}</p>',
+    });
+    const deck = makeDeck([slide]);
+    deck.resolvedEnvironment = { XSS: '<img onerror=1>' };
+    const html = renderPreviewHtml(deck, opts);
+    expect(html).to.include('&lt;img onerror=1&gt;');
+    expect(html).to.not.include('<img onerror=1>');
+  });
+
+  it('emits postMessage hooks for cursor follow and reverse sync', () => {
+    const html = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>x</p>' })]),
+      opts,
+    );
+    expect(html).to.include('acquireVsCodeApi');
+    expect(html).to.include('scrollToSlide');
+    expect(html).to.include('revealSource');
+  });
 });

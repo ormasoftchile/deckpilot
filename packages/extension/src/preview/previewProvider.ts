@@ -19,6 +19,11 @@ const VIEW_TYPE = 'deckPilotPreview';
 export class PreviewProvider implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private deckUri: vscode.Uri | undefined;
+  /** URI the slides' sourceRange maps to: deckUri normally, or the imported
+   * content file when the wrapper declares `content:`. Used for cursor follow
+   * and reverse sync. */
+  private sourceUri: vscode.Uri | undefined;
+  private slideRanges: Array<{ index: number; start: number; end: number }> = [];
   private readonly watched: WatchedSources;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private disposables: vscode.Disposable[] = [];
@@ -46,6 +51,8 @@ export class PreviewProvider implements vscode.Disposable {
       );
       this.panel.onDidDispose(() => this.disposePanel(), null, this.disposables);
       this.attachDocumentListener();
+      this.attachSelectionListener();
+      this.attachMessageListener();
     }
 
     this.panel.title = previewTitle(deckUri);
@@ -66,6 +73,63 @@ export class PreviewProvider implements vscode.Disposable {
       }
     });
     this.disposables.push(changeDisposable);
+  }
+
+  /** Cursor follow: editor caret moves → preview scrolls to matching slide. */
+  private attachSelectionListener(): void {
+    const d = vscode.window.onDidChangeTextEditorSelection((e) => {
+      if (!this.panel || !this.sourceUri) {
+        return;
+      }
+      if (e.textEditor.document.uri.fsPath !== this.sourceUri.fsPath) {
+        return;
+      }
+      const line = e.selections[0]?.active.line;
+      if (typeof line !== 'number') {
+        return;
+      }
+      const slide = this.slideRanges.find((r) => line >= r.start && line <= r.end);
+      if (slide) {
+        void this.panel.webview.postMessage({ type: 'scrollToSlide', slideIndex: slide.index });
+      }
+    });
+    this.disposables.push(d);
+  }
+
+  /** Reverse sync: webview click on a slide → reveal source line in editor. */
+  private attachMessageListener(): void {
+    const d = this.panel!.webview.onDidReceiveMessage((msg: unknown) => {
+      if (!msg || typeof msg !== 'object') {
+        return;
+      }
+      const m = msg as { type?: string; slideIndex?: number };
+      if (m.type === 'revealSource' && typeof m.slideIndex === 'number') {
+        void this.revealSlideSource(m.slideIndex);
+      }
+    });
+    this.disposables.push(d);
+  }
+
+  private async revealSlideSource(slideIndex: number): Promise<void> {
+    if (!this.sourceUri) {
+      return;
+    }
+    const range = this.slideRanges.find((r) => r.index === slideIndex);
+    if (!range) {
+      return;
+    }
+    const doc = await vscode.workspace.openTextDocument(this.sourceUri);
+    const editor = await vscode.window.showTextDocument(doc, {
+      viewColumn: vscode.ViewColumn.One,
+      preserveFocus: false,
+    });
+    const targetLine = Math.min(range.start, doc.lineCount - 1);
+    const pos = new vscode.Position(targetLine, 0);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(
+      new vscode.Range(pos, pos),
+      vscode.TextEditorRevealType.InCenterIfOutsideViewport,
+    );
   }
 
   private scheduleRefresh(): void {
@@ -116,6 +180,16 @@ export class PreviewProvider implements vscode.Disposable {
       paths.add(extra);
     }
     this.watched.sync([...paths]);
+
+    // Track slide source ranges and the URI those ranges map to (the imported
+    // content file when `content:` is in use, otherwise the deck itself).
+    this.slideRanges = result.deck.slides
+      .filter((s) => s.sourceRange)
+      .map((s) => ({ index: s.index, start: s.sourceRange!.start, end: s.sourceRange!.end }));
+    const importTargets = this.extraWatchPathsFromRaw(raw);
+    this.sourceUri = importTargets.length > 0
+      ? vscode.Uri.file(importTargets[0])
+      : this.deckUri;
   }
 
   /**

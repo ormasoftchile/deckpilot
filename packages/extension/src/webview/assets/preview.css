@@ -171,3 +171,38 @@ html, body {
   color: var(--vscode-errorForeground, var(--vscode-foreground));
   white-space: pre-wrap;
 }
+
+/* Active slide highlight (cursor follow). */
+.preview-slide--active {
+  border-color: var(--vscode-focusBorder, var(--vscode-editorCursor-foreground, #007acc));
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder, transparent) inset;
+}
+
+/* Reverse sync affordance: clicking blank slide chrome jumps to source. */
+.preview-slide { cursor: pointer; }
+.preview-slide-body { cursor: auto; }
+
+/* Cached render:command output. */
+.preview-directive--cached {
+  border-style: solid;
+  cursor: default;
+}
+.preview-directive--success { border-color: var(--vscode-charts-green, #4caf50); }
+.preview-directive--error   { border-color: var(--vscode-errorForeground, #f48771); }
+.preview-directive--timeout { border-color: var(--vscode-charts-yellow, #ddb100); }
+.preview-directive-status {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+}
+.preview-directive-output {
+  margin: 0.5em 0 0;
+  padding: 0.5em 0.7em;
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.08));
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.85em;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre;
+}
