@@ -1,0 +1,173 @@
+/* preview.css — styles for the live preview side panel.
+ * Uses VS Code theme variables so it follows the user's color theme.
+ * Action buttons and render-directive cards intentionally look inert. */
+
+:root {
+  color-scheme: light dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  line-height: 1.55;
+}
+
+.preview-body {
+  padding: 0;
+}
+
+.preview-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.6rem 1.2rem;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  font-size: 0.85em;
+}
+
+.preview-title {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+
+.preview-meta {
+  color: var(--vscode-descriptionForeground);
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-warnings {
+  margin: 0;
+  padding: 0.5rem 1.2rem;
+  background: var(--vscode-inputValidation-warningBackground, rgba(255, 200, 0, 0.08));
+  border-bottom: 1px solid var(--vscode-inputValidation-warningBorder, rgba(255, 200, 0, 0.3));
+  color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
+  font-size: 0.85em;
+}
+.preview-warnings ul { margin: 0; padding-left: 1.2rem; }
+.preview-warnings li { margin: 0.15rem 0; }
+
+.preview-slides {
+  padding: 1rem 1.2rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  max-width: 100%;
+}
+
+.preview-slide {
+  position: relative;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--vscode-editor-background);
+  overflow: hidden;
+}
+
+.preview-slide--error {
+  border-color: var(--vscode-errorForeground, #f48771);
+  background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.04));
+}
+
+.preview-slide-label {
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 0.6rem;
+}
+
+.preview-slide-body { font-size: 0.95em; }
+
+.preview-slide-body h1,
+.preview-slide-body h2,
+.preview-slide-body h3,
+.preview-slide-body h4 { margin: 0.6em 0 0.3em; }
+
+.preview-slide-body p { margin: 0.4em 0; }
+
+.preview-slide-body code {
+  font-family: var(--vscode-editor-font-family);
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.preview-slide-body pre {
+  font-family: var(--vscode-editor-font-family);
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+  padding: 0.6em 0.8em;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.preview-slide-body img { max-width: 100%; height: auto; }
+
+.preview-slide-body a[href^="action:"],
+.preview-slide-body .action-button {
+  display: inline-block;
+  padding: 0.25em 0.7em;
+  border: 1px dashed var(--vscode-button-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  text-decoration: none;
+  cursor: not-allowed;
+  opacity: 0.75;
+  font-size: 0.9em;
+}
+.preview-slide-body a[href^="action:"]::before,
+.preview-slide-body .action-button::before {
+  content: "\26A1\00A0";
+  opacity: 0.7;
+}
+
+.preview-directive {
+  margin: 0.7em 0;
+  border: 1px dashed var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 0.5em 0.75em;
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.05));
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  cursor: not-allowed;
+}
+.preview-directive-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+.preview-directive-icon { font-size: 1em; }
+.preview-directive-kind {
+  font-family: var(--vscode-editor-font-family);
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+.preview-directive-source {
+  font-family: var(--vscode-editor-font-family);
+  word-break: break-all;
+}
+.preview-directive-note {
+  margin-top: 0.25em;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.preview-error-message {
+  margin: 0;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-errorForeground, var(--vscode-foreground));
+  white-space: pre-wrap;
+}

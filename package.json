@@ -87,6 +87,10 @@
         "title": "Deckpilot: Go to Slide"
       },
       {
+        "command": "deckPilot.openPreview",
+        "title": "Deckpilot: Open Live Preview"
+      },
+      {
         "command": "deckPilot.startRecording",
         "title": "Deckpilot: Start Recording Session"
       },
