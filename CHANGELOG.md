@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.35] - 2026-05-24
+
 ### Added
 
 - **Live Preview**: New `Deckpilot: Open Live Preview` command opens a side-panel view of the active .deck.md that re-renders as you type. Watches the sidecar (`.deck.yaml`), env file (`.deck.env`), `content:` imports, and `render:file` / `render:diff` source paths. Action links and render directives render as inert cards — preview never executes side effects.
@@ -369,6 +371,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SnapshotFactory for IDE state capture/restore
 
 ## [Unreleased]
+
+## [0.9.35] - 2026-05-24
 
 ### Planned
 
