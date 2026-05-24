@@ -14,42 +14,68 @@ import {
     maybeOfferAuthoringSkillsInstall
 } from './commands/installAuthoringSkills';
 import { PreviewProvider } from './preview';
+import { matter } from '@deckpilot/core/parser/frontmatter';
 
 let conductor: Conductor | undefined;
 let previewProvider: PreviewProvider | undefined;
 
 /**
- * Resolves a deck URI from the active editor, supporting both .deck.md and .deck.yaml files.
- * 
- * - If the active editor is a .deck.md file, returns it as-is.
- * - If the active editor is a .deck.yaml sidecar, derives and returns the paired .deck.md URI.
- * - Returns undefined if no active editor, or the .deck.md file doesn't exist.
- * 
- * @param editor - The active text editor (usually from vscode.window.activeTextEditor)
- * @returns The URI of the .deck.md file, or undefined if not applicable
+ * Resolves a deck URI from the active editor.
+ *
+ * - `.deck.md` → returned as-is.
+ * - `.deck.yaml` sidecar → paired `.deck.md` if it exists on disk.
+ * - Any other file (e.g. a plain `.md`) → searches the workspace for a
+ *   `.deck.md` whose frontmatter declares `content: <path>` resolving to the
+ *   active file, and returns that deck if found.
  */
-function resolveDeckUri(editor: vscode.TextEditor | undefined): vscode.Uri | undefined {
+async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vscode.Uri | undefined> {
     if (!editor) {
         return undefined;
     }
 
     const filePath = editor.document.uri.fsPath;
-    
-    // If it's already a .deck.md file, return it
+
     if (filePath.endsWith('.deck.md')) {
         return editor.document.uri;
     }
-    
-    // If it's a .deck.yaml sidecar, derive the paired .deck.md path
+
     if (filePath.endsWith('.deck.yaml')) {
         const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
-        
-        // Verify the .deck.md file exists
         if (fs.existsSync(deckMdPath)) {
             return vscode.Uri.file(deckMdPath);
         }
+        return undefined;
     }
-    
+
+    return findDeckImporting(filePath);
+}
+
+/**
+ * Scans the workspace for `*.deck.md` files whose frontmatter declares
+ * `content: <path>` resolving to `targetFsPath`. Returns the first match.
+ */
+async function findDeckImporting(targetFsPath: string): Promise<vscode.Uri | undefined> {
+    const decks = await vscode.workspace.findFiles('**/*.deck.md', '**/node_modules/**');
+    for (const deckUri of decks) {
+        try {
+            const buf = await vscode.workspace.fs.readFile(deckUri);
+            const raw = Buffer.from(buf).toString('utf-8');
+            const parsed = matter(raw);
+            const importPath = typeof parsed.data.content === 'string' ? parsed.data.content.trim() : '';
+            if (!importPath) {
+                continue;
+            }
+            const deckDir = path.dirname(deckUri.fsPath);
+            const resolved = path.isAbsolute(importPath)
+                ? importPath
+                : path.resolve(deckDir, importPath);
+            if (resolved === targetFsPath) {
+                return deckUri;
+            }
+        } catch {
+            // ignore unreadable / unparseable decks
+        }
+    }
     return undefined;
 }
 
@@ -69,8 +95,8 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const editor = vscode.window.activeTextEditor;
             
-            // Resolve deck URI (supports both .deck.md and .deck.yaml)
-            const deckUri = resolveDeckUri(editor);
+            // Resolve deck URI (.deck.md, .deck.yaml sidecar, or a content-imported file).
+            const deckUri = await resolveDeckUri(editor);
             
             if (!deckUri) {
                 const activeFile = editor?.document.fileName;
@@ -79,7 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
                     );
                 } else {
-                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md or .deck.yaml file first.');
+                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md file (or a markdown file imported by one) first.');
                 }
                 return;
             }
@@ -165,9 +191,9 @@ export function activate(context: vscode.ExtensionContext): void {
         'deckPilot.openPreview',
         async () => {
             const editor = vscode.window.activeTextEditor;
-            const deckUri = resolveDeckUri(editor);
+            const deckUri = await resolveDeckUri(editor);
             if (!deckUri) {
-                void vscode.window.showWarningMessage('Open a .deck.md or .deck.yaml file first to preview.');
+                void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to preview.');
                 return;
             }
             if (!previewProvider) {
@@ -183,8 +209,8 @@ export function activate(context: vscode.ExtensionContext): void {
         async () => {
             const editor = vscode.window.activeTextEditor;
             
-            // Resolve deck URI (supports both .deck.md and .deck.yaml)
-            const deckUri = resolveDeckUri(editor);
+            // Resolve deck URI (.deck.md, .deck.yaml sidecar, or a content-imported file).
+            const deckUri = await resolveDeckUri(editor);
             
             if (!deckUri) {
                 const activeFile = editor?.document.fileName;
@@ -193,7 +219,7 @@ export function activate(context: vscode.ExtensionContext): void {
                         'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
                     );
                 } else {
-                    void vscode.window.showWarningMessage('Open a .deck.md or .deck.yaml file first to validate.');
+                    void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to validate.');
                 }
                 return;
             }
