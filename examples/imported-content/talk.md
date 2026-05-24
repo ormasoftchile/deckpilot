@@ -16,3 +16,11 @@ Write your script as prose, then format it as a deck without copy-pasting.
 
 # Wrap-up
 That's the whole feature.
+
+---
+
+# some new page
+
+my life
+
+---

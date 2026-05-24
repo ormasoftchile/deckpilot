@@ -24,12 +24,6 @@ const md = new MarkdownIt({
 });
 
 /**
- * Slide delimiter pattern: --- on its own line
- * Must be at least 3 dashes with optional whitespace
- */
-const SLIDE_DELIMITER = /^---+\s*$/m;
-
-/**
  * Accumulated parse warnings from the last parseSlides() call.
  * Reset at the start of each parseSlides() invocation.
  */
@@ -66,14 +60,16 @@ export function parseSlides(content: string): Slide[] {
   _lastParseWarnings = [];
   _lastValidationDiagnostics = [];
   
-  // Split content on slide delimiter
+  // Split content on slide delimiter (with line range tracking for sync)
   const rawSlides = splitOnDelimiter(content);
   
   const slides: Slide[] = [];
   let pendingFrontmatter: SlideFrontmatter | undefined;
+  let pendingRangeStart: number | undefined;
   
   for (let index = 0; index < rawSlides.length; index++) {
-    const rawContent = rawSlides[index].trim();
+    const { text: rawText, start: rangeStart, end: rangeEnd } = rawSlides[index];
+    const rawContent = rawText.trim();
     
     // Skip empty slides (but keep first slide even if empty)
     if (!rawContent && index > 0) {
@@ -81,6 +77,7 @@ export function parseSlides(content: string): Slide[] {
     }
     
     const slide = parseSlideContent(index, rawContent);
+    slide.sourceRange = { start: rangeStart, end: rangeEnd };
 
     // If this "slide" is frontmatter-only (no visible content), hold it
     // and merge into the next slide. This lets authors write:
@@ -90,6 +87,9 @@ export function parseSlides(content: string): Slide[] {
     //   # Actual Slide Content
     if (isFrontmatterOnly(slide)) {
       pendingFrontmatter = mergeFrontmatter(pendingFrontmatter, slide.frontmatter);
+      if (pendingRangeStart === undefined) {
+        pendingRangeStart = rangeStart;
+      }
       continue;
     }
 
@@ -98,6 +98,10 @@ export function parseSlides(content: string): Slide[] {
       slide.frontmatter = mergeFrontmatter(pendingFrontmatter, slide.frontmatter);
       slide.speakerNotes = slide.frontmatter?.notes ?? slide.speakerNotes;
       pendingFrontmatter = undefined;
+    }
+    if (pendingRangeStart !== undefined && slide.sourceRange) {
+      slide.sourceRange = { start: pendingRangeStart, end: slide.sourceRange.end };
+      pendingRangeStart = undefined;
     }
 
     // Re-index after filtering
@@ -129,21 +133,48 @@ export function parseSlides(content: string): Slide[] {
 }
 
 /**
- * Split content on --- delimiter
- * Handles edge cases like leading/trailing delimiters
+ * Split content on --- delimiter, tracking source line ranges.
+ * Returns each chunk's text plus its 0-based [start, end] inclusive line
+ * range in the original input. Used by parseSlides() to populate
+ * Slide.sourceRange for editor ↔ preview sync.
  */
-function splitOnDelimiter(content: string): string[] {
-  // Split on delimiter lines
-  const parts = content.split(SLIDE_DELIMITER);
-  
-  // Filter out completely empty parts but preserve whitespace-only for processing
-  return parts.filter((part, index) => {
-    // Always keep first part
+interface RawSlideChunk {
+  text: string;
+  start: number; // 0-based inclusive line number in original input
+  end: number;   // 0-based inclusive line number in original input
+}
+
+function splitOnDelimiter(content: string): RawSlideChunk[] {
+  const lines = content.split(/\r?\n/);
+  const delimiterRe = /^---+\s*$/;
+  const chunks: RawSlideChunk[] = [];
+  let segmentStart = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (delimiterRe.test(lines[i])) {
+      const segLines = lines.slice(segmentStart, i);
+      chunks.push({
+        text: segLines.join('\n'),
+        start: segmentStart,
+        end: Math.max(segmentStart, i - 1),
+      });
+      segmentStart = i + 1;
+    }
+  }
+  // Trailing segment after last delimiter (or whole input if no delimiters)
+  const tailLines = lines.slice(segmentStart);
+  chunks.push({
+    text: tailLines.join('\n'),
+    start: segmentStart,
+    end: Math.max(segmentStart, lines.length - 1),
+  });
+
+  // Filter out completely empty parts (but keep first chunk even when empty
+  // to preserve historical behavior).
+  return chunks.filter((chunk, index) => {
     if (index === 0) {
       return true;
     }
-    // Keep non-empty parts
-    return part.trim().length > 0;
+    return chunk.text.trim().length > 0;
   });
 }
 

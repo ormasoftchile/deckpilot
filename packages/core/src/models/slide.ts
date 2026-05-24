@@ -102,6 +102,12 @@ export interface Slide {
   duration?: string;
   /** Actions sourced from sidecar YAML; wired to action registry in DA-07/08 (DA-05) */
   sidecarActions?: SidecarAction[];
+  /**
+   * 0-based inclusive line range in the original deck source (or imported
+   * content body). Populated by the parser to enable editor ↔ preview sync.
+   * Absent when the source location is unknown (e.g. synthetically created).
+   */
+  sourceRange?: { start: number; end: number };
 }
 
 /**
