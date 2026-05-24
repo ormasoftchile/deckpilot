@@ -58,6 +58,11 @@ export class WatchedSources implements vscode.Disposable {
     return [...this.watchers.keys()].sort();
   }
 
+  /** True if the given path (raw or normalized) is currently watched. */
+  has(p: string): boolean {
+    return this.watchers.has(path.normalize(p));
+  }
+
   dispose(): void {
     for (const w of this.watchers.values()) {
       w.dispose();

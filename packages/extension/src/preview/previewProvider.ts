@@ -53,7 +53,14 @@ export class PreviewProvider implements vscode.Disposable {
 
   private attachDocumentListener(): void {
     const changeDisposable = vscode.workspace.onDidChangeTextDocument((e) => {
-      if (this.deckUri && e.document.uri.fsPath === this.deckUri.fsPath) {
+      if (e.contentChanges.length === 0) {
+        return;
+      }
+      const changedPath = e.document.uri.fsPath;
+      if (
+        (this.deckUri && changedPath === this.deckUri.fsPath) ||
+        this.watched.has(changedPath)
+      ) {
         this.scheduleRefresh();
       }
     });
