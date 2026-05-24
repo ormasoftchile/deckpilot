@@ -159,21 +159,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     );
 
-    // T024/T025: Save/Restore scene commands — send messages to Webview
-    const saveSceneDisposable = vscode.commands.registerCommand(
-        'deckPilot.saveScene',
-        () => {
-            conductor?.requestSaveScene();
-        }
-    );
-
-    const restoreSceneDisposable = vscode.commands.registerCommand(
-        'deckPilot.restoreScene',
-        () => {
-            conductor?.requestRestoreScene();
-        }
-    );
-
     const validateDeckDisposable = vscode.commands.registerCommand(
         'deckPilot.validateDeck',
         async () => {
@@ -262,38 +247,6 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // Recording marker commands (Phase 2)
-    const pauseTimingDisposable = vscode.commands.registerCommand(
-        'deckPilot.pauseRecordingTiming',
-        async () => {
-            if (!conductor?.isRecording()) {
-                void vscode.window.showWarningMessage('No active recording.');
-                return;
-            }
-            if (conductor.isRecordingPaused()) {
-                void vscode.window.showWarningMessage('Recording timing is already paused.');
-                return;
-            }
-            conductor.pauseRecordingTiming();
-            void vscode.window.showInformationMessage('⏸️ Recording timing paused');
-        }
-    );
-
-    const resumeTimingDisposable = vscode.commands.registerCommand(
-        'deckPilot.resumeRecordingTiming',
-        async () => {
-            if (!conductor?.isRecording()) {
-                void vscode.window.showWarningMessage('No active recording.');
-                return;
-            }
-            if (!conductor.isRecordingPaused()) {
-                void vscode.window.showWarningMessage('Recording timing is not paused.');
-                return;
-            }
-            conductor.resumeRecordingTiming();
-            void vscode.window.showInformationMessage('▶️ Recording timing resumed');
-        }
-    );
-
     const markRetakeDisposable = vscode.commands.registerCommand(
         'deckPilot.markRetake',
         async () => {
@@ -307,22 +260,6 @@ export function activate(context: vscode.ExtensionContext): void {
             });
             conductor.markRetake(note);
             void vscode.window.showInformationMessage('🔁 Retake point marked');
-        }
-    );
-
-    const insertNarrationMarkerDisposable = vscode.commands.registerCommand(
-        'deckPilot.insertNarrationMarker',
-        async () => {
-            if (!conductor?.isRecording()) {
-                void vscode.window.showWarningMessage('No active recording.');
-                return;
-            }
-            const note = await vscode.window.showInputBox({
-                prompt: 'Narration note (optional)',
-                placeHolder: 'What to say here...',
-            });
-            conductor.insertNarrationMarker(note);
-            void vscode.window.showInformationMessage('🎙️ Narration marker inserted');
         }
     );
 
@@ -553,15 +490,10 @@ export function activate(context: vscode.ExtensionContext): void {
         previousSlideDisposable,
         openPresenterViewDisposable,
         goToSlideDisposable,
-        saveSceneDisposable,
-        restoreSceneDisposable,
         validateDeckDisposable,
         startRecordingDisposable,
         stopRecordingDisposable,
-        pauseTimingDisposable,
-        resumeTimingDisposable,
         markRetakeDisposable,
-        insertNarrationMarkerDisposable,
         toggleRecordingPauseDisposable,
         autoRecordDisposable,
         cancelAutoRecordDisposable,

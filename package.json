@@ -87,14 +87,6 @@
         "title": "Deckpilot: Go to Slide"
       },
       {
-        "command": "deckPilot.saveScene",
-        "title": "Deckpilot: Save Scene"
-      },
-      {
-        "command": "deckPilot.restoreScene",
-        "title": "Deckpilot: Restore Scene"
-      },
-      {
         "command": "deckPilot.startRecording",
         "title": "Deckpilot: Start Recording Session"
       },
@@ -103,24 +95,12 @@
         "title": "Deckpilot: Stop Recording Session"
       },
       {
-        "command": "deckPilot.pauseRecordingTiming",
-        "title": "Deckpilot: Pause Recording Timing"
-      },
-      {
-        "command": "deckPilot.resumeRecordingTiming",
-        "title": "Deckpilot: Resume Recording Timing"
-      },
-      {
         "command": "deckPilot.toggleRecordingPause",
         "title": "Deckpilot: Toggle Recording Pause"
       },
       {
         "command": "deckPilot.markRetake",
         "title": "Deckpilot: Mark Retake Point"
-      },
-      {
-        "command": "deckPilot.insertNarrationMarker",
-        "title": "Deckpilot: Insert Narration Marker"
       },
       {
         "command": "deckPilot.autoRecord",
@@ -143,18 +123,6 @@
         "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       },
       {
-        "command": "deckPilot.saveScene",
-        "key": "ctrl+s",
-        "mac": "cmd+s",
-        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
-      },
-      {
-        "command": "deckPilot.restoreScene",
-        "key": "ctrl+r",
-        "mac": "cmd+r",
-        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
-      },
-      {
         "command": "deckPilot.toggleRecordingPause",
         "key": "ctrl+shift+space",
         "mac": "cmd+shift+space",
@@ -164,12 +132,6 @@
         "command": "deckPilot.markRetake",
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
-        "when": "activeWebviewPanelId == 'deckPilotPresentation'"
-      },
-      {
-        "command": "deckPilot.insertNarrationMarker",
-        "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m",
         "when": "activeWebviewPanelId == 'deckPilotPresentation'"
       }
     ],
