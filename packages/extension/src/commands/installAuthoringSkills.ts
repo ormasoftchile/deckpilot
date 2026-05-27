@@ -4,7 +4,11 @@ import * as fs from 'fs';
 
 const SKILLS_SUBDIR = path.join('resources', 'skills');
 const TARGET_SUBDIR = path.join('.github', 'skills');
+const SKILL_BUNDLE_DIRNAME = 'deckpilot-authoring';
 const OFFERED_KEY = 'deckPilot.authoringSkillsOffered';
+
+const EXCLUDE_MARKER_BEGIN = '# >>> deckpilot authoring skills (managed) >>>';
+const EXCLUDE_MARKER_END = '# <<< deckpilot authoring skills (managed) <<<';
 
 interface InstallResult {
     written: string[];
@@ -31,6 +35,64 @@ async function readIfExists(file: string): Promise<string | undefined> {
         return await fs.promises.readFile(file, 'utf-8');
     } catch {
         return undefined;
+    }
+}
+
+/**
+ * Resolve the path to `info/exclude` for the git repo containing `workspaceRoot`,
+ * or undefined if the workspace is not a git checkout. Handles both classic
+ * `.git/` directories and worktree/submodule `.git` files of the form
+ * `gitdir: <path>`.
+ */
+async function resolveGitInfoExclude(workspaceRoot: string): Promise<string | undefined> {
+    const dotGit = path.join(workspaceRoot, '.git');
+    let stat: fs.Stats;
+    try {
+        stat = await fs.promises.stat(dotGit);
+    } catch {
+        return undefined;
+    }
+    let gitDir: string;
+    if (stat.isDirectory()) {
+        gitDir = dotGit;
+    } else if (stat.isFile()) {
+        const raw = await fs.promises.readFile(dotGit, 'utf-8');
+        const match = raw.match(/^gitdir:\s*(.+)\s*$/m);
+        if (!match) return undefined;
+        const ref = match[1].trim();
+        gitDir = path.isAbsolute(ref) ? ref : path.resolve(workspaceRoot, ref);
+    } else {
+        return undefined;
+    }
+    return path.join(gitDir, 'info', 'exclude');
+}
+
+/**
+ * Add the installed skill bundle to `.git/info/exclude` so it doesn't show up
+ * in `git status`. Uses repo-local exclude (not `.gitignore`) so the choice
+ * stays local to the user's checkout and isn't imposed on collaborators or CI.
+ * Idempotent: a sentinel marker block is rewritten in place on repeat runs.
+ */
+async function excludeFromGitTracking(workspaceRoot: string): Promise<void> {
+    const excludeFile = await resolveGitInfoExclude(workspaceRoot);
+    if (!excludeFile) return;
+    const pattern = `${TARGET_SUBDIR.split(path.sep).join('/')}/${SKILL_BUNDLE_DIRNAME}/`;
+    const block = [EXCLUDE_MARKER_BEGIN, pattern, EXCLUDE_MARKER_END].join('\n');
+    const existing = (await readIfExists(excludeFile)) ?? '';
+    const blockRe = new RegExp(
+        `${EXCLUDE_MARKER_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${EXCLUDE_MARKER_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        'm'
+    );
+    let next: string;
+    if (blockRe.test(existing)) {
+        next = existing.replace(blockRe, block);
+    } else {
+        const sep = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
+        next = `${existing}${sep}${existing.length > 0 ? '\n' : ''}${block}\n`;
+    }
+    if (next !== existing) {
+        await fs.promises.mkdir(path.dirname(excludeFile), { recursive: true });
+        await fs.promises.writeFile(excludeFile, next, 'utf-8');
     }
 }
 
@@ -117,7 +179,17 @@ export async function installAuthoringSkills(context: vscode.ExtensionContext): 
         return;
     }
 
-    const target = path.join(TARGET_SUBDIR, 'deckpilot-authoring', 'SKILL.md');
+    // Keep the installed skill bundle out of `git status` via the repo-local
+    // `.git/info/exclude` (never committed) — collaborators and CI are
+    // unaffected, but the user's working copy stays clean. Best-effort: a
+    // failure here doesn't roll back the install.
+    try {
+        await excludeFromGitTracking(workspaceRoot);
+    } catch {
+        // ignore — exclude is a convenience, not a correctness requirement
+    }
+
+    const target = path.join(TARGET_SUBDIR, SKILL_BUNDLE_DIRNAME, 'SKILL.md');
     const action = await vscode.window.showInformationMessage(
         `Deckpilot: installed ${total} authoring skill file(s) under ${TARGET_SUBDIR}/. Ask Copilot to "create a deck" or "convert this markdown to a deck" to use them.`,
         'Open SKILL.md'
@@ -139,7 +211,7 @@ export async function maybeOfferAuthoringSkillsInstall(
         return;
     }
     const root = folders[0].uri.fsPath;
-    const marker = path.join(root, TARGET_SUBDIR, 'deckpilot-authoring', 'SKILL.md');
+    const marker = path.join(root, TARGET_SUBDIR, SKILL_BUNDLE_DIRNAME, 'SKILL.md');
     if (fs.existsSync(marker)) {
         await context.globalState.update(OFFERED_KEY, true);
         return;
