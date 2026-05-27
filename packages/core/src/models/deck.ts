@@ -98,6 +98,16 @@ export interface DeckMetadata {
     srtFormat?: 'srt' | 'vtt';
     voiceScript?: boolean;
   };
+  /** Per-deck auto-record pacing overrides. Any omitted field falls back to DEFAULT_CONFIG. */
+  autoRecord?: {
+    wordsPerMinute?: number;
+    minDisplayMs?: number;
+    actionDelayMs?: number;
+    fileViewMs?: number;
+    initialDelayMs?: number;
+    finalDelayMs?: number;
+    postActionMs?: number;
+  };
   /** Additional properties */
   [key: string]: unknown;
 }

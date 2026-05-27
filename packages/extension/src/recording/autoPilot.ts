@@ -26,6 +26,8 @@ export interface AutoPilotConfig {
   initialDelayMs: number;
   /** Delay after last slide before stopping in ms (default: 2000) */
   finalDelayMs: number;
+  /** Settle time after an action executes in ms (default: 1200) */
+  postActionMs: number;
 }
 
 const DEFAULT_CONFIG: AutoPilotConfig = {
@@ -35,6 +37,7 @@ const DEFAULT_CONFIG: AutoPilotConfig = {
   fileViewMs: 3000,
   initialDelayMs: 1000,
   finalDelayMs: 2000,
+  postActionMs: 1200,
 };
 
 /**
@@ -56,6 +59,13 @@ export interface AutoPilotStep {
 }
 
 /**
+ * Resolve a partial config against built-in defaults.
+ */
+export function resolveAutoPilotConfig(config: Partial<AutoPilotConfig> = {}): AutoPilotConfig {
+  return { ...DEFAULT_CONFIG, ...config };
+}
+
+/**
  * Build a complete execution plan for auto-piloting a deck.
  * The plan is a sequence of steps with calculated durations.
  */
@@ -63,7 +73,7 @@ export function buildAutoPilotPlan(
   slides: Slide[],
   config: Partial<AutoPilotConfig> = {},
 ): AutoPilotStep[] {
-  const cfg = { ...DEFAULT_CONFIG, ...config };
+  const cfg = resolveAutoPilotConfig(config);
   const cues = parseCues(slides);
   const steps: AutoPilotStep[] = [];
 
