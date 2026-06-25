@@ -9,10 +9,7 @@
       "presentation": {
         "reveal": "never"
       },
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
+      "group": "build"
     },
     {
       "type": "npm",
@@ -21,7 +18,37 @@
       "presentation": {
         "reveal": "silent"
       },
-      "group": "build"
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "bundle extension host",
+      "type": "shell",
+      "command": "npm run bundle",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "build triton companion",
+      "type": "shell",
+      "command": "npm --prefix apps/deckpilot-triton run build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "build extension host + triton",
+      "dependsOn": [
+        "bundle extension host",
+        "build triton companion"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
     },
     {
       "type": "npm",

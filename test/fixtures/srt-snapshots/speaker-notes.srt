@@ -1,34 +1,34 @@
 1
-00:00:06,000 --> 00:00:14,000
+00:00:08,500 --> 00:00:16,500
 This is the speaker note for this slide.
 It can be multi-line. Only you see this —
 not the audience.
 
 2
-00:00:19,000 --> 00:00:23,800
+00:00:24,000 --> 00:00:28,800
 Introduce the slide topic here. This plays
 when the slide first appears.
 
 3
-00:00:28,800 --> 00:00:31,600
+00:00:36,300 --> 00:00:39,100
 Mention this when the first fragment
 appears.
 
 4
-00:00:31,600 --> 00:00:34,100
+00:00:39,100 --> 00:00:41,600
 Now explain the second point.
 
 5
-00:00:36,600 --> 00:00:41,000
+00:00:46,600 --> 00:00:51,000
 Open the extension entry point and walk
 through the activation function.
 
 6
-00:00:41,000 --> 00:00:46,200
+00:00:53,500 --> 00:00:58,700
 The imports at the top pull in the
 Conductor and all the providers.
 
 7
-00:00:49,400 --> 00:00:52,600
+00:01:01,900 --> 00:01:05,100
 The activate function registers all
 commands and providers.

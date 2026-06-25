@@ -2000,3 +2000,127 @@ body.theme-light #btn-reset {
 body.theme-light #btn-reset:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
+
+/* ============================================================
+   Diagram blocks (diagram:* fences rendered via IDiagramRenderer)
+   ============================================================ */
+
+#slide-content .diagram-block {
+  --diagram-max-height: min(58vh, calc(100vh - 12rem));
+  margin: 1.5rem auto;
+  width: min(100%, 1100px);
+  min-height: 200px;
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  contain: layout;
+  transition: min-height 0.2s ease;
+}
+
+body.theme-light #slide-content .diagram-block {
+  background: rgba(0, 0, 0, 0.02);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+}
+
+#slide-content .diagram-block:not(.diagram-block--loading):not(.diagram-block--error) {
+  padding: 0;
+}
+
+/* SVG viewport — scrolls if diagram is wider than the slide */
+#slide-content .diagram-block__viewport {
+  width: 100%;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+#slide-content .diagram-block svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: var(--diagram-max-height);
+  flex: 0 0 auto;
+}
+
+/* Caption */
+#slide-content .diagram-block__caption {
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--vscode-descriptionForeground, var(--fg-color, #aaa));
+  margin: 0;
+  padding: 0 1.25rem 1rem;
+}
+
+/* Loading state */
+#slide-content .diagram-block--loading {
+  align-items: center;
+  justify-items: center;
+}
+
+#slide-content .diagram-block--loading .diagram-block__viewport {
+  display: none;
+}
+
+#slide-content .diagram-block--loading::before {
+  content: 'Rendering diagram…';
+  font-size: 0.875rem;
+  color: var(--vscode-descriptionForeground, var(--fg-color, #aaa));
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Error state */
+#slide-content .diagram-block--error {
+  border-color: var(--vscode-inputValidation-errorBorder, #f44);
+  background: rgba(255, 60, 60, 0.05);
+}
+
+#slide-content .diagram-block__error-header {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground, #f88));
+}
+
+#slide-content .diagram-block__error-message {
+  font-size: 0.8rem;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-descriptionForeground, #ccc);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+#slide-content .diagram-block__source {
+  font-size: 0.8rem;
+}
+
+#slide-content .diagram-block__source summary {
+  cursor: pointer;
+  color: var(--vscode-textLink-foreground, var(--accent-color, #6cf));
+}
+
+#slide-content .diagram-block__source pre {
+  margin: 0.4rem 0 0;
+  max-height: 10rem;
+  overflow: auto;
+  background: var(--vscode-editor-background, #1e1e1e);
+  border-radius: 6px;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* Fragment: hide until revealed (matches existing .fragment:not(.visible) pattern) */
+#slide-content .diagram-block.fragment:not(.visible) {
+  display: grid !important;
+  visibility: hidden !important;
+}

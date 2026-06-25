@@ -22,3 +22,12 @@ export {
   injectBlockElements,
   injectBlockElementsFromParsed,
 } from './blockElementRenderer';
+
+export type {
+  IDiagramRenderer,
+  DeckpilotDiagramAPI,
+} from './diagramRenderer';
+
+export {
+  injectDiagramPlaceholders,
+} from './diagramPlaceholderRenderer';

@@ -20,6 +20,8 @@ import { getActionRegistry } from '../actions/registry';
 import { isTrusted, onTrustChanged } from '../utils/workspaceTrust';
 import { enterZenMode, exitZenMode, resetZenModeState } from '../utils/zenMode';
 import { parseRenderDirectives, resolveDirective, createLoadingPlaceholder, formatAsCommandBlock, renderCommand, StreamCallback, injectBlockElements } from '../renderer';
+import { DiagramRendererRegistry } from '../renderer/diagram/registry';
+import type { DiagramRenderOptions } from '@deckpilot/core/models/diagram';
 import { parseDeck } from '@deckpilot/core/parser';
 import { PreflightValidator } from '../validation/preflightValidator';
 import { ValidationReport, ValidationIssue } from '../validation/types';
@@ -39,6 +41,7 @@ import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
 import { buildAutoPilotPlan, AutoPilotStep } from '../recording/autoPilot';
 import { disposeBrowserPanel } from '../browser';
+import { diagramLog } from '../utils/diagramLogger';
 
 /**
  * Actions that require workspace trust
@@ -108,6 +111,7 @@ export class Conductor implements vscode.Disposable {
   private sidecarDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   private onboardingSteps: OnboardingStepState[] = [];
   private recordingState: RecordingState;
+  private diagramRegistry: DiagramRendererRegistry;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
   private autoPilotRunning = false;
   /** Pending slide render callback — resolved when webview confirms render complete */
@@ -131,6 +135,7 @@ export class Conductor implements vscode.Disposable {
     this.envResolver = new EnvResolver();
     this.secretScrubber = new SecretScrubber();
     this.recordingState = new RecordingState();
+    this.diagramRegistry = new DiagramRendererRegistry();
 
     // Listen for workspace trust changes
     this.disposables.push(
@@ -138,6 +143,10 @@ export class Conductor implements vscode.Disposable {
         this.webviewProvider.sendTrustStatusChanged({ isTrusted: trusted });
       })
     );
+  }
+
+  getDiagramRegistry(): DiagramRendererRegistry {
+    return this.diagramRegistry;
   }
 
   /**
@@ -316,6 +325,12 @@ export class Conductor implements vscode.Disposable {
       canGoBack: this.navigationHistory.canGoBack(),
       totalHistoryEntries: this.navigationHistory.length,
     });
+
+    // Resolve diagram blocks asynchronously (non-blocking)
+    diagramLog(`[conductor] goToSlide: slide.diagramBlocks = ${slide.diagramBlocks?.length ?? 0}`);
+    if (slide.diagramBlocks && slide.diagramBlocks.length > 0) {
+      void this.resolveSlideAsyncDiagrams(slide.diagramBlocks);
+    }
 
     // Sync presenter view if visible
     this.presenterViewProvider.updateSlide(targetIndex);
@@ -501,11 +516,13 @@ export class Conductor implements vscode.Disposable {
     // Parse the deck first
     const parseResult = await parseDeck(content, filePath);
     if (!parseResult.deck) {
+      diagramLog(`[conductor] Validation parse failed for ${filePath}: ${parseResult.error || 'Failed to parse deck'}`);
       void vscode.window.showWarningMessage(
         `Cannot validate: ${parseResult.error || 'Failed to parse deck'}`
       );
       return undefined;
     }
+    diagramLog(`[conductor] Deck parsed. Slides: ${parseResult.deck.slides.length}. Slide 0 diagramBlocks: ${parseResult.deck.slides[0]?.diagramBlocks?.length ?? 0}`);
 
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
 
@@ -1932,11 +1949,14 @@ export class Conductor implements vscode.Disposable {
   private async reloadDeckFromDisk(filePath: string): Promise<void> {
     try {
       const content = await fs.promises.readFile(filePath, 'utf8');
+      diagramLog(`[conductor] Re-parsing deck from disk: ${filePath}`);
       const parseResult = await parseDeck(content, filePath);
       if (!parseResult.deck) {
+        diagramLog(`[conductor] Reload parse failed for ${filePath}: ${parseResult.error ?? 'parse error'}`);
         this.outputChannel.appendLine(`[Sidecar] Reload failed: ${parseResult.error ?? 'parse error'}`);
         return;
       }
+      diagramLog(`[conductor] Deck parsed. Slides: ${parseResult.deck.slides.length}. Slide 0 diagramBlocks: ${parseResult.deck.slides[0]?.diagramBlocks?.length ?? 0}`);
       await this.openDeck(parseResult.deck);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -2005,6 +2025,63 @@ export class Conductor implements vscode.Disposable {
   }
 
   /**
+   * Resolve diagram blocks asynchronously and send renderBlockUpdate to webview.
+   * Mirrors resolveDirectivesAsync but dispatches through DiagramRendererRegistry.
+   */
+  private async resolveSlideAsyncDiagrams(
+    blocks: import('@deckpilot/core/models/diagram').DiagramBlockRef[],
+  ): Promise<void> {
+    diagramLog(`[conductor] resolveSlideAsyncDiagrams: blocks = ${blocks?.length ?? 0}`);
+    const workspaceRoot = this.resolvedBasePath();
+    const vsTheme = vscode.window.activeColorTheme.kind;
+    const theme: DiagramRenderOptions['theme'] =
+      vsTheme === vscode.ColorThemeKind.Light ? 'light'
+      : vsTheme === vscode.ColorThemeKind.HighContrast || vsTheme === vscode.ColorThemeKind.HighContrastLight ? 'contrast'
+      : 'dark';
+
+    for (const block of blocks) {
+      diagramLog(`[conductor] rendering block ${block.id} ${block.fence.language}`);
+      try {
+        const fenceTheme = block.fence.attributes?.theme;
+        const blockTheme: DiagramRenderOptions['theme'] =
+          !fenceTheme || fenceTheme === 'auto' ? theme : fenceTheme;
+        diagramLog(
+          `[conductor] block ${block.id} fence attrs=${JSON.stringify(block.fence.attributes ?? {})} resolved theme=${blockTheme ?? 'undefined'}`,
+        );
+        const result = await this.diagramRegistry.renderBlock(block, { theme: blockTheme, workspaceRoot });
+
+        if (result.ok && result.svg) {
+          const lang = block.fence.language;
+          const caption = block.fence.attributes?.caption ?? '';
+          const captionHtml = caption
+            ? `<figcaption class="diagram-block__caption">${escapeHtml(caption)}</figcaption>`
+            : '';
+          const renderer = result.rendererId;
+          const html = `<figure class="diagram-block" data-render-id="${block.id}" data-diagram-renderer="${renderer}" data-diagram-language="${lang}">\
+<div class="diagram-block__viewport">${result.svg}</div>${captionHtml}</figure>`;
+          this.webviewProvider.sendRenderBlockUpdate({ blockId: block.id, html, status: 'success' });
+        } else {
+          const errorMsg = result.errorMessage ?? 'Diagram render failed.';
+          const sourceEscaped = escapeHtml(block.source);
+          const html = `<figure class="diagram-block diagram-block--error" data-render-id="${block.id}">\
+<div class="diagram-block__error-header">⚠ Diagram failed to render</div>\
+<pre class="diagram-block__error-message">${escapeHtml(errorMsg)}</pre>\
+<details class="diagram-block__source"><summary>Show source</summary>\
+<pre><code class="language-${block.fence.language}">${sourceEscaped}</code></pre></details></figure>`;
+          this.webviewProvider.sendRenderBlockUpdate({ blockId: block.id, html, status: 'error' });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.outputChannel.appendLine(`[Diagrams] Error rendering block ${block.id}: ${msg}`);
+        const html = `<figure class="diagram-block diagram-block--error" data-render-id="${block.id}">\
+<div class="diagram-block__error-header">⚠ Diagram render error</div>\
+<pre class="diagram-block__error-message">${escapeHtml(msg)}</pre></figure>`;
+        this.webviewProvider.sendRenderBlockUpdate({ blockId: block.id, html, status: 'error' });
+      }
+    }
+  }
+
+  /**
    * Resolve directives asynchronously and send updates to webview
    */
   private async resolveDirectivesAsync(directives: import('../renderer').RenderDirective[]): Promise<void> {
@@ -2068,4 +2145,7 @@ export class Conductor implements vscode.Disposable {
       status: result.success ? 'success' : 'error',
     });
   }
+}
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

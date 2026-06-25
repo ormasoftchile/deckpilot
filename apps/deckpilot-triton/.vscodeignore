@@ -1,0 +1,17 @@
+.vscode/**
+.gitignore
+src/**
+test/**
+scripts/**
+tsconfig.json
+esbuild.mjs
+
+# Exclude all node_modules
+node_modules/**
+
+# Re-include the extension bundle
+!dist/extension.js
+!dist/extension.js.map
+
+# Re-include the vendored Triton ESM runtime
+!dist/vendor/**

@@ -26,7 +26,7 @@ Deckpilot decks can **drive the IDE**, run commands, validate setup, and record 
 ### 1. Presentation
 
 - Reveal.js-powered full-screen webview; arrow keys + Space navigate slides and fragments
-- Fragment animations — elements reveal step-by-step (no markup required; auto-fragmentation is on by default)
+- Fragment animations — explicitly marked elements reveal step-by-step
 - Five themes: `dark`, `light`, `minimal`, `contrast` — set in frontmatter
 - Slide transitions: `slide` (default) or `fade`
 - Non-linear navigation: slide picker (`Ctrl+G`), jump-by-number, go-back (`Alt+Left`), breadcrumb trail
