@@ -1,0 +1,98 @@
+deck:
+  title: Episode 02 — Using static docs as executable artifacts
+  theme: dark
+
+slides:
+  - id: intro-deckpilot
+    cues:
+      - "What if Markdown could do more than describe steps and actually run them?"
+      - "This episode introduces DeckPilot as live, executable content."
+    duration: 16s
+    checkpoint: opening
+
+  - id: markdown-live-content
+    cues:
+      - "Most docs are useful but passive, and that limits how far they can help."
+      - "DeckPilot reframes Markdown as an operational medium."
+    duration: 14s
+
+  - id: problem-technical-demos
+    cues:
+      - "Technical demos and onboarding guides fail for the same reason: manual drift."
+      - "Teams compensate with meetings and videos that age quickly."
+    duration: 22s
+    checkpoint: problem-framed
+
+  - id: deckpilot-overview
+    cues:
+      - "A deck is just Markdown, but it can drive the editor, terminal, and debugger."
+      - "The deck stops being a script and becomes the demo runtime."
+    duration: 18s
+
+  - id: authoring
+    cues:
+      - "Authoring stays simple: Markdown slides separated by triple dashes."
+      - "Inline actions keep quick steps readable in context."
+    duration: 18s
+
+  - id: structured-actions
+    cues:
+      - "Structured action blocks support richer automation without cluttering slide prose."
+    duration: 12s
+
+  - id: sidecars
+    cues:
+      - "As decks grow, move execution metadata into the sidecar."
+      - "Content stays clean while operational behavior stays explicit."
+    duration: 16s
+    checkpoint: architecture
+
+  - id: presenting
+    cues:
+      - "Presentations run in the real workspace with fragments, scenes, and state restore."
+      - "This removes context switching and fake screenshots."
+    duration: 18s
+
+  - id: onboarding
+    cues:
+      - "The same deck can become an interactive onboarding flow with validations and retries."
+    duration: 14s
+
+  - id: recording
+    cues:
+      - "DeckPilot can auto-present and export video, subtitles, and event timelines."
+      - "One deck now supports live delivery and recorded walkthroughs."
+    duration: 18s
+    checkpoint: production-flow
+
+  - id: sharing-web
+    cues:
+      - "Browser rendering enables async sharing without requiring VS Code."
+      - "One source can power live, async, onboarding, and media modes."
+    duration: 16s
+
+  - id: ai-assisted-authoring
+    cues:
+      - "The deck assistant accelerates generation and enrichment, but authorship stays human."
+    duration: 14s
+
+  - id: why-this-matters
+    cues:
+      - "Code, docs, demos, onboarding, and video usually drift apart."
+      - "Executable decks converge them into one reproducible artifact."
+    duration: 20s
+    checkpoint: key-message
+
+  - id: the-end
+    cues:
+      - "DeckPilot is an experiment in making Markdown executable, not just readable."
+    duration: 10s
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  video: true
+  srtFormat: srt

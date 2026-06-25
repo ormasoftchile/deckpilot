@@ -39,7 +39,7 @@ import {
 import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
-import { buildAutoPilotPlan, AutoPilotStep } from '../recording/autoPilot';
+import { buildAutoPilotPlan, AutoPilotStep, AutoPilotConfig, resolveAutoPilotConfig } from '../recording/autoPilot';
 import { disposeBrowserPanel } from '../browser';
 import { diagramLog } from '../utils/diagramLogger';
 
@@ -114,6 +114,7 @@ export class Conductor implements vscode.Disposable {
   private diagramRegistry: DiagramRendererRegistry;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
   private autoPilotRunning = false;
+  private autoPilotConfig: AutoPilotConfig = resolveAutoPilotConfig();
   /** Pending slide render callback — resolved when webview confirms render complete */
   private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
 
@@ -823,8 +824,17 @@ export class Conductor implements vscode.Disposable {
     this.autoPilotRunning = true;
     this.outputChannel.appendLine('[AutoPilot] Building execution plan...');
 
+    // Resolve pacing config: deck frontmatter overrides → defaults
+    const overrides = (this.deck.metadata.autoRecord ?? {}) as Partial<AutoPilotConfig>;
+    this.autoPilotConfig = resolveAutoPilotConfig(overrides);
+    if (Object.keys(overrides).length > 0) {
+      this.outputChannel.appendLine(
+        `[AutoPilot] Pacing overrides: ${JSON.stringify(overrides)}`,
+      );
+    }
+
     // Build the plan from slides
-    const plan = buildAutoPilotPlan(this.deck.slides);
+    const plan = buildAutoPilotPlan(this.deck.slides, this.autoPilotConfig);
     this.outputChannel.appendLine(`[AutoPilot] Plan: ${plan.length} steps`);
     for (const step of plan) {
       this.outputChannel.appendLine(`  ${step.type} (${step.durationMs}ms) — ${step.label}`);
@@ -890,7 +900,7 @@ export class Conductor implements vscode.Disposable {
             this.outputChannel.appendLine(`[AutoPilot]   error: ${e instanceof Error ? e.message : String(e)}`);
           }
           // Give the UI time to settle after the action
-          await this.delay(1200);
+          await this.delay(this.autoPilotConfig.postActionMs);
         }
         break;
 
