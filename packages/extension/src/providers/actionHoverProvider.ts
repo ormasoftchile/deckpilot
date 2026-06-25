@@ -214,7 +214,7 @@ export class ActionHoverProvider {
           '- `"fade"` — explicit fade\n' +
           '- `"slide-up"` — slide up from below\n' +
           '- `"zoom"` — zoom in\n\n' +
-          'Fragments are revealed in document order alongside other `<!-- .fragment -->` elements.',
+          'Fragments are revealed in document order alongside other explicitly marked slide fragments.',
       },
       showCommand: {
         type: 'boolean',

@@ -5,6 +5,7 @@
 
 import { Action, ActionDefinition } from './action';
 import type { SidecarAction } from './sidecar';
+import type { DiagramBlockRef } from './diagram';
 
 /**
  * YAML frontmatter structure for a slide
@@ -85,6 +86,8 @@ export interface Slide {
   interactiveElements: InteractiveElement[];
   /** Render directives for dynamic content */
   renderDirectives: RenderDirectiveRef[];
+  /** Diagram blocks parsed from diagram:* fences */
+  diagramBlocks?: DiagramBlockRef[];
   /** Number of animated fragments in this slide */
   fragmentCount: number;
   /** Checkpoint identifier for onboarding mode */

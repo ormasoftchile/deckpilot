@@ -884,31 +884,82 @@
           temp.innerHTML = payload.html;
           const newBlock = temp.firstElementChild;
           if (newBlock) {
-            newBlock.setAttribute('data-render-id', blockId);
-            // Preserve fragment participation from the placeholder so the
-            // resolved block stays hidden until its fragment step is reached.
-            if (block.classList.contains('fragment')) {
-              newBlock.classList.add('fragment');
-              if (block.classList.contains('visible')) {
-                newBlock.classList.add('visible');
-              }
-              if (block.classList.contains('current-fragment')) {
-                newBlock.classList.add('current-fragment');
-              }
-            }
-            const fragIdx = block.getAttribute('data-fragment');
-            if (fragIdx !== null) {
-              newBlock.setAttribute('data-fragment', fragIdx);
-            }
-            const fragAnim = block.getAttribute('data-fragment-animation');
-            if (fragAnim !== null) {
-              newBlock.setAttribute('data-fragment-animation', fragAnim);
-            }
-            block.replaceWith(newBlock);
+            preserveRenderBlockState(block, newBlock, blockId);
           }
         }
         break;
     }
+  }
+
+  function preserveRenderBlockState(block, newBlock, blockId) {
+    if (block.tagName === newBlock.tagName) {
+      syncPreservedAttributes(block, newBlock, blockId);
+      block.innerHTML = newBlock.innerHTML;
+      return;
+    }
+
+    newBlock.setAttribute('data-render-id', blockId);
+    // Preserve fragment participation from the placeholder so the
+    // resolved block stays hidden until its fragment step is reached.
+    if (block.classList.contains('fragment')) {
+      newBlock.classList.add('fragment');
+      if (block.classList.contains('visible')) {
+        newBlock.classList.add('visible');
+      }
+      if (block.classList.contains('current-fragment')) {
+        newBlock.classList.add('current-fragment');
+      }
+    }
+    const fragIdx = block.getAttribute('data-fragment');
+    if (fragIdx !== null) {
+      newBlock.setAttribute('data-fragment', fragIdx);
+    }
+    const fragAnim = block.getAttribute('data-fragment-animation');
+    if (fragAnim !== null) {
+      newBlock.setAttribute('data-fragment-animation', fragAnim);
+    }
+    block.replaceWith(newBlock);
+  }
+
+  function syncPreservedAttributes(block, newBlock, blockId) {
+    var preservedFragmentClasses = ['fragment', 'visible', 'current-fragment'];
+    var preservedClasses = new Set();
+    var i;
+
+    for (i = 0; i < preservedFragmentClasses.length; i++) {
+      if (block.classList.contains(preservedFragmentClasses[i])) {
+        preservedClasses.add(preservedFragmentClasses[i]);
+      }
+    }
+
+    block.className = newBlock.className || '';
+    preservedClasses.forEach(function(className) {
+      block.classList.add(className);
+    });
+
+    var attrsToRemove = [];
+    for (i = 0; i < block.attributes.length; i++) {
+      var attrName = block.attributes[i].name;
+      if (
+        attrName !== 'class' &&
+        attrName !== 'data-fragment' &&
+        attrName !== 'data-fragment-animation' &&
+        attrName !== 'data-render-id'
+      ) {
+        attrsToRemove.push(attrName);
+      }
+    }
+    for (i = 0; i < attrsToRemove.length; i++) {
+      block.removeAttribute(attrsToRemove[i]);
+    }
+    for (i = 0; i < newBlock.attributes.length; i++) {
+      var attr = newBlock.attributes[i];
+      if (attr.name !== 'class') {
+        block.setAttribute(attr.name, attr.value);
+      }
+    }
+
+    block.setAttribute('data-render-id', blockId);
   }
 
   /**

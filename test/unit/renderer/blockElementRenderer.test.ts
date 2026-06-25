@@ -38,6 +38,7 @@ function makeElement(
   type: string,
   params: Record<string, unknown>,
   showCommand: boolean,
+  fragment?: boolean | string,
 ): InteractiveElement {
   const id = `block-0-${elementCounter++}`;
   return {
@@ -48,6 +49,7 @@ function makeElement(
     rawLink: '',
     source: 'block',
     showCommand,
+    fragment,
   };
 }
 
@@ -200,6 +202,26 @@ describe('blockElementRenderer — showCommand preview', () => {
       const html = injectBlockElements(slide.html, slide);
       expect(html).to.not.include('action-preview');
     });
+  });
+});
+
+describe('blockElementRenderer — block fragment markup', () => {
+  beforeEach(() => { elementCounter = 0; });
+
+  it('emits __frag markup when a block action explicitly opts into fragments', () => {
+    const el = makeElement('terminal.run', { command: 'npm test' }, false, true);
+    const slide = makeSlide([el]);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('<p __frag="fade">');
+    expect(html).to.not.include('data-no-fragment');
+  });
+
+  it('emits data-no-fragment when a block action explicitly opts out', () => {
+    const el = makeElement('terminal.run', { command: 'npm test' }, false, false);
+    const slide = makeSlide([el]);
+    const html = injectBlockElements(slide.html, slide);
+    expect(html).to.include('<p data-no-fragment>');
+    expect(html).to.not.include('__frag=');
   });
 });
 

@@ -109,6 +109,11 @@ function buildButtonHtml(el: InteractiveElement): string {
   const href = simpleParams ? `action:${type}?${simpleParams}` : `action:${type}`;
   const escapedLabel = escapeHtml(el.label);
   const noFrag = el.fragment === false ? ' data-no-fragment' : '';
+  const fragAttr = el.fragment === true
+    ? ' __frag="fade"'
+    : typeof el.fragment === 'string'
+      ? ` __frag="${escapeHtml(el.fragment)}"`
+      : '';
 
   let preview = '';
   if (el.showCommand) {
@@ -118,7 +123,7 @@ function buildButtonHtml(el: InteractiveElement): string {
     }
   }
 
-  return `<p${noFrag}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${preview}</p>`;
+  return `<p${noFrag}${fragAttr}><a href="${href}" data-action-id="${el.action.id}">${escapedLabel}</a>${preview}</p>`;
 }
 
 /**

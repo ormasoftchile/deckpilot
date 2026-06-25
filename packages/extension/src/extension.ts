@@ -15,6 +15,8 @@ import {
 } from './commands/installAuthoringSkills';
 import { PreviewProvider } from './preview';
 import { matter } from '@deckpilot/core/parser/frontmatter';
+import type { DeckpilotDiagramAPI, IDiagramRenderer } from '@deckpilot/core/renderer/diagramRenderer';
+import { diagramLog, initializeDiagramLogger } from './utils/diagramLogger';
 
 let conductor: Conductor | undefined;
 let previewProvider: PreviewProvider | undefined;
@@ -79,8 +81,10 @@ async function findDeckImporting(targetFsPath: string): Promise<vscode.Uri | und
     return undefined;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI {
     console.log('Deckpilot extension is now active');
+    initializeDiagramLogger(context);
+    diagramLog('[extension] Diagram debug channel initialized');
 
     // Register all action executors
     registerAllExecutors();
@@ -114,12 +118,16 @@ export function activate(context: vscode.ExtensionContext): void {
                 // Load and parse the deck
                 const deckDocument = await vscode.workspace.openTextDocument(deckUri);
                 const content = deckDocument.getText();
+                diagramLog(`[extension] Parsing deck for Start Presentation: ${deckUri.fsPath}`);
                 const result = await parseDeck(content, deckUri.fsPath);
 
                 if (result.error || !result.deck) {
+                    diagramLog(`[extension] Deck parse failed for ${deckUri.fsPath}: ${result.error || 'Unknown parse error'}`);
                     void vscode.window.showWarningMessage(result.error || 'Failed to parse presentation.');
                     return;
                 }
+
+                diagramLog(`[conductor] Deck parsed. Slides: ${result.deck.slides.length}. Slide 0 diagramBlocks: ${result.deck.slides[0]?.diagramBlocks?.length ?? 0}`);
 
                 if (result.deck.slides.length === 0) {
                     void vscode.window.showWarningMessage('Presentation has no slides.');
@@ -497,6 +505,9 @@ export function activate(context: vscode.ExtensionContext): void {
         updateDiagnostics(e.document);
     });
     const onOpenDisposable = vscode.workspace.onDidOpenTextDocument((doc) => {
+        if (doc.uri.fsPath.endsWith('.deck.md')) {
+            diagramLog(`[extension] Deck file opened in editor (diagnostics only; presentation parse not triggered): ${doc.uri.fsPath}`);
+        }
         updateDiagnostics(doc);
     });
     const onCloseDisposable = vscode.workspace.onDidCloseTextDocument((doc) => {
@@ -560,6 +571,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // First-run: offer to install authoring skills into the workspace
     void maybeOfferAuthoringSkillsInstall(context);
+
+    // Diagram plugin API — companion extensions register renderers here
+    return {
+        version: '0.9.36',
+        registerDiagramRenderer(renderer: IDiagramRenderer): { dispose(): void } {
+            return conductor?.getDiagramRegistry().register(renderer) ?? { dispose(): void {} };
+        },
+    };
 }
 
 export function deactivate(): void {

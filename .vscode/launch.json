@@ -5,24 +5,44 @@
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
+      "extensionDevelopmentPath": "${workspaceFolder}",
       "args": [
-        "${workspaceFolder}/examples",
-        "--extensionDevelopmentPath=${workspaceFolder}"
+        "${workspaceFolder}/examples"
       ],
       "outFiles": [
+        "${workspaceFolder}/dist/**/*.js",
         "${workspaceFolder}/out/**/*.js"
       ],
       "preLaunchTask": "${defaultBuildTask}"
     },
     {
+      "name": "Run Extension + Triton",
+      "type": "extensionHost",
+      "request": "launch",
+      "extensionDevelopmentPath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/apps/deckpilot-triton"
+      ],
+      "args": [
+        "${workspaceFolder}/examples"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js",
+        "${workspaceFolder}/out/**/*.js",
+        "${workspaceFolder}/apps/deckpilot-triton/dist/**/*.js"
+      ],
+      "preLaunchTask": "build extension host + triton"
+    },
+    {
       "name": "Extension Tests",
       "type": "extensionHost",
       "request": "launch",
+      "extensionDevelopmentPath": "${workspaceFolder}",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}",
         "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
       ],
       "outFiles": [
+        "${workspaceFolder}/dist/**/*.js",
         "${workspaceFolder}/out/**/*.js"
       ],
       "preLaunchTask": "${defaultBuildTask}"

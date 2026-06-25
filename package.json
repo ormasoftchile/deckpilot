@@ -191,8 +191,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run bundle -- --production",
-    "compile": "tsc -b",
+    "vscode:prepublish": "tsc -b && npm run bundle -- --production",
+    "compile": "tsc -b && npm run bundle",
     "watch": "tsc -b --watch",
     "bundle": "node esbuild.mjs",
     "bundle:watch": "node esbuild.mjs --watch",

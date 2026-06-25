@@ -49,7 +49,7 @@ describe('slideRenderingPipeline — <!-- center --> layout', () => {
   it('should render heading inside <!-- center --> correctly', () => {
     const html = renderSlide('<!-- center -->\n# Title\n<!-- /center -->');
     expect(html).to.contain('class="layout-center"');
-    expect(html).to.contain('<h1>');
+    expect(html).to.contain('<h1 class="fragment"');
     expect(html).to.contain('Title');
   });
 });
@@ -179,33 +179,52 @@ describe('slideRenderingPipeline — <!-- optional --> layout', () => {
 describe('slideRenderingPipeline — plain slide (no layout directive)', () => {
   it('should render a heading without any layout wrapper', () => {
     const html = renderSlide('# Hello World');
-    expect(html).to.contain('<h1>Hello World</h1>');
+    expect(html).to.contain('<h1 class="fragment" data-fragment="1" data-fragment-animation="fade">Hello World</h1>');
     expect(html).not.to.contain('layout-center');
     expect(html).not.to.contain('layout-columns');
     expect(html).not.to.contain('disclosure-advanced');
     expect(html).not.to.contain('step-optional');
   });
 
-  it('should render a paragraph as a <p> tag (auto-fragmented)', () => {
-    // Auto-fragment system: every <p> gets class="fragment" by default
+  it('should render a paragraph as a <p> tag and auto-fragment it', () => {
     const html = renderSlide('Just some text.');
-    expect(html).to.contain('<p');
-    expect(html).to.contain('Just some text.');
-    expect(html).to.contain('class="fragment"');
+    expect(html).to.contain('<p class="fragment" data-fragment="1" data-fragment-animation="fade">Just some text.</p>');
   });
 
-  it('should render a bullet list as <ul>/<li> elements (auto-fragmented)', () => {
-    // Auto-fragment system: every <li> gets class="fragment" by default
+  it('should render a bullet list as a single auto-fragmented block', () => {
     const html = renderSlide('- Item A\n- Item B');
-    expect(html).to.contain('<ul>');
+    expect(html).to.contain('<ul class="fragment" data-fragment="1" data-fragment-animation="fade">');
     expect(html).to.contain('Item A');
     expect(html).to.contain('Item B');
-    expect(html).to.contain('class="fragment"');
+    expect(html).to.not.match(/<li[^>]*class="fragment"/);
   });
 
   it('should render inline code within a <code> tag', () => {
     const html = renderSlide('Use `npm install` to install.');
     expect(html).to.contain('<code>npm install</code>');
+  });
+});
+
+describe('slideRenderingPipeline — diagram fences', () => {
+  it('keeps the fallback source visible while async diagram rendering resolves', () => {
+    const slides = parseSlides('```diagram:mermaid\ngraph TD\n  A-->B\n```');
+    expect(slides).to.have.lengthOf(1);
+    expect(slides[0].diagramBlocks).to.have.lengthOf(1);
+    expect(slides[0].html).to.contain('class="diagram-block diagram-block--loading fragment"');
+    expect(slides[0].html).to.contain('class="diagram-block__source-fallback" data-no-fragment');
+    expect(slides[0].html).to.not.contain('diagram-block__source-fallback" class="fragment"');
+    expect(slides[0].html).to.not.contain('diagram-block__source-fallback" data-no-fragment class="fragment"');
+  });
+
+  it('auto-fragments diagram placeholders between surrounding markdown blocks', () => {
+    const slides = parseSlides(
+      '## Diagrams Work\n\nHere\'s a flow:\n\n```diagram:mermaid\ngraph TD\n  A-->B\n```',
+    );
+    expect(slides).to.have.lengthOf(1);
+    expect(slides[0].html).to.contain('<h2 class="fragment" data-fragment="1" data-fragment-animation="fade">Diagrams Work</h2>');
+    expect(slides[0].html).to.contain('<p class="fragment" data-fragment="2" data-fragment-animation="fade">Here’s a flow:</p>');
+    expect(slides[0].html).to.contain('class="diagram-block diagram-block--loading fragment"');
+    expect(slides[0].html).to.contain('data-fragment="3"');
   });
 });
 
@@ -284,7 +303,7 @@ describe('slideRenderingPipeline — edge cases', () => {
   it('should render a slide that mixes a layout directive and a plain heading', () => {
     const markdown = '# Intro\n\n<!-- center -->\nCentered bit\n<!-- /center -->';
     const html = renderSlide(markdown);
-    expect(html).to.contain('<h1>Intro</h1>');
+    expect(html).to.contain('<h1 class="fragment" data-fragment="1" data-fragment-animation="fade">Intro</h1>');
     expect(html).to.contain('layout-center');
     expect(html).to.contain('Centered bit');
   });

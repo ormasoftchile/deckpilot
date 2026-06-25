@@ -14,3 +14,4 @@ export * from './recording';
 export type { SceneDefinition, NavigationMethod, NavigationHistoryBreadcrumb } from './deck';
 
 export * from './sidecar';
+export * from './diagram';

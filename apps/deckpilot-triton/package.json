@@ -1,0 +1,44 @@
+{
+  "name": "deckpilot-triton",
+  "displayName": "Deckpilot Triton Diagrams",
+  "description": "Triton diagram renderer for Deckpilot. Renders diagram:mermaid and diagram:poster fences using the Triton compiler.",
+  "version": "0.9.38",
+  "private": true,
+  "publisher": "focus-space",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ormasoftchile/deckpilot.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:deck-markdown",
+    "workspaceContains:**/*.deck.md"
+  ],
+  "extensionDependencies": [
+    "focus-space.executable-talk"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "npm run build",
+    "bundle": "node esbuild.mjs",
+    "bundle:watch": "node esbuild.mjs --watch",
+    "build": "npm run bundle && npm run vendor-triton",
+    "vendor-triton": "node scripts/vendor-triton.mjs",
+    "test": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'"
+  },
+  "devDependencies": {
+    "@deckpilot/core": "*",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "^0.25.12",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.2"
+  }
+}

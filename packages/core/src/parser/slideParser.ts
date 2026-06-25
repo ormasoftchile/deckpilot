@@ -8,9 +8,11 @@ import MarkdownIt from 'markdown-it';
 import { Slide, SlideFrontmatter, createSlide } from '../models/slide';
 import { parseActionLinks } from './actionLinkParser';
 import { parseActionBlocks } from './actionBlockParser';
+import { parseDiagramBlocks } from './diagramBlockParser';
 import { parseRenderDirectives } from '../renderer';
 import { processLayoutComments } from './layoutCommentProcessor';
 import { injectBlockElementsFromParsed } from '../renderer/blockElementRenderer';
+import { injectDiagramPlaceholders } from '../renderer/diagramPlaceholderRenderer';
 import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
 import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
@@ -271,7 +273,7 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   );
   content = content.trim();
 
-  // Step 2: Parse action blocks (NEW — extracts elements + cleans content)
+  // Step 2: Parse action blocks (extracts elements + cleans content)
   const actionBlockResult = parseActionBlocks(content, index);
   const cleanedContent = actionBlockResult.cleanedContent;
   
@@ -281,15 +283,20 @@ function parseSlideContent(index: number, rawContent: string): Slide {
       `Slide ${index + 1}, line ${err.line}: ${err.message}`
     );
   }
-  
-  // Step 3: Render markdown to HTML (uses cleaned content — no action blocks in output)
-  let html = md.render(cleanedContent);
+
+  // Step 2b: Parse diagram blocks (extracts blocks + cleans content)
+  const diagramBlockResult = parseDiagramBlocks(cleanedContent, index);
+  console.log(`[DECK-DIAGRAM][slideParser] slide ${index} diagramBlocks:`, diagramBlockResult.blocks.length);
+  const contentForRender = diagramBlockResult.cleanedContent;
+
+  // Step 3: Render markdown to HTML (uses cleaned content — no action blocks or diagram fences)
+  let html = md.render(contentForRender);
   
   // Step 4: Inject block element buttons into HTML (replaces <!--ACTION:--> placeholders)
-  // This must happen BEFORE fragment processing so that action buttons with
-  // `fragment: true` get fragment indices in document order alongside other
-  // fragment-marked elements.
   html = injectBlockElementsFromParsed(html, actionBlockResult.elements);
+
+  // Step 4b: Inject diagram loading placeholders (replaces <!--DIAGRAM:--> markers)
+  html = injectDiagramPlaceholders(html, diagramBlockResult.blocks);
 
   // Step 4.5: Convert <!-- layout --> comment markers to HTML wrapper divs.
   // Must run after markdown-it rendering (so comments are in the HTML string)
@@ -346,6 +353,11 @@ function parseSlideContent(index: number, rawContent: string): Slide {
     rawDirective: d.rawDirective,
     position: d.position,
   }));
+
+  // Store diagram blocks parsed in Step 2b
+  if (diagramBlockResult.blocks.length > 0) {
+    slide.diagramBlocks = diagramBlockResult.blocks;
+  }
   
   return slide;
 }
