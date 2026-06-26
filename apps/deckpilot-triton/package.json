@@ -1,8 +1,8 @@
 {
   "name": "deckpilot-triton",
   "displayName": "Deckpilot Triton Diagrams",
-  "description": "Triton diagram renderer for Deckpilot. Renders diagram:mermaid and diagram:poster fences using the Triton compiler.",
-  "version": "0.9.39",
+  "description": "Triton diagram renderer for Deckpilot. Renders diagram:mermaid fences using the Triton compiler.",
+  "version": "0.9.40",
   "private": true,
   "publisher": "focus-space",
   "license": "MIT",
@@ -13,7 +13,9 @@
   "engines": {
     "vscode": "^1.95.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:deck-markdown",

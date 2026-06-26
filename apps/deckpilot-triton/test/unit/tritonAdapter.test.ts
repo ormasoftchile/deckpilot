@@ -18,10 +18,6 @@ describe('TritonDiagramRenderer — canRender()', () => {
     assert.ok(adapter.canRender({ language: 'mermaid' }));
   });
 
-  it('returns true for poster', () => {
-    assert.ok(adapter.canRender({ language: 'poster' }));
-  });
-
   it('returns false for graphviz', () => {
     assert.ok(!adapter.canRender({ language: 'graphviz' }));
   });
@@ -75,6 +71,13 @@ describe('applyTritonTheme()', () => {
     assert.equal(
       applyTritonTheme('---\nconfig:\n  spacing: compact\n---\ngraph TD\n  A --> B\n', 'executive'),
       '---\nconfig:\n  spacing: compact\ntheme: executive\n---\ngraph TD\n  A --> B\n',
+    );
+  });
+
+  it('preserves an existing type field when adding theme', () => {
+    assert.equal(
+      applyTritonTheme('---\ntype: poster\n---\nrow\n  cell\n    title: Test', 'midnight'),
+      '---\ntype: poster\ntheme: midnight\n---\nrow\n  cell\n    title: Test',
     );
   });
 });

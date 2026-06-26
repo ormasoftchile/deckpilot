@@ -2,7 +2,7 @@
 
 Triton diagram renderer for [Deckpilot](https://marketplace.visualstudio.com/items?itemName=focus-space.executable-talk).
 
-Adds support for rendering `diagram:mermaid` and `diagram:poster` fences in `.deck.md` presentations using the [Triton](../../triton) compiler.
+Adds support for rendering `diagram:mermaid` fences in `.deck.md` presentations using the [Triton](../../triton) compiler.
 
 ## Usage
 
@@ -16,11 +16,25 @@ flowchart TD
 ```
 ````
 
+## Fence syntax
+
+### Diagram fence
+
+````markdown
+```diagram:mermaid
+row
+  cell
+    title: My Poster
+```
+````
+
+Use `diagram:mermaid` for all Triton diagrams, including `flowchart`, `sequence`, `poster`, `architecture`, `topology`, `ds`, `timeline`, `gantt`, and other Triton-supported types.
+
 Valid `theme` values:
 
-- `executive`, `midnight`, `blueprint`, `editorial` — Triton contract themes, passed through directly
+- `default`, `executive`, `midnight`, `blueprint`, `editorial` — Triton contract themes or Deckpilot aliases, mapped to Triton presets
 - `dark` — mapped to `midnight`
-- `light` — mapped to `executive`
+- `light` — mapped to `default`
 
 ## Development
 

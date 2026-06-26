@@ -45,7 +45,7 @@ const TRITON_THEME_PRESETS = new Set([
  */
 export class TritonDiagramRenderer implements IDiagramRenderer {
   readonly id = 'triton';
-  readonly supportedFenceLanguages = ['mermaid', 'poster'] as const;
+  readonly supportedFenceLanguages = ['mermaid'] as const;
 
   private modulePromise: Promise<TritonModule> | undefined;
 
