@@ -3,7 +3,6 @@ name: Release Extension
 on:
   pull_request_target:
     types: [closed]
-  workflow_dispatch:
 
 jobs:
   release:
