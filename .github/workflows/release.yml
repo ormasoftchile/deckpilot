@@ -3,11 +3,12 @@ name: Release Extension
 on:
   pull_request_target:
     types: [closed]
+  workflow_dispatch:
 
 jobs:
   release:
     name: Release Extension
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,7 +48,9 @@ jobs:
       env:
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
-        if echo "$PR_TITLE" | grep -q '\[version:major\]'; then
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "kind=none" >> "$GITHUB_OUTPUT"
+        elif echo "$PR_TITLE" | grep -q '\[version:major\]'; then
           echo "kind=major" >> "$GITHUB_OUTPUT"
         elif echo "$PR_TITLE" | grep -q '\[version:minor\]'; then
           echo "kind=minor" >> "$GITHUB_OUTPUT"
@@ -58,24 +61,38 @@ jobs:
     - name: Bump extension version
       id: version
       run: |
-        npm run version:${{ steps.bump_kind.outputs.kind }}
-        NEW_VERSION=$(node -p "require('./package.json').version")
+        if [ "${{ steps.bump_kind.outputs.kind }}" = "none" ]; then
+          NEW_VERSION=$(node -p "require('./package.json').version")
+        else
+          npm run version:${{ steps.bump_kind.outputs.kind }}
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          node -e "const fs=require('fs'); const path='apps/deckpilot-triton/package.json'; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.version=process.argv[1]; fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');" "$NEW_VERSION"
+          git add package.json package-lock.json apps/deckpilot-triton/package.json
+          git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
+          git tag "v${NEW_VERSION}"
+          git push origin main --tags
+        fi
         echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-        git add package.json package-lock.json
-        git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-        git tag "v${NEW_VERSION}"
-        git push origin main --tags
 
     - name: Build extension package
       run: |
         npm run compile
         npm run package
 
+    - name: Build deckpilot-triton package
+      run: |
+        cd apps/deckpilot-triton
+        npm run compile
+        npx vsce package --no-dependencies
+        mv *.vsix ../../
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.version.outputs.new_version }}
-        files: '*.vsix'
+        files: |
+          executable-talk-*.vsix
+          deckpilot-triton-*.vsix
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,17 +102,19 @@ jobs:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
       run: |
         if [ -n "$VSCE_PAT" ]; then
-          # Publish the .vsix produced by `npm run package` (which uses
-          # --no-dependencies) instead of letting vsce repackage with its
-          # default settings — those would re-include the entire workspace
-          # node_modules tree and balloon the artifact back to ~16 MB.
-          VSIX_FILE=$(ls *.vsix | head -n1)
-          npx vsce publish --no-dependencies --packagePath "$VSIX_FILE" -p "$VSCE_PAT"
+          for VSIX_FILE in *.vsix; do
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [[ "$VSIX_FILE" == executable-talk-* ]]; then
+              echo "Skipping already-published main extension on manual dispatch: $VSIX_FILE"
+              continue
+            fi
+            npx vsce publish --no-dependencies --packagePath "$VSIX_FILE" -p "$VSCE_PAT"
+          done
         else
           echo "Skipping VS Code Marketplace publish - VSCE_PAT not configured"
         fi
 
     - name: Trigger viewer deploy
+      if: github.event_name != 'workflow_dispatch'
       # The version bump commit uses [skip ci], which suppresses the
       # deploy-viewer workflow's push trigger. Dispatch it explicitly so the
       # viewer's footer version stays in sync with the extension version.
