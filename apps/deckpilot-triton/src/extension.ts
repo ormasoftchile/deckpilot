@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { DeckpilotDiagramAPI } from '@deckpilot/core/renderer/diagramRenderer';
+import { MermaidFallbackRenderer } from './mermaidFallbackRenderer';
 import { TritonDiagramRenderer } from './tritonAdapter';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -21,10 +22,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   const adapter = new TritonDiagramRenderer(context.extensionUri);
+  const fallbackRenderer = new MermaidFallbackRenderer();
   const registration = api.registerDiagramRenderer(adapter);
-  context.subscriptions.push(registration);
+  const fallbackRegistration = api.registerDiagramRenderer(fallbackRenderer);
+  context.subscriptions.push(registration, fallbackRegistration);
 
-  console.log('[deckpilot-triton] Triton diagram renderer registered.');
+  console.log('[deckpilot-triton] Triton and Mermaid fallback diagram renderers registered.');
 }
 
 export function deactivate(): void {}

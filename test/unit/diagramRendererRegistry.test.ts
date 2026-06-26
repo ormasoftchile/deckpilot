@@ -25,12 +25,13 @@ function makeBlock(language: string, source: string = 'graph TD\n  A --> B\n'): 
 function makeRenderer(
   id: string,
   languages: readonly string[],
+  canRenderImpl?: (source: string, fence: DiagramFenceInfo) => boolean,
   renderImpl?: (source: string, fence: DiagramFenceInfo, options?: DiagramRenderOptions) => Promise<DiagramRenderResult>,
 ): IDiagramRenderer {
   return {
     id,
     supportedFenceLanguages: languages,
-    canRender: (fence: DiagramFenceInfo) => languages.includes(fence.language),
+    canRender: canRenderImpl ?? ((_source: string, fence: DiagramFenceInfo) => languages.includes(fence.language)),
     render: renderImpl ?? (async () => ({
       ok: true,
       format: 'svg',
@@ -44,7 +45,7 @@ describe('DiagramRendererRegistry', () => {
   it('returns undefined from findRenderer when the registry is empty', () => {
     const registry = new DiagramRendererRegistry();
 
-    expect(registry.findRenderer(makeFence('mermaid'))).to.equal(undefined);
+    expect(registry.findRenderer('graph TD\n  A --> B\n', makeFence('mermaid'))).to.equal(undefined);
   });
 
   it('returns the matching renderer for a supported language', () => {
@@ -52,14 +53,14 @@ describe('DiagramRendererRegistry', () => {
     const mermaidRenderer = makeRenderer('mermaid-renderer', ['mermaid']);
     registry.register(mermaidRenderer);
 
-    expect(registry.findRenderer(makeFence('mermaid'))).to.equal(mermaidRenderer);
+    expect(registry.findRenderer('graph TD\n  A --> B\n', makeFence('mermaid'))).to.equal(mermaidRenderer);
   });
 
   it('returns undefined for an unsupported language', () => {
     const registry = new DiagramRendererRegistry();
     registry.register(makeRenderer('mermaid-renderer', ['mermaid']));
 
-    expect(registry.findRenderer(makeFence('plantuml'))).to.equal(undefined);
+    expect(registry.findRenderer('@startuml\n@enduml\n', makeFence('plantuml'))).to.equal(undefined);
   });
 
   it('routes different languages to the correct registered renderer', () => {
@@ -70,8 +71,23 @@ describe('DiagramRendererRegistry', () => {
     registry.register(mermaidRenderer);
     registry.register(d2Renderer);
 
-    expect(registry.findRenderer(makeFence('mermaid'))).to.equal(mermaidRenderer);
-    expect(registry.findRenderer(makeFence('d2'))).to.equal(d2Renderer);
+    expect(registry.findRenderer('graph TD\n  A --> B\n', makeFence('mermaid'))).to.equal(mermaidRenderer);
+    expect(registry.findRenderer('direction: right\n', makeFence('d2'))).to.equal(d2Renderer);
+  });
+
+  it('skips renderers whose canRender rejects the specific source', () => {
+    const registry = new DiagramRendererRegistry();
+    const tritonRenderer = makeRenderer(
+      'triton',
+      ['mermaid'],
+      (source) => !source.startsWith('packet-beta'),
+    );
+    const fallbackRenderer = makeRenderer('mermaid-js', ['mermaid']);
+
+    registry.register(tritonRenderer);
+    registry.register(fallbackRenderer);
+
+    expect(registry.findRenderer('packet-beta\n  title Header\n', makeFence('mermaid'))).to.equal(fallbackRenderer);
   });
 
   it('returns the fallback result when no renderer is registered for a block', async () => {
@@ -100,10 +116,15 @@ describe('DiagramRendererRegistry', () => {
       rendererId: 'mermaid-renderer',
     };
 
-    registry.register(makeRenderer('mermaid-renderer', ['mermaid'], async (source, fence, renderOptions) => {
-      received = { source, fence, options: renderOptions };
-      return expected;
-    }));
+    registry.register(makeRenderer(
+      'mermaid-renderer',
+      ['mermaid'],
+      undefined,
+      async (source, fence, renderOptions) => {
+        received = { source, fence, options: renderOptions };
+        return expected;
+      },
+    ));
 
     const result = await registry.renderBlock(block, options);
 
@@ -113,5 +134,42 @@ describe('DiagramRendererRegistry', () => {
       options,
     });
     expect(result).to.equal(expected);
+  });
+
+  it('falls through to the next renderer when the first candidate fails', async () => {
+    const registry = new DiagramRendererRegistry();
+    registry.register(makeRenderer('triton', ['mermaid'], undefined, async () => ({
+      ok: false,
+      format: 'svg',
+      errorMessage: 'Triton render error',
+      rendererId: 'triton',
+    })));
+    registry.register(makeRenderer('mermaid-js', ['mermaid']));
+
+    const result = await registry.renderBlock(makeBlock('mermaid', 'packet-beta\n  title Header\n'));
+
+    expect(result.ok).to.equal(true);
+    expect(result.rendererId).to.equal('mermaid-js');
+  });
+
+  it('treats renderers without canRender as eligible when language matches', async () => {
+    const registry = new DiagramRendererRegistry();
+    const renderer: IDiagramRenderer = {
+      id: 'legacy',
+      supportedFenceLanguages: ['mermaid'],
+      render: async () => ({
+        ok: true,
+        format: 'svg',
+        svg: '<svg data-renderer="legacy"></svg>',
+        rendererId: 'legacy',
+      }),
+    };
+
+    registry.register(renderer);
+
+    const result = await registry.renderBlock(makeBlock('mermaid'));
+
+    expect(result.ok).to.equal(true);
+    expect(result.rendererId).to.equal('legacy');
   });
 });

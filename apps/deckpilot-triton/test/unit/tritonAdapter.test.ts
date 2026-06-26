@@ -15,15 +15,26 @@ describe('TritonDiagramRenderer — canRender()', () => {
   const adapter = new TritonDiagramRenderer({ fsPath: __dirname } as never);
 
   it('returns true for mermaid', () => {
-    assert.ok(adapter.canRender({ language: 'mermaid' }));
+    assert.ok(adapter.canRender('graph TD\n  A --> B\n', { language: 'mermaid' }));
   });
 
   it('returns false for graphviz', () => {
-    assert.ok(!adapter.canRender({ language: 'graphviz' }));
+    assert.ok(!adapter.canRender('digraph { a -> b }', { language: 'graphviz' }));
   });
 
   it('returns false for empty string', () => {
-    assert.ok(!adapter.canRender({ language: '' }));
+    assert.ok(!adapter.canRender('graph TD\n  A --> B\n', { language: '' }));
+  });
+
+  it('returns false for Triton-unsupported Mermaid native types', () => {
+    assert.ok(!adapter.canRender('packet-beta\n  title TCP Segment Header\n', { language: 'mermaid' }));
+    assert.ok(!adapter.canRender('xychart-beta\n  title "Monthly Revenue"\n', { language: 'mermaid' }));
+    assert.ok(!adapter.canRender('block-beta\n  columns 2\n', { language: 'mermaid' }));
+    assert.ok(!adapter.canRender('kanban\n  Todo\n    task[Ship it]\n', { language: 'mermaid' }));
+  });
+
+  it('ignores Mermaid frontmatter when detecting the diagram type', () => {
+    assert.ok(adapter.canRender('---\ntheme: dark\n---\ntimeline\n  title History\n', { language: 'mermaid' }));
   });
 });
 
