@@ -2049,6 +2049,28 @@ body.theme-light #slide-content .diagram-block {
   flex: 0 0 auto;
 }
 
+#slide-content .diagram-block__mermaid-fallback {
+  width: 100%;
+  min-height: 200px;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 1rem 1.25rem;
+}
+
+#slide-content .diagram-block__mermaid-status {
+  font-size: 0.875rem;
+  color: var(--vscode-descriptionForeground, var(--fg-color, #aaa));
+  opacity: 0.8;
+  font-style: italic;
+}
+
+#slide-content .diagram-block__mermaid-fallback--error {
+  align-items: start;
+  justify-items: stretch;
+  padding: 1rem 1.25rem;
+}
+
 /* Caption */
 #slide-content .diagram-block__caption {
   text-align: center;

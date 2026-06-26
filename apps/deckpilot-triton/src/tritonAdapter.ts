@@ -33,6 +33,13 @@ const TRITON_THEME_PRESETS = new Set([
   'showcase',
 ]);
 
+const TRITON_UNSUPPORTED_MERMAID_TYPES = new Set([
+  'block-beta',
+  'kanban',
+  'packet-beta',
+  'xychart-beta',
+]);
+
 /**
  * Diagram renderer adapter for Triton.
  *
@@ -51,8 +58,17 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
-  canRender(fence: DiagramFenceInfo): boolean {
-    return (this.supportedFenceLanguages as readonly string[]).includes(fence.language);
+  canRender(source: string, fence: DiagramFenceInfo): boolean {
+    if (!(this.supportedFenceLanguages as readonly string[]).includes(fence.language)) {
+      return false;
+    }
+
+    const diagramType = extractDiagramType(source);
+    if (!diagramType) {
+      return true;
+    }
+
+    return !TRITON_UNSUPPORTED_MERMAID_TYPES.has(diagramType);
   }
 
   async render(
@@ -118,6 +134,30 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
     }
     return this.modulePromise;
   }
+}
+
+function extractDiagramType(source: string): string | undefined {
+  const normalized = source.replace(/^\uFEFF/, '');
+  const lines = normalized.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed === '---') {
+      continue;
+    }
+
+    if (trimmed.startsWith('%%')) {
+      continue;
+    }
+
+    if (/^[A-Za-z0-9_-]+:$/.test(trimmed) || /^[A-Za-z0-9_-]+\s*:/.test(trimmed)) {
+      continue;
+    }
+
+    return trimmed.split(/[\s{]/, 1)[0];
+  }
+
+  return undefined;
 }
 
 /**

@@ -481,6 +481,7 @@ export class WebviewProvider implements vscode.Disposable {
     scriptUri: vscode.Uri
   ): string {
     const nonce = this.getNonce();
+    const mermaidScriptUrl = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
 
     // Get presentation options from metadata
     const options = (this.currentDeck?.metadata?.options ?? {}) as Record<string, unknown>;
@@ -529,7 +530,7 @@ export class WebviewProvider implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https: data:;">
   <link href="${cssUri}" rel="stylesheet">
   <title>Presentation</title>
 </head>
@@ -563,6 +564,7 @@ export class WebviewProvider implements vscode.Disposable {
   <script nonce="${nonce}">
     window.deckData = ${deckJson};
   </script>
+  <script nonce="${nonce}" src="${mermaidScriptUrl}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

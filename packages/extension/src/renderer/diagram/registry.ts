@@ -11,38 +11,37 @@ import type {
  * Instantiated by Conductor; exposed via DeckpilotDiagramAPI for companion extensions.
  */
 export class DiagramRendererRegistry {
-  private readonly renderers = new Map<string, IDiagramRenderer>();
+  private readonly renderers: IDiagramRenderer[] = [];
 
   register(renderer: IDiagramRenderer): { dispose(): void } {
-    this.renderers.set(renderer.id, renderer);
+    this.unregister(renderer.id);
+    this.renderers.push(renderer);
     return {
-      dispose: () => { this.renderers.delete(renderer.id); },
+      dispose: () => { this.unregister(renderer.id); },
     };
   }
 
   unregister(id: string): void {
-    this.renderers.delete(id);
+    const index = this.renderers.findIndex((renderer) => renderer.id === id);
+    if (index >= 0) {
+      this.renderers.splice(index, 1);
+    }
   }
 
   get(id: string): IDiagramRenderer | undefined {
-    return this.renderers.get(id);
+    return this.renderers.find((renderer) => renderer.id === id);
   }
 
-  findRenderer(fence: DiagramFenceInfo): IDiagramRenderer | undefined {
-    for (const renderer of this.renderers.values()) {
-      if (renderer.canRender(fence)) {
-        return renderer;
-      }
-    }
-    return undefined;
+  findRenderer(source: string, fence: DiagramFenceInfo): IDiagramRenderer | undefined {
+    return this.findCandidateRenderers(source, fence)[0];
   }
 
   async renderBlock(
     block: DiagramBlockRef,
     options?: DiagramRenderOptions,
   ): Promise<DiagramRenderResult> {
-    const renderer = this.findRenderer(block.fence);
-    if (!renderer) {
+    const candidates = this.findCandidateRenderers(block.source, block.fence);
+    if (candidates.length === 0) {
       return {
         ok: false,
         format: 'svg',
@@ -50,6 +49,32 @@ export class DiagramRendererRegistry {
         rendererId: 'none',
       };
     }
-    return renderer.render(block.source, block.fence, options);
+
+    let fallbackFailure: DiagramRenderResult | undefined;
+
+    for (const renderer of candidates) {
+      const result = await renderer.render(block.source, block.fence, options);
+      if (result.ok && result.svg) {
+        return result;
+      }
+      fallbackFailure ??= result;
+    }
+
+    return fallbackFailure ?? {
+      ok: false,
+      format: 'svg',
+      errorMessage: `No diagram renderer could render "${block.fence.language}".`,
+      rendererId: 'none',
+    };
+  }
+
+  private findCandidateRenderers(source: string, fence: DiagramFenceInfo): IDiagramRenderer[] {
+    return this.renderers.filter((renderer) => {
+      if (!(renderer.supportedFenceLanguages as readonly string[]).includes(fence.language)) {
+        return false;
+      }
+
+      return renderer.canRender ? renderer.canRender(source, fence) : true;
+    });
   }
 }

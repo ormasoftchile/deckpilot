@@ -29,8 +29,12 @@ export interface IDiagramRenderer {
   readonly id: string;
   /** Fence language tags this renderer handles, e.g. ["mermaid", "poster"]. */
   readonly supportedFenceLanguages: readonly string[];
-  /** Return true if this renderer can handle the given fence. */
-  canRender(fence: DiagramFenceInfo): boolean;
+  /**
+   * Return true if this renderer can handle the given source/fence pair.
+   * If omitted, the registry treats the renderer as eligible for any matching
+   * supportedFenceLanguages entry.
+   */
+  canRender?(source: string, fence: DiagramFenceInfo): boolean;
   /** Render diagram source to SVG. Never throws. */
   render(
     source: string,

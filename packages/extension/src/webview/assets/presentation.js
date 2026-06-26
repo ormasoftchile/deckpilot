@@ -15,6 +15,7 @@
   let slides = [];
   let currentFragment = 0;  // Current fragment index (0 = no fragments shown)
   let totalFragments = 0;   // Total fragments in current slide
+  let mermaidRenderQueue = Promise.resolve();
 
   // Onboarding mode state
   let onboardingMode = false;
@@ -517,6 +518,8 @@
       updateStepProgress(index);
       updateOnboardingControls(index);
     }
+
+    renderMermaidFallbacks(slideContent);
   }
 
   /**
@@ -884,7 +887,8 @@
           temp.innerHTML = payload.html;
           const newBlock = temp.firstElementChild;
           if (newBlock) {
-            preserveRenderBlockState(block, newBlock, blockId);
+            const resolvedBlock = preserveRenderBlockState(block, newBlock, blockId);
+            renderMermaidFallbacks(resolvedBlock);
           }
         }
         break;
@@ -895,7 +899,7 @@
     if (block.tagName === newBlock.tagName) {
       syncPreservedAttributes(block, newBlock, blockId);
       block.innerHTML = newBlock.innerHTML;
-      return;
+      return block;
     }
 
     newBlock.setAttribute('data-render-id', blockId);
@@ -919,6 +923,7 @@
       newBlock.setAttribute('data-fragment-animation', fragAnim);
     }
     block.replaceWith(newBlock);
+    return newBlock;
   }
 
   function syncPreservedAttributes(block, newBlock, blockId) {
@@ -960,6 +965,87 @@
     }
 
     block.setAttribute('data-render-id', blockId);
+  }
+
+  function renderMermaidFallbacks(root) {
+    if (!root || !root.querySelectorAll) return;
+
+    var containers = [];
+    if (root.matches && root.matches('.diagram-block__mermaid-fallback[data-mermaid-source]')) {
+      containers.push(root);
+    }
+    containers = containers.concat(Array.from(root.querySelectorAll('.diagram-block__mermaid-fallback[data-mermaid-source]')));
+
+    containers.forEach(function(container) {
+      mermaidRenderQueue = mermaidRenderQueue
+        .then(function() { return renderMermaidFallback(container); })
+        .catch(function(error) {
+          console.error('Mermaid fallback render failed:', error);
+        });
+    });
+  }
+
+  async function renderMermaidFallback(container) {
+    if (!container || container.dataset.mermaidRendered === 'true') {
+      return;
+    }
+
+    if (typeof window.mermaid === 'undefined') {
+      showMermaidFallbackError(container, new Error('Mermaid.js failed to load.'), '');
+      return;
+    }
+
+    var source = decodeMermaidSource(container.dataset.mermaidSource || '');
+    var theme = container.dataset.mermaidTheme || inferMermaidTheme();
+
+    try {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        suppressErrorRendering: true,
+        theme: theme,
+      });
+
+      var renderId = 'deckpilot-mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      var result = await window.mermaid.render(renderId, source);
+      container.innerHTML = result.svg || result;
+      container.dataset.mermaidRendered = 'true';
+      if (result && typeof result.bindFunctions === 'function') {
+        result.bindFunctions(container);
+      }
+    } catch (error) {
+      showMermaidFallbackError(container, error, source);
+    }
+  }
+
+  function decodeMermaidSource(base64Value) {
+    if (!base64Value) return '';
+    var binary = window.atob(base64Value);
+    var bytes = Uint8Array.from(binary, function(char) {
+      return char.charCodeAt(0);
+    });
+    return new TextDecoder().decode(bytes);
+  }
+
+  function inferMermaidTheme() {
+    if (document.body.classList.contains('theme-light') || document.body.classList.contains('theme-minimal')) {
+      return 'default';
+    }
+    if (document.body.classList.contains('theme-contrast')) {
+      return 'neutral';
+    }
+    return 'dark';
+  }
+
+  function showMermaidFallbackError(container, error, source) {
+    var message = error && error.message ? error.message : String(error);
+    container.classList.add('diagram-block__mermaid-fallback--error');
+    container.innerHTML =
+      '<div class="diagram-block__error-header">⚠ Mermaid.js fallback failed</div>' +
+      '<pre class="diagram-block__error-message">' + escapeHtml(message) + '</pre>' +
+      (source
+        ? '<details class="diagram-block__source"><summary>Show source</summary><pre><code class="language-mermaid">' + escapeHtml(source) + '</code></pre></details>'
+        : '');
   }
 
   /**
