@@ -82,7 +82,8 @@ jobs:
     - name: Build deckpilot-triton package
       run: |
         cd apps/deckpilot-triton
-        npm run compile
+        npm run bundle
+        test -f dist/vendor/triton/index.js
         npx vsce package --no-dependencies
         mv *.vsix ../../
 
