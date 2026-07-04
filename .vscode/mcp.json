@@ -1,0 +1,14 @@
+{
+    "servers": {
+        "codetopo": {
+            "command": "/Users/cormazab/.local/bin/codetopo",
+            "args": [
+                "mcp",
+                "--root",
+                ".",
+                "--watch",
+                "--freshness=normal"
+            ]
+        }
+    }
+}
