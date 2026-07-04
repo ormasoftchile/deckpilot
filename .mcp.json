@@ -11,6 +11,21 @@
       "tools": [
         "*"
       ]
+    },
+    "codetopo": {
+      "type": "local",
+      "command": "/Users/cormazab/.local/bin/codetopo",
+      "args": [
+        "mcp",
+        "--root",
+        "/Volumes/Projects/deckpilot",
+        "--watch",
+        "--freshness=normal"
+      ],
+      "env": {},
+      "tools": [
+        "*"
+      ]
     }
   }
 }

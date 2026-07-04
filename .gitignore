@@ -66,3 +66,6 @@ examples/recordings/*.mp4
 
 # Generated extension packages
 *.vsix
+
+# codetopo index (auto-generated)
+.codetopo/
