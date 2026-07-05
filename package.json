@@ -251,7 +251,7 @@
   },
   "scripts": {
     "vscode:prepublish": "tsc -b && npm run bundle -- --production",
-    "compile": "tsc -b && npm run bundle",
+    "compile": "tsc -b && npm run bundle && npm run compile:companions",
     "watch": "tsc -b --watch",
     "bundle": "node esbuild.mjs",
     "bundle:watch": "node esbuild.mjs --watch",
@@ -264,7 +264,8 @@
     "deploy": "vsce publish --no-dependencies",
     "version:patch": "npm version patch --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
-    "version:major": "npm version major --no-git-tag-version"
+    "version:major": "npm version major --no-git-tag-version",
+    "compile:companions": "npm --workspace deckpilot-triton run compile && npm --workspace deckpilot-mermaid run compile"
   },
   "devDependencies": {
     "@types/chai": "^5.2.3",
