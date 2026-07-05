@@ -7,7 +7,13 @@
  * including async diagram placeholders.
  */
 
+import type { ListFragmentMode } from '../models/deck';
+
 const FRAGMENT_COMMENT_RE = /\s*<!--\s*\.fragment(?:\s+([\w-]+))?\s*-->/g;
+
+export interface ProcessFragmentsOptions {
+  listFragmentMode?: ListFragmentMode;
+}
 
 /**
  * Split HTML into segments, separating out <div class="slide-group"> blocks
@@ -97,18 +103,19 @@ function tagRenderBlocksWithComment(seg: string): string {
 /**
  * `<!-- .fragment-each -->` placed anywhere inside a list opts the WHOLE list
  * into per-item fragmentation: every `<li>` becomes its own reveal step and the
- * list itself is not fragmented as a unit. Opt-in — lists without the marker
- * keep the default "list reveals in one step" behavior.
+ * list itself is not fragmented as a unit. Deck config may also enable this as
+ * the default list behavior; the inline marker still preserves per-list opt-in.
  */
-function tagFragmentEachLists(seg: string): string {
+function tagFragmentEachLists(seg: string, listFragmentMode?: ListFragmentMode): string {
   return seg.replace(
     /<(ul|ol)\b([^>]*)>([\s\S]*?)<\/\1>/g,
     (match: string, tag: string, attrs: string, inner: string) => {
       const marker = inner.match(/<!--\s*\.fragment-each(?:\s+([\w-]+))?\s*-->/);
-      if (!marker) {
+      const useEachByDefault = listFragmentMode === 'each' && !/data-no-fragment/.test(attrs);
+      if (!marker && !useEachByDefault) {
         return match;
       }
-      const animation = marker[1] ?? 'fade';
+      const animation = marker?.[1] ?? 'fade';
       let newInner = inner.replace(/\s*<!--\s*\.fragment-each(?:\s+[\w-]+)?\s*-->/g, '');
       newInner = newInner.replace(
         /(<li\b)(?![^>]*__frag)(?![^>]*data-no-fragment)([^>]*>)/g,
@@ -150,10 +157,10 @@ function suppressListsWithFragmentedItems(seg: string): string {
   );
 }
 
-function tagExplicitElements(seg: string): string {
+function tagElements(seg: string, options: ProcessFragmentsOptions): string {
   // List-item fragmentation (opt-in) runs first so the per-item markers are
   // consumed before the whole-list `<ul>/<ol>` comment tagging below.
-  seg = tagFragmentEachLists(seg);
+  seg = tagFragmentEachLists(seg, options.listFragmentMode);
   seg = tagListItemsWithComment(seg);
   seg = suppressListsWithFragmentedItems(seg);
   for (const heading of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']) {
@@ -225,7 +232,10 @@ function stripNestedParagraphFragments(seg: string): string {
  * Process fragments in slide HTML.
  * Standard block elements become fragment steps automatically in document order.
  */
-export function processFragments(html: string): { html: string; fragmentCount: number } {
+export function processFragments(
+  html: string,
+  options: ProcessFragmentsOptions = {},
+): { html: string; fragmentCount: number } {
   const segments = splitOnGroups(html);
   const tagged = segments.map(seg => {
     if (seg.isGroup) {
@@ -241,7 +251,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
       stripNestedParagraphFragments(
         tagWrapperUnits(
           tagAutoElements(
-            tagExplicitElements(seg.text),
+            tagElements(seg.text, options),
           ),
         ),
       ),

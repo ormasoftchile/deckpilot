@@ -17,6 +17,7 @@ import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
 import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
 import { validateSlideIds, SlideDiagnosticResult } from './deckValidator';
+import type { ListFragmentMode } from '../models/deck';
 import {
   resolveSlideBreaks,
   looksLikeBareYaml,
@@ -29,6 +30,8 @@ export interface ParseSlidesOptions {
   slideBreak?: SlideBreakMode;
   /** Heading levels that start a slide in heading mode (defaults to [1, 2]). */
   headingLevels?: number[];
+  /** Default list fragmentation mode for presentation rendering. */
+  listFragmentMode?: ListFragmentMode;
 }
 
 // Initialize markdown-it renderer
@@ -102,7 +105,7 @@ export function parseSlides(content: string, options: ParseSlidesOptions = {}): 
       continue;
     }
     
-    const slide = parseSlideContent(index, rawContent);
+    const slide = parseSlideContent(index, rawContent, options);
     slide.sourceRange = { start: rangeStart, end: rangeEnd };
 
     // If this "slide" is frontmatter-only (no visible content), hold it
@@ -161,7 +164,7 @@ export function parseSlides(content: string, options: ParseSlidesOptions = {}): 
 /**
  * Parse individual slide content including frontmatter
  */
-function parseSlideContent(index: number, rawContent: string): Slide {
+function parseSlideContent(index: number, rawContent: string, options: ParseSlidesOptions): Slide {
   let content = rawContent;
   let frontmatter: SlideFrontmatter | undefined;
   
@@ -283,7 +286,9 @@ function parseSlideContent(index: number, rawContent: string): Slide {
   html = processLayoutComments(html);
   
   // Step 5: Process fragments and get count
-  const { html: fragmentHtml, fragmentCount } = processFragments(html);
+  const { html: fragmentHtml, fragmentCount } = processFragments(html, {
+    listFragmentMode: options.listFragmentMode,
+  });
   html = fragmentHtml;
 
   // Resolve each fragment-cue position marker to the data-fragment index of

@@ -108,4 +108,25 @@ describe('parseDeck — content: import', () => {
     expect(deck!.slides).to.have.lengthOf(1);
     expect(deck!.slides[0].content).to.include('Absolute');
   });
+
+  it('passes listFragmentMode frontmatter into fragment processing', async () => {
+    const deckPath = path.join(tmpDir, 'demo.deck.md');
+    const deckSource = [
+      '---',
+      'listFragmentMode: each',
+      '---',
+      '- A',
+      '- B',
+      '- C',
+    ].join('\n');
+
+    const { deck, error } = await parseDeck(deckSource, deckPath);
+
+    expect(error).to.be.undefined;
+    expect(deck!.metadata.listFragmentMode).to.equal('each');
+    expect(deck!.slides[0].html).to.not.match(/<ul[^>]*class="fragment"/);
+    expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="1" data-fragment-animation="fade">A</li>');
+    expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">B</li>');
+    expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">C</li>');
+  });
 });

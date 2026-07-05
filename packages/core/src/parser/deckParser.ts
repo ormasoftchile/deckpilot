@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { matter } from './frontmatter';
-import { Deck, DeckMetadata, SceneDefinition, createDeck } from '../models/deck';
+import { Deck, DeckMetadata, SceneDefinition, createDeck, type ListFragmentMode } from '../models/deck';
 import { parseSlides, getLastParseWarnings } from './slideParser';
 import { resolveSlideBreakConfig } from './slideBreakResolver';
 import { EnvDeclarationParser } from '../env/envDeclarationParser';
@@ -94,13 +94,29 @@ async function parseMarkdownDeck(
       }
     }
 
+    let mergedMetadata = metadata as DeckMetadata;
+    let loadedSidecar: import('../models/sidecar').SidecarFile | null = null;
+    const sidecarWarnings: string[] = [];
+    try {
+      const sidecar = await loadSidecar(filePath);
+      loadedSidecar = sidecar;
+      if (sidecar) {
+        mergedMetadata = mergeSidecarDeckMetadata(mergedMetadata, sidecar);
+      }
+    } catch (sidecarError) {
+      // Non-fatal: sidecar load/merge errors surface as warnings, deck still loads
+      const msg = sidecarError instanceof Error ? sidecarError.message : 'Unknown sidecar error';
+      sidecarWarnings.push(`[sidecar] ${msg}`);
+    }
+
     // Parse slides from body content. The slide-break mode comes from the
     // wrapper deck's frontmatter (source of truth, even for imported content).
     // Default is 'blank'; `slideBreak` (or `split` alias) opts into other modes.
-    const breakCfg = resolveSlideBreakConfig(metadata.slideBreak ?? metadata.split);
+    const breakCfg = resolveSlideBreakConfig(mergedMetadata.slideBreak ?? mergedMetadata.split);
     let slides = parseSlides(effectiveBody, {
       slideBreak: breakCfg.mode,
       headingLevels: breakCfg.headingLevels,
+      listFragmentMode: resolveListFragmentMode(mergedMetadata.listFragmentMode),
     });
 
     if (slides.length === 0) {
@@ -110,20 +126,8 @@ async function parseMarkdownDeck(
     }
 
     // Load and merge sidecar (.deck.yaml) if present — zero behavior change when absent
-    let mergedMetadata = metadata as DeckMetadata;
-    let loadedSidecar: import('../models/sidecar').SidecarFile | null = null;
-    const sidecarWarnings: string[] = [];
-    try {
-      const sidecar = await loadSidecar(filePath);
-      loadedSidecar = sidecar;
-      if (sidecar) {
-        slides = mergeSidecarIntoSlides(slides, sidecar);
-        mergedMetadata = mergeSidecarDeckMetadata(mergedMetadata, sidecar);
-      }
-    } catch (sidecarError) {
-      // Non-fatal: sidecar load/merge errors surface as warnings, deck still loads
-      const msg = sidecarError instanceof Error ? sidecarError.message : 'Unknown sidecar error';
-      sidecarWarnings.push(`[sidecar] ${msg}`);
+    if (loadedSidecar) {
+      slides = mergeSidecarIntoSlides(slides, loadedSidecar);
     }
 
     // Parse authored scenes from frontmatter (T043)
@@ -279,6 +283,7 @@ async function parseYamlDeck(
   let slides = parseSlides(body, {
     slideBreak: breakCfg.mode,
     headingLevels: breakCfg.headingLevels,
+    listFragmentMode: resolveListFragmentMode(manifest.deck?.listFragmentMode),
   });
 
   if (slides.length === 0) {
@@ -297,6 +302,9 @@ async function parseYamlDeck(
     }
     if (manifest.deck.basePath !== undefined) {
       metadata.basePath = manifest.deck.basePath;
+    }
+    if (manifest.deck.listFragmentMode !== undefined) {
+      metadata.listFragmentMode = resolveListFragmentMode(manifest.deck.listFragmentMode);
     }
   }
 
@@ -488,4 +496,8 @@ function parseAuthoredScenes(
   }
 
   return { scenes, errors };
+}
+
+function resolveListFragmentMode(value: unknown): ListFragmentMode | undefined {
+  return value === 'all' || value === 'each' ? value : undefined;
 }
