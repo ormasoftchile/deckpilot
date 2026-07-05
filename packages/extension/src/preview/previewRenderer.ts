@@ -58,7 +58,7 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
   <main class="preview-slides">
     ${slidesHtml}
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script nonce="${opts.nonce}">
     (function () {
       var vscode = acquireVsCodeApi();
