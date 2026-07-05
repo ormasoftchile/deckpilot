@@ -59,9 +59,15 @@ Open the deck in Deckpilot for VS Code to run them.
 
 ## Fragments work
 
-- First, this appears <!-- .element: class="fragment" -->
-- Then this <!-- .element: class="fragment" -->
-- Finally this <!-- .element: class="fragment" -->
+Deckpilot reveals each block-level element on its own step, in document order.
+
+First, this paragraph appears.
+
+Then this one.
+
+Finally this one — use the arrow keys to step through.
+
+> A bullet list counts as a single block, so it reveals in one step.
 
 ---
 
