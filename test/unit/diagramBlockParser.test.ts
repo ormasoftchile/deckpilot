@@ -82,6 +82,23 @@ describe('parseDiagramBlocks', () => {
     });
   });
 
+  it('parses bare key=value fence attributes', () => {
+    const content = [
+      '```diagram:mermaid theme=dark caption="System Overview"',
+      'graph TD',
+      '  A --> B',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.blocks).to.have.lengthOf(1);
+    expect(result.blocks[0].fence.attributes).to.deep.equal({
+      theme: 'dark',
+      caption: 'System Overview',
+    });
+  });
+
   it('returns the input unchanged when no diagram fences exist', () => {
     const content = [
       '# Slide title',

@@ -15,6 +15,15 @@ const Module = require('module');
 const vscodeMock = {
   workspace: {
     workspaceFolders: undefined,
+    textDocuments: [],
+    onDidChangeTextDocument: () => ({ dispose: () => {} }),
+    openTextDocument: async (uri) => ({ uri, lineCount: 1, getText: () => '' }),
+    createFileSystemWatcher: () => ({
+      onDidChange: () => ({ dispose: () => {} }),
+      onDidCreate: () => ({ dispose: () => {} }),
+      onDidDelete: () => ({ dispose: () => {} }),
+      dispose: () => {},
+    }),
     fs: {
       readFile: async () => Buffer.from(''),
     },
@@ -22,15 +31,30 @@ const vscodeMock = {
   Uri: {
     file: (p) => ({ fsPath: p, path: p, toString: () => p }),
     parse: (s) => ({ fsPath: s, path: s, toString: () => s }),
+    joinPath: (...parts) => {
+      const path = require('path');
+      const resolved = parts
+        .map((part) => (typeof part === 'string' ? part : (part.fsPath || part.path || String(part))))
+        .reduce((acc, part) => path.join(acc, part));
+      return { fsPath: resolved, path: resolved, toString: () => resolved };
+    },
   },
   window: {
     showErrorMessage: () => {},
     showInformationMessage: () => {},
     createOutputChannel: () => ({ appendLine: () => {}, show: () => {}, dispose: () => {} }),
+    activeColorTheme: { kind: 2 },
+    onDidChangeTextEditorSelection: () => ({ dispose: () => {} }),
+    showTextDocument: async (document) => ({
+      document,
+      selection: undefined,
+      revealRange: () => {},
+    }),
     createWebviewPanel: (_viewType, _title, _column, _options) => ({
       webview: {
         html: '',
         cspSource: 'vscode-resource:',
+        asWebviewUri: (uri) => uri,
         postMessage: async () => true,
         onDidReceiveMessage: () => ({ dispose: () => {} }),
       },
@@ -45,6 +69,7 @@ const vscodeMock = {
   EventEmitter: class { on() {} off() {} fire() {} },
   Disposable: class { dispose() {} },
   ThemeColor: class { constructor(id) { this.id = id; } },
+  RelativePattern: class { constructor(baseUri, pattern) { this.baseUri = baseUri; this.pattern = pattern; } },
   ViewColumn: {
     One: 1,
     Two: 2,
@@ -57,6 +82,16 @@ const vscodeMock = {
     Nine: 9,
     Active: -1,
     Beside: -2,
+  },
+  Position: class { constructor(line, character) { this.line = line; this.character = character; } },
+  Selection: class { constructor(anchor, active) { this.anchor = anchor; this.active = active; } },
+  Range: class { constructor(start, end) { this.start = start; this.end = end; } },
+  TextEditorRevealType: { InCenterIfOutsideViewport: 0 },
+  ColorThemeKind: {
+    Light: 1,
+    Dark: 2,
+    HighContrast: 3,
+    HighContrastLight: 4,
   },
 };
 

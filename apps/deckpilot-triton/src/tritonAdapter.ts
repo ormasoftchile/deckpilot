@@ -52,7 +52,8 @@ const TRITON_UNSUPPORTED_MERMAID_TYPES = new Set([
  */
 export class TritonDiagramRenderer implements IDiagramRenderer {
   readonly id = 'triton';
-  readonly supportedFenceLanguages = ['mermaid'] as const;
+  readonly priority = 5;
+  readonly supportedFenceLanguages = ['mermaid', 'triton'] as const;
 
   private modulePromise: Promise<TritonModule> | undefined;
 
@@ -61,6 +62,10 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
   canRender(source: string, fence: DiagramFenceInfo): boolean {
     if (!(this.supportedFenceLanguages as readonly string[]).includes(fence.language)) {
       return false;
+    }
+
+    if (fence.language === 'triton') {
+      return source.trim().length > 0;
     }
 
     const diagramType = extractDiagramType(source);

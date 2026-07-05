@@ -13,6 +13,9 @@ import { matter } from '@deckpilot/core/parser/frontmatter';
 import { collectWatchPaths } from './collectWatchPaths';
 import { renderPreviewError, renderPreviewHtml, RenderPreviewOptions } from './previewRenderer';
 import { WatchedSources } from './watchedSources';
+import { DiagramRendererRegistry } from '../renderer/diagram/registry';
+import { RenderBlockUpdatePayload } from '../webview/messages';
+import { DiagramService, annotateDiagramPlaceholders } from '../services/diagramService';
 
 const DEBOUNCE_MS = 150;
 const VIEW_TYPE = 'deckPilotPreview';
@@ -26,12 +29,18 @@ export class PreviewProvider implements vscode.Disposable {
   private sourceUri: vscode.Uri | undefined;
   private slideRanges: Array<{ index: number; start: number; end: number }> = [];
   private readonly watched: WatchedSources;
+  private readonly diagramService: DiagramService;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private disposables: vscode.Disposable[] = [];
   private nonce = generateNonce();
+  private refreshVersion = 0;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    diagramRegistry: DiagramRendererRegistry,
+  ) {
     this.watched = new WatchedSources(() => this.scheduleRefresh());
+    this.diagramService = new DiagramService(diagramRegistry);
   }
 
   async show(deckUri: vscode.Uri): Promise<void> {
@@ -178,10 +187,17 @@ export class PreviewProvider implements vscode.Disposable {
       return;
     }
 
+    const workspaceRoot = this.resolveBasePath(result.deck);
+    for (const slide of result.deck.slides) {
+      slide.html = annotateDiagramPlaceholders(slide.html, workspaceRoot);
+    }
+
     this.panel.webview.html = renderPreviewHtml(result.deck, {
       ...renderOpts,
       warnings: result.warnings,
     });
+    const refreshVersion = ++this.refreshVersion;
+    void this.resolvePreviewDiagrams(result.deck.slides.map((slide) => slide.html), refreshVersion);
     const paths = new Set(collectWatchPaths(result.deck));
     for (const extra of this.extraWatchPathsFromRaw(raw)) {
       paths.add(extra);
@@ -197,6 +213,15 @@ export class PreviewProvider implements vscode.Disposable {
     this.sourceUri = importTargets.length > 0
       ? vscode.Uri.file(importTargets[0])
       : this.deckUri;
+  }
+
+  private resolveBasePath(deck: Awaited<ReturnType<typeof parseDeck>>['deck']): string {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+    const deckBasePath = deck?.metadata?.basePath;
+    if (typeof deckBasePath === 'string' && deckBasePath.trim().length > 0 && this.deckUri) {
+      return path.resolve(path.dirname(this.deckUri.fsPath), deckBasePath);
+    }
+    return workspaceRoot;
   }
 
   /**
@@ -300,6 +325,26 @@ export class PreviewProvider implements vscode.Disposable {
       cssUri,
       deckPath: this.deckUri!.fsPath,
     };
+  }
+
+  private async resolvePreviewDiagrams(slidesHtml: string[], refreshVersion: number): Promise<void> {
+    for (const slideHtml of slidesHtml) {
+      const updates = await this.diagramService.resolveSlideBlocks(slideHtml);
+      for (const update of updates) {
+        if (!this.panel || refreshVersion !== this.refreshVersion) {
+          return;
+        }
+        await this.sendRenderBlockUpdate({
+          blockId: update.blockId,
+          html: update.html,
+          status: update.html.includes('diagram-block--error') ? 'error' : 'success',
+        });
+      }
+    }
+  }
+
+  private async sendRenderBlockUpdate(payload: RenderBlockUpdatePayload): Promise<void> {
+    await this.panel?.webview.postMessage({ type: 'renderBlockUpdate', payload });
   }
 
   private computeResourceRoots(): vscode.Uri[] {

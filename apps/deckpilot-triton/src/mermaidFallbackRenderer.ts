@@ -7,6 +7,7 @@ import type {
 
 export class MermaidFallbackRenderer implements IDiagramRenderer {
   readonly id = 'mermaid-js';
+  readonly priority = 5;
   readonly supportedFenceLanguages = ['mermaid'] as const;
 
   canRender(_source: string, fence: DiagramFenceInfo): boolean {

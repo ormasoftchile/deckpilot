@@ -1,0 +1,11 @@
+.vscode/**
+.gitignore
+src/**
+**/*.ts
+test/**
+tsconfig.json
+esbuild.mjs
+
+# Keep the bundled extension output and runtime dependencies in the VSIX.
+!dist/**
+!node_modules/**

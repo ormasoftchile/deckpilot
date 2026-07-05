@@ -79,8 +79,12 @@ export function parseDiagramBlocks(
  */
 function parseAttributes(raw: string): Record<string, string> | undefined {
   const trimmed = raw.trim();
-  if (!trimmed || !trimmed.startsWith('{')) {
+  if (!trimmed) {
     return undefined;
+  }
+
+  if (!trimmed.startsWith('{')) {
+    return parseKeyValueAttributes(trimmed);
   }
 
   const result: Record<string, string> = {};
@@ -93,12 +97,27 @@ function parseAttributes(raw: string): Record<string, string> | undefined {
   // Split on commas not inside quotes
   const pairs = inner.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
   for (const pair of pairs) {
-    const colonIdx = pair.indexOf(':');
-    if (colonIdx === -1) {
+    const separatorIdx = pair.search(/[:=]/);
+    if (separatorIdx === -1) {
       continue;
     }
-    const key = pair.slice(0, colonIdx).trim().replace(/^["']|["']$/g, '');
-    const value = pair.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
+    const key = pair.slice(0, separatorIdx).trim().replace(/^["']|["']$/g, '');
+    const value = pair.slice(separatorIdx + 1).trim().replace(/^["']|["']$/g, '');
+    if (key) {
+      result[key] = value;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseKeyValueAttributes(raw: string): Record<string, string> | undefined {
+  const result: Record<string, string> = {};
+  const pattern = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)'|([^\s]+))/g;
+
+  for (const match of raw.matchAll(pattern)) {
+    const key = match[1]?.trim();
+    const value = (match[2] ?? match[3] ?? match[4] ?? '').trim();
     if (key) {
       result[key] = value;
     }

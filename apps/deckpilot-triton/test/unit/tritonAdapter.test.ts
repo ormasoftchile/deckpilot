@@ -26,6 +26,10 @@ describe('TritonDiagramRenderer — canRender()', () => {
     assert.ok(!adapter.canRender('graph TD\n  A --> B\n', { language: '' }));
   });
 
+  it('accepts explicit triton fences', () => {
+    assert.ok(adapter.canRender('row\n  cell\n    title: Test\n', { language: 'triton' }));
+  });
+
   it('returns false for Triton-unsupported Mermaid native types', () => {
     assert.ok(!adapter.canRender('packet-beta\n  title TCP Segment Header\n', { language: 'mermaid' }));
     assert.ok(!adapter.canRender('xychart-beta\n  title "Monthly Revenue"\n', { language: 'mermaid' }));

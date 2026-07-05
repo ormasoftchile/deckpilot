@@ -25,11 +25,13 @@ function makeBlock(language: string, source: string = 'graph TD\n  A --> B\n'): 
 function makeRenderer(
   id: string,
   languages: readonly string[],
+  priority?: number,
   canRenderImpl?: (source: string, fence: DiagramFenceInfo) => boolean,
   renderImpl?: (source: string, fence: DiagramFenceInfo, options?: DiagramRenderOptions) => Promise<DiagramRenderResult>,
 ): IDiagramRenderer {
   return {
     id,
+    priority,
     supportedFenceLanguages: languages,
     canRender: canRenderImpl ?? ((_source: string, fence: DiagramFenceInfo) => languages.includes(fence.language)),
     render: renderImpl ?? (async () => ({
@@ -80,6 +82,7 @@ describe('DiagramRendererRegistry', () => {
     const tritonRenderer = makeRenderer(
       'triton',
       ['mermaid'],
+      undefined,
       (source) => !source.startsWith('packet-beta'),
     );
     const fallbackRenderer = makeRenderer('mermaid-js', ['mermaid']);
@@ -88,6 +91,17 @@ describe('DiagramRendererRegistry', () => {
     registry.register(fallbackRenderer);
 
     expect(registry.findRenderer('packet-beta\n  title Header\n', makeFence('mermaid'))).to.equal(fallbackRenderer);
+  });
+
+  it('prefers the highest-priority matching renderer', () => {
+    const registry = new DiagramRendererRegistry();
+    const fallbackRenderer = makeRenderer('mermaid-js', ['mermaid'], 5);
+    const nativeRenderer = makeRenderer('deckpilot-mermaid', ['mermaid'], 10);
+
+    registry.register(fallbackRenderer);
+    registry.register(nativeRenderer);
+
+    expect(registry.findRenderer('graph TD\n  A --> B\n', makeFence('mermaid'))).to.equal(nativeRenderer);
   });
 
   it('returns the fallback result when no renderer is registered for a block', async () => {
@@ -120,6 +134,7 @@ describe('DiagramRendererRegistry', () => {
       'mermaid-renderer',
       ['mermaid'],
       undefined,
+      undefined,
       async (source, fence, renderOptions) => {
         received = { source, fence, options: renderOptions };
         return expected;
@@ -138,7 +153,7 @@ describe('DiagramRendererRegistry', () => {
 
   it('falls through to the next renderer when the first candidate fails', async () => {
     const registry = new DiagramRendererRegistry();
-    registry.register(makeRenderer('triton', ['mermaid'], undefined, async () => ({
+    registry.register(makeRenderer('triton', ['mermaid'], undefined, undefined, async () => ({
       ok: false,
       format: 'svg',
       errorMessage: 'Triton render error',
