@@ -10,11 +10,23 @@ import { renderPreviewHtml, renderPreviewError } from '../../../packages/extensi
 import type { Deck } from '../../../packages/core/src/models/deck';
 import type { Slide } from '../../../packages/core/src/models/slide';
 
-function makeSlide(index: number, opts: { content: string; html: string }): Slide {
+function makeSlide(
+  index: number,
+  opts: {
+    content: string;
+    html: string;
+    speakerNotes?: string;
+    cues?: string[];
+    voiceCues?: Array<{ fragmentIndex?: number; text: string }>;
+  },
+): Slide {
   return {
     index,
     content: opts.content,
     html: opts.html,
+    speakerNotes: opts.speakerNotes,
+    cues: opts.cues,
+    voiceCues: opts.voiceCues,
     onEnterActions: [],
     interactiveElements: [],
     renderDirectives: opts.content.includes('render:')
@@ -75,6 +87,67 @@ describe('renderPreviewHtml', () => {
     );
     expect(html).to.include('data-slide-index="0"');
     expect(html).to.include('data-slide-index="1"');
+  });
+
+  it('renders speaker notes under a slide when present', () => {
+    const html = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>a</p>', speakerNotes: 'Pause and breathe' })]),
+      opts,
+    );
+    expect(html).to.include('preview-slide-notes');
+    expect(html).to.include('Pause and breathe');
+  });
+
+  it('shows the notes toggle only when at least one slide has notes', () => {
+    const withNotes = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>a</p>', speakerNotes: 'note' })]),
+      opts,
+    );
+    expect(withNotes).to.include('id="notes-toggle"');
+
+    const withoutNotes = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>a</p>' })]),
+      opts,
+    );
+    expect(withoutNotes).to.not.include('id="notes-toggle"');
+    expect(withoutNotes).to.not.include('preview-slide-notes');
+  });
+
+  it('renders sidecar cues as an ordered list', () => {
+    const html = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>a</p>', cues: ['Say hello', 'Then pause'] })]),
+      opts,
+    );
+    expect(html).to.include('preview-slide-cues');
+    expect(html).to.include('Say hello');
+    expect(html).to.include('Then pause');
+    expect(html).to.include('id="notes-toggle"'); // cues alone enable the toggle
+  });
+
+  it('renders inline voice cues with fragment tags', () => {
+    const html = renderPreviewHtml(
+      makeDeck([
+        makeSlide(0, {
+          content: '',
+          html: '<p>a</p>',
+          voiceCues: [{ text: 'Intro line' }, { fragmentIndex: 2, text: 'On reveal two' }],
+        }),
+      ]),
+      opts,
+    );
+    expect(html).to.include('Voice cues');
+    expect(html).to.include('Intro line');
+    expect(html).to.include('On reveal two');
+    expect(html).to.include('fragment 2');
+  });
+
+  it('escapes HTML in speaker notes', () => {
+    const html = renderPreviewHtml(
+      makeDeck([makeSlide(0, { content: '', html: '<p>a</p>', speakerNotes: '<script>x</script>' })]),
+      opts,
+    );
+    expect(html).to.not.include('<script>x</script>');
+    expect(html).to.include('&lt;script&gt;x&lt;/script&gt;');
   });
 
   it('replaces render:file links with inert preview cards', () => {

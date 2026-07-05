@@ -79,6 +79,18 @@ export interface DeckMetadata {
   options?: PresentationOptions;
   /** Authored scenes from deck frontmatter */
   scenes?: SceneDefinition[];
+  /**
+   * How the deck body is split into slides.
+   *  - 'blank' (default): break on runs of 2+ consecutive blank lines
+   *    (fence- and indented-code-aware). Also honors `<!-- slide -->` markers
+   *    and, for backward compatibility, bare `---` rules (deprecated).
+   *  - 'marker': disable blank-line splitting; break only on `<!-- slide -->`
+   *    markers and bare `---` rules.
+   *  - 'heading' | 'h2' | 'h1-h3': break before ATX headings. `heading` uses
+   *    levels 1–2; `hN` splits at exactly level N; `hN-hM` splits at a range.
+   *    Ideal for untouched external content (e.g. a README).
+   */
+  slideBreak?: string;
   /** Theme override from sidecar (DA-05) */
   theme?: string;
   /** Recording configuration from sidecar (DA-20) */

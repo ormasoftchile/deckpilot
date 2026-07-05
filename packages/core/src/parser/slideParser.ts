@@ -17,6 +17,19 @@ import { processFragments } from './fragmentProcessor';
 import { extractCheckpoint } from './checkpointParser';
 import { extractIdComment, generateSlideId, resolveUniqueIds } from './slideIdParser';
 import { validateSlideIds, SlideDiagnosticResult } from './deckValidator';
+import {
+  resolveSlideBreaks,
+  looksLikeBareYaml,
+  type SlideBreakMode,
+} from './slideBreakResolver';
+
+/** Options controlling how deck body content is split into slides. */
+export interface ParseSlidesOptions {
+  /** Slide-break mode (from deck frontmatter `slideBreak:`). Defaults to 'blank'. */
+  slideBreak?: SlideBreakMode;
+  /** Heading levels that start a slide in heading mode (defaults to [1, 2]). */
+  headingLevels?: number[];
+}
 
 // Initialize markdown-it renderer
 const md = new MarkdownIt({
@@ -57,13 +70,24 @@ export function getLastValidationDiagnostics(): SlideDiagnosticResult[] {
 /**
  * Parse content into individual slides
  */
-export function parseSlides(content: string): Slide[] {
+export function parseSlides(content: string, options: ParseSlidesOptions = {}): Slide[] {
   // Reset warnings and validation diagnostics
   _lastParseWarnings = [];
   _lastValidationDiagnostics = [];
   
-  // Split content on slide delimiter (with line range tracking for sync)
-  const rawSlides = splitOnDelimiter(content);
+  // Split content into slide chunks (fence-aware, delimiter mode configurable).
+  const { chunks: rawSlides, usedDeprecatedDelimiter } = resolveSlideBreaks(
+    content,
+    options.slideBreak ?? 'blank',
+    { headingLevels: options.headingLevels },
+  );
+
+  // Surface a one-time migration hint when a bare `---` acted as a separator.
+  if (usedDeprecatedDelimiter) {
+    _lastParseWarnings.push(
+      'The `---` slide separator is deprecated; use `<!-- slide -->` instead.',
+    );
+  }
   
   const slides: Slide[] = [];
   let pendingFrontmatter: SlideFrontmatter | undefined;
@@ -132,52 +156,6 @@ export function parseSlides(content: string): Slide[] {
   resolveUniqueIds(slides);
   
   return slides;
-}
-
-/**
- * Split content on --- delimiter, tracking source line ranges.
- * Returns each chunk's text plus its 0-based [start, end] inclusive line
- * range in the original input. Used by parseSlides() to populate
- * Slide.sourceRange for editor ↔ preview sync.
- */
-interface RawSlideChunk {
-  text: string;
-  start: number; // 0-based inclusive line number in original input
-  end: number;   // 0-based inclusive line number in original input
-}
-
-function splitOnDelimiter(content: string): RawSlideChunk[] {
-  const lines = content.split(/\r?\n/);
-  const delimiterRe = /^---+\s*$/;
-  const chunks: RawSlideChunk[] = [];
-  let segmentStart = 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (delimiterRe.test(lines[i])) {
-      const segLines = lines.slice(segmentStart, i);
-      chunks.push({
-        text: segLines.join('\n'),
-        start: segmentStart,
-        end: Math.max(segmentStart, i - 1),
-      });
-      segmentStart = i + 1;
-    }
-  }
-  // Trailing segment after last delimiter (or whole input if no delimiters)
-  const tailLines = lines.slice(segmentStart);
-  chunks.push({
-    text: tailLines.join('\n'),
-    start: segmentStart,
-    end: Math.max(segmentStart, lines.length - 1),
-  });
-
-  // Filter out completely empty parts (but keep first chunk even when empty
-  // to preserve historical behavior).
-  return chunks.filter((chunk, index) => {
-    if (index === 0) {
-      return true;
-    }
-    return chunk.text.trim().length > 0;
-  });
 }
 
 /**
@@ -405,28 +383,6 @@ function isFrontmatterOnly(slide: Slide): boolean {
   const hasElements = slide.interactiveElements.length > 0;
   const hasDirectives = slide.renderDirectives.length > 0;
   return !hasContent && !hasElements && !hasDirectives;
-}
-
-/**
- * Check if raw content looks like bare YAML key-value pairs
- * (no markdown headings, no prose, just "key: value" lines).
- * This detects frontmatter that lost its --- fences during splitting.
- */
-function looksLikeBareYaml(raw: string): boolean {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return false;
-  }
-  const lines = trimmed.split('\n');
-  // Every non-empty line must look like "key: value" or be a YAML continuation
-  return lines.every(line => {
-    const l = line.trim();
-    if (l.length === 0) {
-      return true;
-    }
-    // key: value pattern, or YAML multi-line continuation (indented or starting with |, >)
-    return /^[\w][\w.-]*\s*:/.test(l) || /^\s+/.test(line) || /^[|>]/.test(l);
-  });
 }
 
 /**

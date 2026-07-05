@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseDeck } from '@deckpilot/core/parser/deckParser';
+import { readDeckContentImport } from '@deckpilot/core/parser';
 import { matter } from '@deckpilot/core/parser/frontmatter';
 import { collectWatchPaths } from './collectWatchPaths';
 import { renderPreviewError, renderPreviewHtml, RenderPreviewOptions } from './previewRenderer';
@@ -158,8 +159,14 @@ export class PreviewProvider implements vscode.Disposable {
       return;
     }
 
-    const content = await this.inlineContentImport(raw, this.deckUri.fsPath);
-    const result = await parseDeck(content, this.deckUri.fsPath);
+    const isYamlDeck = this.deckUri.fsPath.endsWith('.deck.yaml');
+    // Markdown decks: splice live (unsaved) imported content into the wrapper.
+    // YAML decks: parseDeck reads `content:` itself, so give it a live resolver
+    // that returns unsaved editor text for the imported file.
+    const content = isYamlDeck ? raw : await this.inlineContentImport(raw, this.deckUri.fsPath);
+    const result = await parseDeck(content, this.deckUri.fsPath, {
+      readImport: (abs) => this.readOpenDoc(abs),
+    });
     if (result.error || !result.deck) {
       this.panel.webview.html = renderPreviewError(
         result.error ?? 'Parse failed',
@@ -194,22 +201,21 @@ export class PreviewProvider implements vscode.Disposable {
 
   /**
    * Extract paths the synthetic (post-inline) parsed deck would no longer
-   * surface — currently just the `content:` import target, which we strip
-   * before parsing so we always need to re-add it here.
+   * surface — the `content:` import target, for both `.deck.md` (frontmatter)
+   * and `.deck.yaml` (top-level key) decks.
    */
   private extraWatchPathsFromRaw(raw: string): string[] {
-    let parsed: { data: Record<string, unknown> };
-    try {
-      parsed = matter(raw);
-    } catch {
-      return [];
-    }
-    const importPath = typeof parsed.data.content === 'string' ? parsed.data.content.trim() : '';
+    const importPath = readDeckContentImport(raw, this.deckUri!.fsPath);
     if (!importPath) {
       return [];
     }
     const deckDir = path.dirname(this.deckUri!.fsPath);
     return [path.isAbsolute(importPath) ? importPath : path.resolve(deckDir, importPath)];
+  }
+
+  /** Return the live (possibly unsaved) text of an open document, or undefined. */
+  private readOpenDoc(fsPath: string): string | undefined {
+    return vscode.workspace.textDocuments.find((d) => d.uri.fsPath === fsPath)?.getText();
   }
 
   private async readLive(fsPath: string): Promise<string> {

@@ -49,14 +49,19 @@
   "activationEvents": [
     "onCommand:deckPilot.openPresentation",
     "onLanguage:markdown",
-    "workspaceContains:**/*.deck.md"
+    "workspaceContains:**/*.deck.md",
+    "workspaceContains:**/*.deck.yaml"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "deckPilot.openPresentation",
-        "title": "Deckpilot: Start Presentation"
+        "title": "Deckpilot: Start Presentation",
+        "icon": {
+          "light": "resources/presentation-light.svg",
+          "dark": "resources/presentation-dark.svg"
+        }
       },
       {
         "command": "deckPilot.closePresentation",
@@ -88,7 +93,11 @@
       },
       {
         "command": "deckPilot.openPreview",
-        "title": "Deckpilot: Open Live Preview"
+        "title": "Deckpilot: Open Live Preview",
+        "icon": {
+          "light": "resources/presentation-light.svg",
+          "dark": "resources/presentation-dark.svg"
+        }
       },
       {
         "command": "deckPilot.startRecording",
@@ -188,6 +197,56 @@
           "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '0:none', '1:none', etc. For directshow (Windows) use the display name."
         }
       }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "deckPilot.openPresentation",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "navigation@1"
+        },
+        {
+          "command": "deckPilot.openPreview",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "deckPilot.openPresentation",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "deckpilot@1"
+        },
+        {
+          "command": "deckPilot.openPreview",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "deckpilot@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "deckPilot.openPresentation",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "deckpilot@1"
+        },
+        {
+          "command": "deckPilot.openPreview",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "group": "deckpilot@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "deckPilot.openPresentation",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/",
+          "group": "deckpilot@1"
+        },
+        {
+          "command": "deckPilot.openPreview",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/",
+          "group": "deckpilot@2"
+        }
+      ]
     }
   },
   "scripts": {

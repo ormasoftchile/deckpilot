@@ -44,6 +44,77 @@ html, body {
 .preview-meta {
   color: var(--vscode-descriptionForeground);
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.preview-notes-toggle {
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  background: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.5rem;
+  line-height: 1.4;
+}
+.preview-notes-toggle:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+}
+/* aria-pressed reflects visibility; dim the button when notes are hidden. */
+.preview-notes-toggle[aria-pressed="false"] {
+  opacity: 0.6;
+}
+
+/* Speaker notes shown under each slide; hidden when body has .notes-hidden. */
+.preview-slide-notes {
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.75rem;
+  border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
+  background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.08));
+  border-radius: 0 4px 4px 0;
+}
+.preview-slide-notes-label {
+  display: block;
+  font-size: 0.7em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 0.25rem;
+}
+.preview-slide-notes-body {
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  color: var(--vscode-foreground);
+}
+/* Multiple presenter items (notes / cues / voice cues) stack with spacing. */
+.preview-notes-item + .preview-notes-item {
+  margin-top: 0.5rem;
+}
+.preview-slide-cues {
+  margin: 0.1rem 0 0;
+  padding-left: 1.3rem;
+  font-size: 0.9em;
+  color: var(--vscode-foreground);
+}
+.preview-slide-cues li {
+  margin: 0.15rem 0;
+}
+.preview-cue-frag {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  margin-right: 0.3rem;
+  white-space: nowrap;
+}
+.notes-hidden .preview-slide-notes {
+  display: none;
 }
 
 .preview-warnings {

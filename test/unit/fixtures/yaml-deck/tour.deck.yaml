@@ -1,0 +1,28 @@
+content: guide.md
+split: heading
+
+deck:
+  title: Widget Tour
+  theme: dark
+
+slides:
+  - id: setup
+    duration: 8s
+    cues:
+      - Walk through install
+    actions:
+      - type: terminal.run
+        cmd: npm install widget
+
+  - id: running
+    notes: Show the running app here.
+
+scenes:
+  - name: start
+    slide: widget
+  - name: demo
+    slide: running
+
+recording:
+  autoStart: false
+  format: mp4
