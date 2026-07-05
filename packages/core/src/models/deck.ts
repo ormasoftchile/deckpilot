@@ -22,6 +22,7 @@ export interface SceneDefinition {
  * Per data-model.md.
  */
 export type NavigationMethod = 'sequential' | 'jump' | 'scene-restore' | 'history-click' | 'go-back';
+export type ListFragmentMode = 'all' | 'each';
 
 /**
  * Lightweight breadcrumb DTO sent to Webview via slideChanged.
@@ -120,6 +121,8 @@ export interface DeckMetadata {
     finalDelayMs?: number;
     postActionMs?: number;
   };
+  /** Default list fragmentation mode for presentation rendering */
+  listFragmentMode?: ListFragmentMode;
   /** Additional properties */
   [key: string]: unknown;
 }
@@ -141,6 +144,8 @@ export interface Deck {
   author?: string;
   /** Ordered collection of slides */
   slides: Slide[];
+  /** Default list fragmentation mode for presentation rendering */
+  listFragmentMode?: ListFragmentMode;
   /** Zero-based index of active slide */
   currentSlideIndex: number;
   /** Additional deck-level frontmatter properties */
@@ -168,6 +173,7 @@ export function createDeck(
     title: metadata.title,
     author: metadata.author,
     slides,
+    listFragmentMode: metadata.listFragmentMode,
     currentSlideIndex: 0,
     metadata,
     state: 'active',

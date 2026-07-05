@@ -36,6 +36,8 @@ export interface SidecarDeck {
   theme?: string;
   /** Base path for resolving relative file references in the deck (mirrors DeckMetadata.basePath) */
   basePath?: string;
+  /** Default list fragmentation mode for presentation rendering */
+  listFragmentMode?: 'all' | 'each';
 }
 
 /**

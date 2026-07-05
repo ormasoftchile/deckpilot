@@ -137,6 +137,10 @@ export function mergeSidecarDeckMetadata(metadata: DeckMetadata, sidecar: Sideca
     if (sidecar.deck.theme !== undefined && merged.theme === undefined) {
       merged.theme = sidecar.deck.theme;
     }
+
+    if (sidecar.deck.listFragmentMode !== undefined && merged.listFragmentMode === undefined) {
+      merged.listFragmentMode = sidecar.deck.listFragmentMode;
+    }
   }
 
   // recording: field-by-field merge — sidecar as base, inline wins per field

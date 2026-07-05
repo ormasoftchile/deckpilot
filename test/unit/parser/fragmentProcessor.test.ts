@@ -35,6 +35,17 @@ describe('processFragments', () => {
     expect(html).to.not.contain('.fragment-each');
   });
 
+  it('fragments each list item when listFragmentMode defaults to each', () => {
+    const { html, fragmentCount } = processFragments('<ul><li>A</li><li>B</li><li>C</li></ul>', {
+      listFragmentMode: 'each',
+    });
+    expect(fragmentCount).to.equal(3);
+    expect(html).to.not.match(/<ul[^>]*class="fragment"/);
+    expect(html).to.contain('<li class="fragment" data-fragment="1" data-fragment-animation="fade">A</li>');
+    expect(html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">B</li>');
+    expect(html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">C</li>');
+  });
+
   it('honors a custom animation on .fragment-each', () => {
     const { html } = processFragments(
       '<ul><li>A <!-- .fragment-each slide-up --></li><li>B</li></ul>',

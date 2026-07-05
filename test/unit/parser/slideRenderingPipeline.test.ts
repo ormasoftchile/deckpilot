@@ -35,6 +35,16 @@ describe('slideRenderingPipeline — <!-- center --> layout', () => {
     expect(html).to.contain('class="layout-center"');
   });
 
+  describe('slideRenderingPipeline — listFragmentMode option', () => {
+    it('fragments each list item when parseSlides receives listFragmentMode: each', () => {
+      const slides = parseSlides('- A\n- B\n- C', { listFragmentMode: 'each' });
+      expect(slides[0].html).to.not.match(/<ul[^>]*class="fragment"/);
+      expect(slides[0].html).to.contain('<li class="fragment" data-fragment="1" data-fragment-animation="fade">A</li>');
+      expect(slides[0].html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">B</li>');
+      expect(slides[0].html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">C</li>');
+    });
+  });
+
   it('should preserve the inner text inside the layout-center wrapper', () => {
     const html = renderSlide('<!-- center -->\nBig idea\n<!-- /center -->');
     expect(html).to.contain('Big idea');
