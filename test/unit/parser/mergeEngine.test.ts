@@ -404,6 +404,13 @@ describe('mergeSidecarDeckMetadata', () => {
       expect(result.theme).to.equal('dark');
     });
 
+    it('applies sidecar listFragmentMode when metadata has none', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = { deck: { listFragmentMode: 'each' } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.listFragmentMode).to.equal('each');
+    });
+
     it('preserves other metadata fields unchanged', () => {
       const metadata: DeckMetadata = { author: 'Alice', basePath: '/talks' };
       const sidecar: SidecarFile = { deck: { title: 'New Title', theme: 'light' } };

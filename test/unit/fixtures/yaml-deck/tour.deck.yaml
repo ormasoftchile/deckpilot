@@ -1,9 +1,9 @@
 content: guide.md
-split: heading
 
 deck:
   title: Widget Tour
   theme: dark
+  split: heading
 
 slides:
   - id: setup

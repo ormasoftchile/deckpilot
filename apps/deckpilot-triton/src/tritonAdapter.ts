@@ -9,7 +9,7 @@ import type {
 
 /**
  * Minimal shape of the Triton module we need.
- * The full type is available via @triton/core once its package.json is created.
+ * The vendoring step pulls this from the published Triton core package.
  */
 type TritonModule = {
   renderMermaid(

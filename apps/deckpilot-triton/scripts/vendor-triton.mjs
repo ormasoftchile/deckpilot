@@ -10,7 +10,7 @@
  * its PNG path. The shim keeps the bundle self-contained without dragging in
  * native .node bindings that cannot be embedded by esbuild.
  *
- * Source: resolved from node_modules/@triton/core (when installed) or from the
+ * Source: resolved from the published npm package when installed, or from the
  * sibling triton project directly for local development.
  *
  * Usage:
@@ -25,20 +25,29 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Resolve source: prefer installed package locations, fall back to sibling project
-const appNodeModulesSource = resolve(__dirname, '..', 'node_modules', '@triton', 'core', 'dist');
-const workspaceNodeModulesSource = resolve(__dirname, '..', '..', '..', 'node_modules', '@triton', 'core', 'dist');
+// Resolve source: prefer installed package locations, fall back to sibling project.
+// Support both the published package name and the historical local alias so
+// older environments keep working.
+const installedPackageNames = [
+  ['@cristianormazabal', 'triton-core'],
+  ['@triton', 'core'],
+];
+const installedSources = installedPackageNames.flatMap(([scope, name]) => ([
+  resolve(__dirname, '..', 'node_modules', scope, name, 'dist'),
+  resolve(__dirname, '..', '..', '..', 'node_modules', scope, name, 'dist'),
+]));
 const siblingSource = resolve(__dirname, '..', '..', '..', '..', 'triton', 'packages', 'core', 'dist');
 
-const candidateSources = [appNodeModulesSource, workspaceNodeModulesSource, siblingSource];
+const candidateSources = [...installedSources, siblingSource];
 const source = candidateSources.find((candidate) => existsSync(candidate));
 
 if (!source) {
   console.error('[vendor-triton] Could not find Triton dist at:');
-  console.error('  ' + appNodeModulesSource);
-  console.error('  ' + workspaceNodeModulesSource);
+  for (const candidate of installedSources) {
+    console.error('  ' + candidate);
+  }
   console.error('  ' + siblingSource);
-  console.error('Build Triton first: cd /path/to/triton && pnpm build');
+  console.error('Install dependencies or build the sibling Triton checkout first.');
   process.exit(1);
 }
 

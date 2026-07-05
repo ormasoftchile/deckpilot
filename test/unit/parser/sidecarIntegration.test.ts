@@ -390,6 +390,19 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
       expect(deck!.metadata.title).to.equal('Sidecar Only');
       expect(deck!.metadata.theme).to.equal('light');
     });
+
+    it('sidecar listFragmentMode reaches fragment processing', async () => {
+      writeDeckMd('- A\n- B\n- C');
+      writeDeckYaml('deck:\n  listFragmentMode: each\n');
+
+      const { deck } = await parseDeck('- A\n- B\n- C', deckMdPath);
+
+      expect(deck!.metadata.listFragmentMode).to.equal('each');
+      expect(deck!.slides[0].html).to.not.match(/<ul[^>]*class="fragment"/);
+      expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="1" data-fragment-animation="fade">A</li>');
+      expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">B</li>');
+      expect(deck!.slides[0].html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">C</li>');
+    });
   });
 
   // =========================================================================
