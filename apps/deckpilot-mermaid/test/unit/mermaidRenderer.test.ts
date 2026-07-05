@@ -130,4 +130,79 @@ describe('MermaidDiagramRenderer', () => {
     assert.match(result.svg ?? '', /data-mermaid-theme="dark"/);
     assert.match((result.warnings ?? []).join(' '), /timed out/);
   });
+
+  it('preserves unicode source when falling back to the webview renderer', async () => {
+    const renderer = new MermaidDiagramRenderer({
+      timeoutMs: 10,
+      loadJSDOM: async () => createFakeJSDOMModule(),
+      loadMermaid: async () => ({
+        initialize: () => undefined,
+        parse: async () => ({ diagramType: 'flowchart-v2' }),
+        render: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return { svg: '<svg></svg>' };
+        },
+      }),
+    });
+    const result = await renderer.render(
+      'flowchart TD\n  A["Inicio 🚀"] --> B["Diseño — 日本語 Ω"]\n',
+      { language: 'mermaid' },
+      { theme: 'light' },
+    );
+
+    assert.equal(result.ok, true);
+    assert.match(result.svg ?? '', /diagram-block__mermaid-fallback/);
+    assert.match(result.svg ?? '', /data-mermaid-theme="default"/);
+    assert.match(
+      result.svg ?? '',
+      /Zmxvd2NoYXJ0IFRECiAgQVsiSW5pY2lvIPCfmoAiXSAtLT4gQlsiRGlzZcOxbyDigJQg5pel5pys6KqeIM6pIl0K/,
+    );
+  });
+
+  it('handles many diagrams sequentially without leaking global DOM state', async () => {
+    const renderIds: string[] = [];
+    const renderer = new MermaidDiagramRenderer({
+      loadJSDOM: async () => createFakeJSDOMModule(),
+      loadMermaid: async () => ({
+        initialize: () => undefined,
+        parse: async () => ({ diagramType: 'flowchart-v2' }),
+        render: async (id: string) => {
+          renderIds.push(id);
+          return { svg: `<svg data-render-id="${id}"></svg>` };
+        },
+      }),
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 24 }, (_unused, index) => renderer.render(
+        `graph TD\n  A${index} --> B${index}\n`,
+        { language: 'mermaid' },
+      )),
+    );
+
+    assert.equal(results.length, 24);
+    assert.ok(results.every((result) => result.ok));
+    assert.equal(new Set(renderIds).size, 24);
+    assert.equal('window' in globalThis, false);
+  });
+
+  it('recomputes auto theme between successive renders', async () => {
+    const initializeThemes: string[] = [];
+    const renderer = new MermaidDiagramRenderer({
+      loadJSDOM: async () => createFakeJSDOMModule(),
+      loadMermaid: async () => ({
+        initialize: (config) => {
+          initializeThemes.push(String(config.theme));
+        },
+        parse: async () => ({ diagramType: 'flowchart-v2' }),
+        render: async () => ({ svg: '<svg data-renderer="mermaid"></svg>' }),
+      }),
+    });
+
+    await renderer.render('graph TD\n  A --> B\n', { language: 'mermaid', attributes: { theme: 'auto' } }, { theme: 'dark' });
+    await renderer.render('graph TD\n  B --> C\n', { language: 'mermaid', attributes: { theme: 'auto' } }, { theme: 'light' });
+    await renderer.render('graph TD\n  C --> D\n', { language: 'mermaid', attributes: { theme: 'auto' } }, { theme: 'contrast' });
+
+    assert.deepEqual(initializeThemes, ['dark', 'default', 'neutral']);
+  });
 });

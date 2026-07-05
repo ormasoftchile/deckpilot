@@ -80,7 +80,7 @@ describe('DiagramService', () => {
       fence: {
         language: 'mermaid',
         attributes: {
-          caption: 'A <B> & "C"',
+          caption: 'A <B> & "C" 🚀 — 日本語 Ω',
         },
       },
     };
@@ -105,7 +105,7 @@ describe('DiagramService', () => {
 
     const updates = await new DiagramService(registry).resolveSlideBlocks(html);
 
-    expect(updates[0].html).to.contain('<figcaption class="diagram-block__caption">A &lt;B&gt; &amp; &quot;C&quot;</figcaption>');
+    expect(updates[0].html).to.contain('<figcaption class="diagram-block__caption">A &lt;B&gt; &amp; &quot;C&quot; 🚀 — 日本語 Ω</figcaption>');
     expect(updates[1].html).to.not.contain('<figcaption');
   });
 

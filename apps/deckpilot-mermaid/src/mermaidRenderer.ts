@@ -182,7 +182,7 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
     if (!this.mermaidPromise) {
       this.mermaidPromise = (this.dependencies.loadMermaid
         ? this.dependencies.loadMermaid()
-        : import(runtimeRequire.resolve('mermaid')).then((module) => normalizeMermaidModule(module)));
+        : import(runtimeRequire.resolve('mermaid')).then((module: Record<string, unknown>) => normalizeMermaidModule(module)));
     }
 
     return this.mermaidPromise;
