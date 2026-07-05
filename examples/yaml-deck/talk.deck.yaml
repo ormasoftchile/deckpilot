@@ -2,18 +2,21 @@
 #
 # Content lives in an untouched README.md. This manifest points at it and
 # carries ALL presentation overlays inline — no companion .deck.md needed.
-# Slides are sliced at each H1/H2 heading (`split: heading`) and overlays
+# Slides are sliced at each H1/H2 heading (`deck.split: heading`) and overlays
 # attach to them by heading slug. Level shorthands are also supported:
-#   split: heading   → H1 and H2   (default)
-#   split: h2        → only H2
-#   split: h1-h3     → H1 through H3
+#   deck:
+#     split: heading   → H1 and H2   (default)
+#   deck:
+#     split: h2        → only H2
+#   deck:
+#     split: h1-h3     → H1 through H3
 
 content: README.md
-split: heading
 
 deck:
   title: Acme CLI — Guided Tour
   theme: dark
+  split: heading
 
 # Per-slide overlays, keyed by the slide's heading slug (from README headings).
 slides:

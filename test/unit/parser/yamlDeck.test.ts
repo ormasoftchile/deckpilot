@@ -79,12 +79,39 @@ describe('parseDeck — YAML-primary deck (.deck.yaml manifest)', () => {
   it('uses the readImport hook for live (unsaved) content', async () => {
     const live = ['# Live Title', '', 'edited body'].join('\n');
     const { deck } = await parseDeck(
-      'content: guide.md\nsplit: heading\n',
+      'content: guide.md\ndeck:\n  split: heading\n',
       TOUR_PATH,
       { readImport: () => live },
     );
     expect(deck!.slides).to.have.lengthOf(1);
     expect(deck!.slides[0].content).to.contain('Live Title');
+  });
+
+  it('keeps top-level split working with a deprecation warning', async () => {
+    const { deck, warnings, error } = await parseDeck(
+      'content: guide.md\nsplit: heading\n',
+      TOUR_PATH,
+    );
+
+    expect(error).to.be.undefined;
+    expect(deck!.slides).to.have.lengthOf(4);
+    expect(warnings?.some((w) => w.includes('deprecated') && w.includes('deck.split'))).to.equal(true);
+  });
+
+  it('prefers deck.split over the deprecated top-level split', async () => {
+    const { deck, warnings, error } = await parseDeck(
+      [
+        'content: guide.md',
+        'split: marker',
+        'deck:',
+        '  split: heading',
+      ].join('\n'),
+      TOUR_PATH,
+    );
+
+    expect(error).to.be.undefined;
+    expect(deck!.slides).to.have.lengthOf(4);
+    expect(warnings?.some((w) => w.includes('deprecated') && w.includes('deck.split'))).to.equal(true);
   });
 });
 

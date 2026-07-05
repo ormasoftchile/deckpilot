@@ -112,7 +112,17 @@ async function parseMarkdownDeck(
     // Parse slides from body content. The slide-break mode comes from the
     // wrapper deck's frontmatter (source of truth, even for imported content).
     // Default is 'blank'; `slideBreak` (or `split` alias) opts into other modes.
-    const breakCfg = resolveSlideBreakConfig(mergedMetadata.slideBreak ?? mergedMetadata.split);
+    const sidecarDeck = loadedSidecar?.deck;
+    const legacySidecarBreak = loadedSidecar
+      ? readLegacyYamlSlideBreakConfig(loadedSidecar as Record<string, unknown>, sidecarWarnings)
+      : undefined;
+    const breakCfg = resolveSlideBreakConfig(
+      mergedMetadata.slideBreak ??
+      mergedMetadata.split ??
+      sidecarDeck?.slideBreak ??
+      sidecarDeck?.split ??
+      legacySidecarBreak,
+    );
     let slides = parseSlides(effectiveBody, {
       slideBreak: breakCfg.mode,
       headingLevels: breakCfg.headingLevels,
@@ -215,14 +225,28 @@ function extractDeckFrontmatter(content: string): { data: Record<string, unknown
 
 /**
  * A YAML-primary deck: the parsed `.deck.yaml` object plus the fields unique to
- * a standalone deck manifest (`content` pointer and `slideBreak`/`split` mode).
+ * a standalone deck manifest (`content` pointer plus sidecar-shaped metadata).
  * Reuses the SidecarFile shape so the existing merge engine applies overlays.
  */
 type YamlDeckManifest = SidecarFile & {
   content?: string;
-  slideBreak?: unknown;
-  split?: unknown;
 };
+
+function readLegacyYamlSlideBreakConfig(
+  source: Record<string, unknown>,
+  warnings: string[],
+): unknown {
+  const hasLegacySlideBreak = Object.prototype.hasOwnProperty.call(source, 'slideBreak');
+  const hasLegacySplit = Object.prototype.hasOwnProperty.call(source, 'split');
+
+  if (hasLegacySlideBreak || hasLegacySplit) {
+    warnings.push(
+      'Top-level `slideBreak`/`split` in `.deck.yaml` is deprecated; move it under `deck:` as `deck.slideBreak` or `deck.split`.',
+    );
+  }
+
+  return source.slideBreak ?? source.split;
+}
 
 /**
  * Parse a standalone `.deck.yaml` deck manifest. It references untouched
@@ -278,8 +302,18 @@ async function parseYamlDeck(
     return { error: `[content] could not import '${importPath}': ${msg}` };
   }
 
+  const manifestWarnings: string[] = [];
+  const legacyManifestBreak = readLegacyYamlSlideBreakConfig(
+    manifest as Record<string, unknown>,
+    manifestWarnings,
+  );
+
   // Parse slides using the manifest's slide-break mode (default 'blank').
-  const breakCfg = resolveSlideBreakConfig(manifest.slideBreak ?? manifest.split);
+  const breakCfg = resolveSlideBreakConfig(
+    manifest.deck?.slideBreak ??
+    manifest.deck?.split ??
+    legacyManifestBreak,
+  );
   let slides = parseSlides(body, {
     slideBreak: breakCfg.mode,
     headingLevels: breakCfg.headingLevels,
@@ -327,6 +361,9 @@ async function parseYamlDeck(
   }
 
   const warnings = getLastParseWarnings();
+  for (const warning of manifestWarnings) {
+    warnings.push(warning);
+  }
   for (const err of sceneErrors) {
     warnings.push(`[scenes] ${err}`);
   }

@@ -36,6 +36,10 @@ export interface SidecarDeck {
   theme?: string;
   /** Base path for resolving relative file references in the deck (mirrors DeckMetadata.basePath) */
   basePath?: string;
+  /** Slide-break mode for deck content, kept under `deck:` with the rest of deck-wide metadata */
+  slideBreak?: unknown;
+  /** Legacy alias for `slideBreak` */
+  split?: unknown;
   /** Default list fragmentation mode for presentation rendering */
   listFragmentMode?: 'all' | 'each';
 }
