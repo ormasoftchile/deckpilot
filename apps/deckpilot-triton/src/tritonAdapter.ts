@@ -52,6 +52,7 @@ const TRITON_UNSUPPORTED_MERMAID_TYPES = new Set([
  */
 export class TritonDiagramRenderer implements IDiagramRenderer {
   readonly id = 'triton';
+  readonly priority = 5;
   readonly supportedFenceLanguages = ['mermaid'] as const;
 
   private modulePromise: Promise<TritonModule> | undefined;

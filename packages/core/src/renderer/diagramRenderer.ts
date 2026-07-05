@@ -30,6 +30,13 @@ export interface IDiagramRenderer {
   /** Fence language tags this renderer handles, e.g. ["mermaid", "poster"]. */
   readonly supportedFenceLanguages: readonly string[];
   /**
+   * Renderer selection priority for a matching fence language.
+   * Higher values win; omitted values default to 0.
+   * The registry uses this to select the highest-priority renderer for each
+   * supported fence language.
+   */
+  readonly priority?: number;
+  /**
    * Return true if this renderer can handle the given source/fence pair.
    * If omitted, the registry treats the renderer as eligible for any matching
    * supportedFenceLanguages entry.

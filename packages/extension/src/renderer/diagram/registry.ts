@@ -69,12 +69,19 @@ export class DiagramRendererRegistry {
   }
 
   private findCandidateRenderers(source: string, fence: DiagramFenceInfo): IDiagramRenderer[] {
-    return this.renderers.filter((renderer) => {
-      if (!renderer.supportedFenceLanguages.includes(fence.language)) {
-        return false;
-      }
+    return this.renderers
+      .map((renderer, index) => ({ renderer, index }))
+      .filter(({ renderer }) => {
+        if (!renderer.supportedFenceLanguages.includes(fence.language)) {
+          return false;
+        }
 
-      return renderer.canRender ? renderer.canRender(source, fence) : true;
-    });
+        return renderer.canRender ? renderer.canRender(source, fence) : true;
+      })
+      .sort((left, right) => {
+        const priorityDelta = (right.renderer.priority ?? 0) - (left.renderer.priority ?? 0);
+        return priorityDelta !== 0 ? priorityDelta : left.index - right.index;
+      })
+      .map(({ renderer }) => renderer);
   }
 }
