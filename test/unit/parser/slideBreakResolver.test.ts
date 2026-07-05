@@ -304,10 +304,10 @@ describe('resolveSlideBreakMode', () => {
     expect(resolveSlideBreakMode(' Heading ')).to.equal('heading');
   });
 
-  it('falls back to blank for unknown or missing values', () => {
-    expect(resolveSlideBreakMode(undefined)).to.equal('blank');
-    expect(resolveSlideBreakMode('nonsense')).to.equal('blank');
-    expect(resolveSlideBreakMode(42)).to.equal('blank');
+  it('falls back to heading for unknown or missing values', () => {
+    expect(resolveSlideBreakMode(undefined)).to.equal('heading');
+    expect(resolveSlideBreakMode('nonsense')).to.equal('heading');
+    expect(resolveSlideBreakMode(42)).to.equal('heading');
   });
 });
 
@@ -332,10 +332,10 @@ describe('resolveSlideBreakConfig', () => {
     expect(resolveSlideBreakConfig('h3-h1')).to.deep.equal({ mode: 'heading', headingLevels: [1, 2, 3] });
   });
 
-  it('falls back to blank for unknown values', () => {
-    expect(resolveSlideBreakConfig('h7')).to.deep.equal({ mode: 'blank', headingLevels: [] });
-    expect(resolveSlideBreakConfig('nope')).to.deep.equal({ mode: 'blank', headingLevels: [] });
-    expect(resolveSlideBreakConfig(undefined)).to.deep.equal({ mode: 'blank', headingLevels: [] });
+  it('falls back to heading for unknown values', () => {
+    expect(resolveSlideBreakConfig('h7')).to.deep.equal({ mode: 'heading', headingLevels: [1, 2] });
+    expect(resolveSlideBreakConfig('nope')).to.deep.equal({ mode: 'heading', headingLevels: [1, 2] });
+    expect(resolveSlideBreakConfig(undefined)).to.deep.equal({ mode: 'heading', headingLevels: [1, 2] });
   });
 });
 

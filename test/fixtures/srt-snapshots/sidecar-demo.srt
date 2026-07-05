@@ -4,10 +4,10 @@ Welcome the audience and explain the dual
 authoring model
 
 2
-00:00:09,600 --> 00:00:12,100
+00:00:12,100 --> 00:00:14,600
 Walk through the dependency installation
 output
 
 3
-00:00:25,100 --> 00:00:27,600
+00:00:30,100 --> 00:00:32,600
 Show the application starting up

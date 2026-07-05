@@ -3,10 +3,10 @@
 Introduce the browser panel feature
 
 2
-00:00:18,500 --> 00:00:23,700
+00:00:21,000 --> 00:00:26,200
 Show how to navigate the panel to a new
 URL without reopening it
 
 3
-00:00:38,700 --> 00:00:41,200
+00:00:43,700 --> 00:00:46,200
 Demonstrate local server support

@@ -1,14 +1,14 @@
 1
-00:01:49,500 --> 00:01:52,300
+00:01:52,000 --> 00:01:54,800
 Introduce how executable talk handles
 speaker context.
 
 2
-00:01:57,300 --> 00:02:01,700
+00:01:59,800 --> 00:02:04,200
 Voice cues sync the transcript to the
 fragment that just appeared.
 
 3
-00:02:01,700 --> 00:02:06,500
+00:02:04,200 --> 00:02:09,000
 The recording system uses these to align
 SRT captions to slide state.

@@ -111,7 +111,7 @@ async function parseMarkdownDeck(
 
     // Parse slides from body content. The slide-break mode comes from the
     // wrapper deck's frontmatter (source of truth, even for imported content).
-    // Default is 'blank'; `slideBreak` (or `split` alias) opts into other modes.
+    // Default is 'heading' (h1-h2); `slideBreak` (or `split` alias) can override.
     const breakCfg = resolveSlideBreakConfig(mergedMetadata.slideBreak ?? mergedMetadata.split);
     let slides = parseSlides(effectiveBody, {
       slideBreak: breakCfg.mode,
@@ -278,7 +278,7 @@ async function parseYamlDeck(
     return { error: `[content] could not import '${importPath}': ${msg}` };
   }
 
-  // Parse slides using the manifest's slide-break mode (default 'blank').
+  // Parse slides using the manifest's slide-break mode (default 'heading' h1-h2).
   const breakCfg = resolveSlideBreakConfig(manifest.slideBreak ?? manifest.split);
   let slides = parseSlides(body, {
     slideBreak: breakCfg.mode,

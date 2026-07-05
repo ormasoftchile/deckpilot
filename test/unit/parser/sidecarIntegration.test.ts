@@ -57,6 +57,7 @@ function buildFullSidecar(opts: {
     'deck:',
     '  title: Integration Test Deck',
     '  theme: dark',
+    '  slideBreak: blank',
     'slides:',
     '  - id: intro',
     '    cues:',
@@ -241,19 +242,23 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
 
   describe('sidecar absent — .deck.md alone', () => {
     it('parseDeck returns a valid Deck with no error', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      // Add explicit frontmatter to use blank mode for this test
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
       // No .deck.yaml written
 
-      const result = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const result = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       expect(result.error).to.be.undefined;
       expect(result.deck).to.not.be.undefined;
     });
 
     it('all three slides are present', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      // Add explicit frontmatter to use blank mode for this test
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       expect(deck!.slides).to.have.length(3);
     });
@@ -271,9 +276,11 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
     });
 
     it('explicit <!-- id: --> IDs are preserved without a sidecar', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      // Add explicit frontmatter to use blank mode for this test
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       expect(deck!.slides[0].id).to.equal('intro');
       expect(deck!.slides[1].id).to.equal('setup');
@@ -281,9 +288,11 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
     });
 
     it('no cues, actions, or checkpoints on any slide', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      // Add explicit frontmatter to use blank mode for this test
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       for (const slide of deck!.slides) {
         expect(slide.cues).to.be.undefined;
@@ -502,29 +511,32 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
 
   describe('malformed sidecar YAML', () => {
     it('parseDeck completes without throwing', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
       writeDeckYaml('deck:\n  title: Broken\n  theme: [unclosed');
 
-      const result = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const result = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       expect(result.error).to.be.undefined;
       expect(result.deck).to.not.be.undefined;
     });
 
     it('deck returns all three slides from the .deck.md', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
       writeDeckYaml('deck:\n  title: Broken\n  theme: [unclosed');
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       expect(deck!.slides).to.have.length(3);
     });
 
     it('no sidecar data is applied to any slide', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
       writeDeckYaml('slides:\n  - id: intro\n    cues:\n      - [invalid yaml\n');
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       for (const slide of deck!.slides) {
         expect(slide.cues).to.be.undefined;
@@ -534,10 +546,11 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
     });
 
     it('deck metadata is not polluted from malformed sidecar', async () => {
-      writeDeckMd(THREE_SLIDE_MD);
+      const deckWithBlankDefault = `---\nsplit: blank\n---\n${THREE_SLIDE_MD}`;
+      writeDeckMd(deckWithBlankDefault);
       writeDeckYaml('deck: [not: valid: yaml');
 
-      const { deck } = await parseDeck(THREE_SLIDE_MD, deckMdPath);
+      const { deck } = await parseDeck(deckWithBlankDefault, deckMdPath);
 
       // title and theme should not be set from the broken sidecar
       expect(deck!.metadata.title).to.be.undefined;
