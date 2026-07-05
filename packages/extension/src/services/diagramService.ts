@@ -25,16 +25,16 @@ export class DiagramService {
       const attrs = match[1] ?? '';
       const body = match[2] ?? '';
       const id = readAttr(attrs, 'data-render-id');
-      const language = readAttr(attrs, 'data-diagram-language');
+      const language = decodeMaybe(readAttr(attrs, 'data-diagram-language'));
       const source = decodeHtml(extractCodeSource(body));
 
       if (!id || !language || !source) {
         continue;
       }
 
-      const caption = readAttr(attrs, 'data-diagram-caption');
-      const theme = readAttr(attrs, 'data-diagram-theme');
-      const workspaceRoot = readAttr(attrs, 'data-diagram-workspace-root');
+      const caption = decodeMaybe(readAttr(attrs, 'data-diagram-caption'));
+      const theme = decodeMaybe(readAttr(attrs, 'data-diagram-theme'));
+      const workspaceRoot = decodeMaybe(readAttr(attrs, 'data-diagram-workspace-root'));
       blocks.push({
         id,
         slideIndex: 0,
@@ -70,7 +70,7 @@ export class DiagramService {
         const captionHtml = caption
           ? `<figcaption class="diagram-block__caption">${escapeHtml(caption)}</figcaption>`
           : '';
-        return `<figure class="diagram-block" data-render-id="${block.id}" data-diagram-renderer="${result.rendererId}" data-diagram-language="${block.fence.language}">\
+        return `<figure class="${buildDiagramClasses(block.fence.language)}" data-render-id="${block.id}" data-diagram-renderer="${result.rendererId}" data-diagram-language="${block.fence.language}">\
 <div class="diagram-block__viewport">${result.svg}</div>${captionHtml}</figure>`;
       }
 
@@ -142,6 +142,10 @@ function decodeHtml(text: string): string {
     .replace(/&amp;/g, '&');
 }
 
+function decodeMaybe(text?: string): string | undefined {
+  return text ? decodeHtml(text) : undefined;
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -151,5 +155,15 @@ function escapeHtml(text: string): string {
 }
 
 function escapeAttr(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildDiagramClasses(language: string): string {
+  const suffix = language.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return suffix ? `diagram-block diagram-block--${suffix}` : 'diagram-block';
 }

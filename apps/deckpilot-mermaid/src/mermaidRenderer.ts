@@ -10,7 +10,7 @@ import {
   MERMAID_RENDERER_PRIORITY,
   MERMAID_SUPPORTED_FENCE_LANGUAGES,
 } from './capabilities';
-import { resolveMermaidTheme, type MermaidTheme } from './theme';
+import { resolveMermaidTheme, type MermaidThemeConfig } from './theme';
 
 const runtimeRequire = createRequire(__filename);
 const MERMAID_RENDER_TIMEOUT_MS = 2_000;
@@ -99,7 +99,7 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
   private beginRender(
     source: string,
     fence: DiagramFenceInfo,
-    theme: MermaidTheme,
+    theme: MermaidThemeConfig,
   ): {
     result: Promise<DiagramRenderResult>;
     settled: Promise<void>;
@@ -119,7 +119,7 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
   private async renderWithMermaid(
     source: string,
     _fence: DiagramFenceInfo,
-    theme: MermaidTheme,
+    theme: MermaidThemeConfig,
   ): Promise<DiagramRenderResult> {
     const environment = await this.createDomEnvironment();
 
@@ -129,7 +129,9 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
         startOnLoad: false,
         securityLevel: 'strict',
         suppressErrorRendering: true,
-        ...(theme !== 'auto' ? { theme } : {}),
+        theme: theme.theme,
+        darkMode: theme.darkMode,
+        themeVariables: theme.themeVariables,
       });
 
       const syntaxError = await this.validateSource(mermaid, source);
@@ -306,13 +308,13 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
 
   private buildFallbackResult(
     source: string,
-    theme: MermaidTheme,
+    theme: MermaidThemeConfig,
     reason: string,
   ): DiagramRenderResult {
     return {
       ok: true,
       format: 'svg',
-      svg: `<div class="diagram-block__mermaid-fallback" data-mermaid-source="${escapeAttr(Buffer.from(source, 'utf8').toString('base64'))}" data-mermaid-theme="${escapeAttr(theme)}"><p>Mermaid diagram (will render in webview if offline rendering failed)</p></div>`,
+      svg: `<div class="diagram-block__mermaid-fallback" data-mermaid-source="${escapeAttr(Buffer.from(source, 'utf8').toString('base64'))}" data-mermaid-theme="${escapeAttr(theme.theme)}"><p>Mermaid diagram (will render in webview if offline rendering failed)</p></div>`,
       warnings: [reason],
       rendererId: this.id,
     };
@@ -322,13 +324,8 @@ export class MermaidDiagramRenderer implements IDiagramRenderer {
 function resolveRequestedTheme(
   fence: DiagramFenceInfo,
   options?: DiagramRenderOptions,
-): MermaidTheme {
-  const requestedTheme = fence.attributes?.theme;
-  if (requestedTheme && requestedTheme !== 'auto') {
-    return resolveMermaidTheme(requestedTheme);
-  }
-
-  return resolveMermaidTheme(options?.theme ?? requestedTheme);
+): MermaidThemeConfig {
+  return resolveMermaidTheme(fence, options?.theme);
 }
 
 function normalizeMermaidModule(module: Record<string, unknown>): MermaidModule {

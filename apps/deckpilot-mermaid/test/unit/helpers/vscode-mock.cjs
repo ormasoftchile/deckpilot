@@ -6,6 +6,15 @@ const vscodeMock = {
   extensions: {
     getExtension: () => undefined,
   },
+  window: {
+    activeColorTheme: { kind: 2 },
+  },
+  ColorThemeKind: {
+    Light: 1,
+    Dark: 2,
+    HighContrast: 3,
+    HighContrastLight: 4,
+  },
 };
 
 const originalResolve = Module._resolveFilename.bind(Module);

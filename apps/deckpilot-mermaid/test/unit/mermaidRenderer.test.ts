@@ -100,6 +100,8 @@ describe('MermaidDiagramRenderer', () => {
 
     assert.equal(result.ok, true);
     assert.equal(initializeConfig?.theme, 'dark');
+    assert.equal(initializeConfig?.darkMode, true);
+    assert.equal((initializeConfig?.themeVariables as Record<string, string>)?.primaryColor, '#1e1e1e');
   });
 
   it('returns the webview fallback when native render times out', async () => {

@@ -2072,13 +2072,14 @@ body.theme-light #slide-content .diagram-block {
 }
 
 /* Caption */
-#slide-content .diagram-block__caption {
+#slide-content .diagram-block__caption,
+#slide-content .diagram-block--mermaid figcaption {
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.9em;
   line-height: 1.4;
-  color: var(--vscode-descriptionForeground, var(--fg-color, #aaa));
+  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground, var(--fg-color, #aaa)));
   margin: 0;
-  padding: 0 1.25rem 1rem;
+  padding: 0.5em 0;
 }
 
 /* Loading state */

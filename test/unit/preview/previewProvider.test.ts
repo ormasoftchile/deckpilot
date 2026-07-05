@@ -53,7 +53,7 @@ describe('PreviewProvider', () => {
       type: 'renderBlockUpdate',
       payload: {
         blockId: 'diagram-0-0',
-        html: '<figure class="diagram-block" data-render-id="diagram-0-0" data-diagram-renderer="preview-renderer" data-diagram-language="mermaid"><div class="diagram-block__viewport"><svg><text>preview</text></svg></div></figure>',
+        html: '<figure class="diagram-block diagram-block--mermaid" data-render-id="diagram-0-0" data-diagram-renderer="preview-renderer" data-diagram-language="mermaid"><div class="diagram-block__viewport"><svg><text>preview</text></svg></div></figure>',
         status: 'success',
       },
     });

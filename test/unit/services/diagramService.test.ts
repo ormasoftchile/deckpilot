@@ -53,12 +53,60 @@ describe('DiagramService', () => {
 
     expect(updates).to.deep.equal([{
       blockId: 'diagram-0-0',
-      html: '<figure class="diagram-block" data-render-id="diagram-0-0" data-diagram-renderer="test-renderer" data-diagram-language="mermaid"><div class="diagram-block__viewport"><svg><text>ok</text></svg></div><figcaption class="diagram-block__caption">Flow</figcaption></figure>',
+      html: '<figure class="diagram-block diagram-block--mermaid" data-render-id="diagram-0-0" data-diagram-renderer="test-renderer" data-diagram-language="mermaid"><div class="diagram-block__viewport"><svg><text>ok</text></svg></div><figcaption class="diagram-block__caption">Flow</figcaption></figure>',
     }]);
     expect(received.source).to.equal('graph TD\n  A --> B & C\n');
     expect(received.fence?.attributes?.caption).to.equal('Flow');
     expect(received.workspaceRoot).to.equal('/workspace/demo');
     expect(received.theme).to.equal('dark');
+  });
+
+  it('escapes caption text and omits empty captions', async () => {
+    const registry = new DiagramRendererRegistry();
+    const renderer: IDiagramRenderer = {
+      id: 'test-renderer',
+      supportedFenceLanguages: ['mermaid'],
+      render: async () => ({
+        ok: true,
+        format: 'svg',
+        svg: '<svg><text>ok</text></svg>',
+        rendererId: 'test-renderer',
+      }),
+    };
+    registry.register(renderer);
+
+    const specialCaptionBlock: DiagramBlockRef = {
+      ...makeBlock(),
+      fence: {
+        language: 'mermaid',
+        attributes: {
+          caption: 'A <B> & "C"',
+        },
+      },
+    };
+    const emptyCaptionBlock: DiagramBlockRef = {
+      ...makeBlock(),
+      id: 'diagram-0-1',
+      fence: {
+        language: 'mermaid',
+        attributes: {
+          caption: '   ',
+        },
+      },
+    };
+
+    const html = annotateDiagramPlaceholders(
+      injectDiagramPlaceholders(
+        '<!--DIAGRAM:diagram-0-0-->\n<!--DIAGRAM:diagram-0-1-->',
+        [specialCaptionBlock, emptyCaptionBlock],
+      ),
+      '/workspace/demo',
+    );
+
+    const updates = await new DiagramService(registry).resolveSlideBlocks(html);
+
+    expect(updates[0].html).to.contain('<figcaption class="diagram-block__caption">A &lt;B&gt; &amp; &quot;C&quot;</figcaption>');
+    expect(updates[1].html).to.not.contain('<figcaption');
   });
 
   it('returns an error block when no renderer is registered', async () => {
