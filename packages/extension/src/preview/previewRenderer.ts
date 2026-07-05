@@ -42,7 +42,7 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${opts.cspSource} 'unsafe-inline'; script-src 'nonce-${opts.nonce}'; img-src ${opts.cspSource} https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${opts.cspSource} 'unsafe-inline'; script-src 'nonce-${opts.nonce}' https://cdn.jsdelivr.net; img-src ${opts.cspSource} https: data:;">
   <link href="${opts.cssUri}" rel="stylesheet">
   <title>Preview: ${title}</title>
 </head>
@@ -58,9 +58,15 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
   <main class="preview-slides">
     ${slidesHtml}
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
   <script nonce="${opts.nonce}">
     (function () {
       var vscode = acquireVsCodeApi();
+
+      // Initialize mermaid for client-side rendering of diagrams
+      if (typeof mermaid !== 'undefined') {
+        mermaid.contentLoaded();
+      }
 
       // Speaker-notes visibility toggle (persisted across live-preview refreshes).
       var notesToggle = document.getElementById('notes-toggle');
@@ -127,9 +133,38 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
           if (next) {
             next.setAttribute('data-render-id', msg.payload.blockId);
             block.replaceWith(next);
+            renderFallbackMermaidDiagrams();
           }
         }
       });
+
+      // Render mermaid fallback diagrams client-side
+      function renderFallbackMermaidDiagrams() {
+        if (typeof mermaid === 'undefined') return;
+        var fallbacks = document.querySelectorAll('.diagram-block__mermaid-fallback[data-mermaid-source]');
+        fallbacks.forEach(function (el) {
+          try {
+            var encoded = el.getAttribute('data-mermaid-source');
+            var theme = el.getAttribute('data-mermaid-theme') || 'auto';
+            if (!encoded) return;
+            var source = atob(encoded);
+            var id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+            var svg = document.createElement('div');
+            svg.className = 'mermaid';
+            svg.setAttribute('data-theme', theme);
+            svg.textContent = source;
+            el.parentElement.replaceChild(svg, el);
+          } catch (err) {
+            console.error('Failed to render mermaid fallback:', err);
+          }
+        });
+        if (typeof mermaid !== 'undefined' && mermaid.contentLoaded) {
+          mermaid.contentLoaded();
+        }
+      }
+
+      // Initial render of any fallback diagrams on load
+      setTimeout(function () { renderFallbackMermaidDiagrams(); }, 100);
     })();
   </script>
 </body>
