@@ -38,6 +38,8 @@ export interface SidecarDeck {
   basePath?: string;
   /** Default list fragmentation mode for presentation rendering */
   listFragmentMode?: 'all' | 'each';
+  /** Slide break mode: 'blank', 'marker', 'heading', 'h1', 'h2', etc. */
+  slideBreak?: string;
 }
 
 /**

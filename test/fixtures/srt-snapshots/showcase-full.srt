@@ -1,4 +1,4 @@
 1
-00:01:57,000 --> 00:01:59,800
+00:02:17,000 --> 00:02:19,800
 Introduce how executable talk handles
 speaker context.

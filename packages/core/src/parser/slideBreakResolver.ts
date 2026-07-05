@@ -108,11 +108,11 @@ const DEFAULT_HEADING_LEVELS = [1, 2];
  *
  * Accepted forms (case-insensitive):
  *   - 'marker'            → marker mode
- *   - 'blank'             → blank mode (default)
- *   - 'heading'           → heading mode, levels [1, 2]
+ *   - 'blank'             → blank mode
+ *   - 'heading'           → heading mode, levels [1, 2] (default)
  *   - 'hN'  (e.g. 'h2')   → heading mode, split at exactly level N
  *   - 'hN-hM' (e.g. 'h1-h3', 'h2-3') → heading mode, levels N..M inclusive
- *   - anything else / undefined → blank mode
+ *   - anything else / undefined → heading mode
  */
 export function resolveSlideBreakConfig(raw: unknown): SlideBreakConfig {
   if (typeof raw === 'string') {
@@ -141,7 +141,7 @@ export function resolveSlideBreakConfig(raw: unknown): SlideBreakConfig {
       return { mode: 'heading', headingLevels: levels };
     }
   }
-  return { mode: 'blank', headingLevels: [] };
+  return { mode: 'heading', headingLevels: [...DEFAULT_HEADING_LEVELS] };
 }
 
 /**
