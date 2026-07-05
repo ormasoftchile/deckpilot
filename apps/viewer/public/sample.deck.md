@@ -67,7 +67,12 @@ Then this one.
 
 Finally this one — use the arrow keys to step through.
 
-> A bullet list counts as a single block, so it reveals in one step.
+A bullet list normally reveals in one step, but `<!-- .fragment-each -->`
+makes each item step on its own:
+
+- One <!-- .fragment-each -->
+- Two
+- Three
 
 ---
 

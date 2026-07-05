@@ -21,6 +21,48 @@ describe('processFragments', () => {
     expect(html).to.not.match(/<li[^>]*class="fragment"/);
   });
 
+  it('fragments each list item when the list has <!-- .fragment-each -->', () => {
+    const { html, fragmentCount } = processFragments(
+      '<ul><li>A <!-- .fragment-each --></li><li>B</li><li>C</li></ul>',
+    );
+    expect(fragmentCount).to.equal(3);
+    // the list itself is NOT a fragment
+    expect(html).to.not.match(/<ul[^>]*class="fragment"/);
+    expect(html).to.contain('<li class="fragment" data-fragment="1" data-fragment-animation="fade">A</li>');
+    expect(html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">B</li>');
+    expect(html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">C</li>');
+    // the marker comment is consumed
+    expect(html).to.not.contain('.fragment-each');
+  });
+
+  it('honors a custom animation on .fragment-each', () => {
+    const { html } = processFragments(
+      '<ul><li>A <!-- .fragment-each slide-up --></li><li>B</li></ul>',
+    );
+    expect(html).to.contain('data-fragment-animation="slide-up"');
+  });
+
+  it('fragments only the items marked with <!-- .fragment -->', () => {
+    const { html, fragmentCount } = processFragments(
+      '<ul><li>A <!-- .fragment --></li><li>B <!-- .fragment --></li><li>C</li></ul>',
+    );
+    expect(fragmentCount).to.equal(2);
+    expect(html).to.not.match(/<ul[^>]*class="fragment"/);
+    expect(html).to.match(/<li class="fragment"[^>]*>A\s*<\/li>/);
+    expect(html).to.match(/<li class="fragment"[^>]*>B\s*<\/li>/);
+    expect(html).to.contain('<li>C</li>');
+  });
+
+  it('numbers list-item fragments in document order after a heading', () => {
+    const { html, fragmentCount } = processFragments(
+      '<h2>Title</h2><ul><li>A<!-- .fragment-each --></li><li>B</li></ul>',
+    );
+    expect(fragmentCount).to.equal(3);
+    expect(html).to.contain('<h2 class="fragment" data-fragment="1"');
+    expect(html).to.contain('<li class="fragment" data-fragment="2" data-fragment-animation="fade">A</li>');
+    expect(html).to.contain('<li class="fragment" data-fragment="3" data-fragment-animation="fade">B</li>');
+  });
+
   it('preserves explicit fragment animation names', () => {
     const { html } = processFragments('<p>Body <!-- .fragment slide-up --></p>');
     expect(html).to.contain('data-fragment-animation="slide-up"');

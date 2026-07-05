@@ -73,6 +73,16 @@ Prints a greeting.
 
 By default, **each block-level element on a slide reveals one step at a time** as the presenter presses `→`. Use `<!-- group -->` to reveal multiple blocks together. There is no opt-in marker — fragments are the default.
 
+A **bullet/numbered list reveals in one step** (the list is a single block). To make each item reveal on its own step, add `<!-- .fragment-each -->` anywhere in the list:
+
+```markdown
+- First <!-- .fragment-each -->
+- Then
+- Finally
+```
+
+For finer control, put `<!-- .fragment -->` on individual items to fragment only those. Both accept an optional animation name, e.g. `<!-- .fragment-each slide-up -->`.
+
 ## Speaker notes
 
 Use HTML comments at the bottom of a slide. They never render on the slide, but appear in the presenter view.

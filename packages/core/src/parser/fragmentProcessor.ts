@@ -94,7 +94,68 @@ function tagRenderBlocksWithComment(seg: string): string {
   return seg;
 }
 
+/**
+ * `<!-- .fragment-each -->` placed anywhere inside a list opts the WHOLE list
+ * into per-item fragmentation: every `<li>` becomes its own reveal step and the
+ * list itself is not fragmented as a unit. Opt-in — lists without the marker
+ * keep the default "list reveals in one step" behavior.
+ */
+function tagFragmentEachLists(seg: string): string {
+  return seg.replace(
+    /<(ul|ol)\b([^>]*)>([\s\S]*?)<\/\1>/g,
+    (match: string, tag: string, attrs: string, inner: string) => {
+      const marker = inner.match(/<!--\s*\.fragment-each(?:\s+([\w-]+))?\s*-->/);
+      if (!marker) {
+        return match;
+      }
+      const animation = marker[1] ?? 'fade';
+      let newInner = inner.replace(/\s*<!--\s*\.fragment-each(?:\s+[\w-]+)?\s*-->/g, '');
+      newInner = newInner.replace(
+        /(<li\b)(?![^>]*__frag)(?![^>]*data-no-fragment)([^>]*>)/g,
+        (_m, start: string, rest: string) => `${start}${rest.slice(0, -1)} __frag="${animation}">`,
+      );
+      const newAttrs = /data-no-fragment/.test(attrs) ? attrs : `${attrs} data-no-fragment`;
+      return `<${tag}${newAttrs}>${newInner}</${tag}>`;
+    },
+  );
+}
+
+/**
+ * `<!-- .fragment -->` on an individual `<li>` makes just that item a fragment
+ * step (granular opt-in).
+ */
+function tagListItemsWithComment(seg: string): string {
+  const inside =
+    /(<li\b)(?![^>]*__frag)([^>]*>)((?:(?!<\/li>)[\s\S])*?)<!--\s*\.fragment(?:\s+([\w-]+))?\s*-->((?:(?!<\/li>)[\s\S])*?<\/li>)/g;
+  return seg.replace(
+    inside,
+    (_m, start: string, attrsAndClose: string, before: string, animation: string | undefined, after: string) =>
+      `${start}${attrsAndClose.slice(0, -1)} __frag="${animation ?? 'fade'}">${before}${after}`,
+  );
+}
+
+/**
+ * When a list contains individually-fragmented `<li>` items, mark the list
+ * itself `data-no-fragment` so it doesn't also auto-fragment as a whole unit.
+ */
+function suppressListsWithFragmentedItems(seg: string): string {
+  return seg.replace(
+    /<(ul|ol)\b([^>]*)>([\s\S]*?)<\/\1>/g,
+    (match: string, tag: string, attrs: string, inner: string) => {
+      if (!/<li\b[^>]*__frag/.test(inner) || /data-no-fragment/.test(attrs)) {
+        return match;
+      }
+      return `<${tag}${attrs} data-no-fragment>${inner}</${tag}>`;
+    },
+  );
+}
+
 function tagExplicitElements(seg: string): string {
+  // List-item fragmentation (opt-in) runs first so the per-item markers are
+  // consumed before the whole-list `<ul>/<ol>` comment tagging below.
+  seg = tagFragmentEachLists(seg);
+  seg = tagListItemsWithComment(seg);
+  seg = suppressListsWithFragmentedItems(seg);
   for (const heading of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']) {
     seg = tagSimpleElementWithComment(seg, heading);
   }
@@ -189,7 +250,7 @@ export function processFragments(html: string): { html: string; fragmentCount: n
 
   let fragmentIndex = 0;
   const result = tagged.replace(
-    /(<(?:p|ul|ol|h[1-6]|blockquote|table|div|pre|details|figure)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
+    /(<(?:p|ul|ol|li|h[1-6]|blockquote|table|div|pre|details|figure)\b[^>]*?) __frag="([\w-]+)"([^>]*>)/g,
     (_m, pre: string, animation: string, post: string) => {
       fragmentIndex++;
       let withClass: string;
