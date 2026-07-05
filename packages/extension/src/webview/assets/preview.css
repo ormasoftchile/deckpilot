@@ -413,3 +413,18 @@ body.theme-light .preview-slide-body .diagram-block {
   padding: 0.4rem;
   font-size: 0.7rem;
 }
+
+/* Blockquotes */
+.preview-slide-body blockquote {
+  border-left: 4px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1rem 1.5rem;
+  margin: 1.25rem 0;
+  border-radius: 4px;
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}
+
+body.theme-light .preview-slide-body blockquote {
+  background-color: rgba(0, 0, 0, 0.04);
+}
