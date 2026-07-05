@@ -70,7 +70,7 @@ export class DiagramRendererRegistry {
 
   private findCandidateRenderers(source: string, fence: DiagramFenceInfo): IDiagramRenderer[] {
     return this.renderers.filter((renderer) => {
-      if (!(renderer.supportedFenceLanguages as readonly string[]).includes(fence.language)) {
+      if (!renderer.supportedFenceLanguages.includes(fence.language)) {
         return false;
       }
 
