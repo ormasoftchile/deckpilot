@@ -21,8 +21,9 @@ export function Landing({ recent, onOpen }: LandingProps): JSX.Element {
       <header className="dp-landing-hero">
         <h1>Deckpilot Viewer</h1>
         <p>
-          Read-only browser viewer for <code>.deck.md</code> presentations. Paste a public URL to
-          render a deck — no install, no execution, no auth.
+          Read-only browser viewer for <code>.deck.md</code> presentations — and any plain
+          Markdown file (a README, docs page, etc.). Paste a public URL to render it as slides —
+          no install, no execution, no auth.
         </p>
       </header>
 
@@ -44,6 +45,11 @@ export function Landing({ recent, onOpen }: LandingProps): JSX.Element {
         </div>
         <p className="dp-landing-hint">
           Supports public HTTPS URLs (GitHub raw, Azure Blob, GitHub Pages, generic static hosting).
+        </p>
+        <p className="dp-landing-hint">
+          Slides split on blank lines by default. Add <code>&amp;split=heading</code> to slice a
+          Markdown file at its headings (also <code>split=h2</code>, <code>split=h1-h3</code>, or
+          <code>split=marker</code>).
         </p>
       </form>
 

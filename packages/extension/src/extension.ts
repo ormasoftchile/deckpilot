@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Conductor } from './conductor';
-import { parseDeck } from '@deckpilot/core/parser';
+import { parseDeck, readDeckContentImport } from '@deckpilot/core/parser';
 import { registerAllExecutors } from './actions';
 import { ActionCompletionProvider } from './providers/actionCompletionProvider';
 import { ActionHoverProvider } from './providers/actionHoverProvider';
@@ -14,7 +14,6 @@ import {
     maybeOfferAuthoringSkillsInstall
 } from './commands/installAuthoringSkills';
 import { PreviewProvider } from './preview';
-import { matter } from '@deckpilot/core/parser/frontmatter';
 import type { DeckpilotDiagramAPI, IDiagramRenderer } from '@deckpilot/core/renderer/diagramRenderer';
 import { diagramLog, initializeDiagramLogger } from './utils/diagramLogger';
 
@@ -25,10 +24,11 @@ let previewProvider: PreviewProvider | undefined;
  * Resolves a deck URI from the active editor.
  *
  * - `.deck.md` → returned as-is.
- * - `.deck.yaml` sidecar → paired `.deck.md` if it exists on disk.
- * - Any other file (e.g. a plain `.md`) → searches the workspace for a
- *   `.deck.md` whose frontmatter declares `content: <path>` resolving to the
- *   active file, and returns that deck if found.
+ * - `.deck.yaml` with a sibling `.deck.md` → the paired `.deck.md` (sidecar).
+ * - `.deck.yaml` with no sibling `.deck.md` but a `content:` pointer →
+ *   itself (a standalone YAML-primary deck manifest).
+ * - Any other file (e.g. a plain `.md`) → searches the workspace for a deck
+ *   (`.deck.md` or `.deck.yaml`) whose `content:` resolves to the active file.
  */
 async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vscode.Uri | undefined> {
     if (!editor) {
@@ -44,7 +44,11 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
     if (filePath.endsWith('.deck.yaml')) {
         const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
         if (fs.existsSync(deckMdPath)) {
-            return vscode.Uri.file(deckMdPath);
+            return vscode.Uri.file(deckMdPath); // sidecar → its .deck.md
+        }
+        // Standalone YAML-primary deck: valid when it declares `content:`.
+        if (readDeckContentImport(editor.document.getText(), filePath)) {
+            return editor.document.uri;
         }
         return undefined;
     }
@@ -53,17 +57,16 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
 }
 
 /**
- * Scans the workspace for `*.deck.md` files whose frontmatter declares
- * `content: <path>` resolving to `targetFsPath`. Returns the first match.
+ * Scans the workspace for deck files (`*.deck.md` or `*.deck.yaml`) whose
+ * `content:` declaration resolves to `targetFsPath`. Returns the first match.
  */
 async function findDeckImporting(targetFsPath: string): Promise<vscode.Uri | undefined> {
-    const decks = await vscode.workspace.findFiles('**/*.deck.md', '**/node_modules/**');
+    const decks = await findDeckFiles();
     for (const deckUri of decks) {
         try {
             const buf = await vscode.workspace.fs.readFile(deckUri);
             const raw = Buffer.from(buf).toString('utf-8');
-            const parsed = matter(raw);
-            const importPath = typeof parsed.data.content === 'string' ? parsed.data.content.trim() : '';
+            const importPath = readDeckContentImport(raw, deckUri.fsPath);
             if (!importPath) {
                 continue;
             }
@@ -81,6 +84,104 @@ async function findDeckImporting(targetFsPath: string): Promise<vscode.Uri | und
     return undefined;
 }
 
+/**
+ * Resolve a deck URI from an explicit resource (e.g. a file passed by an
+ * editor-title / context-menu command) or, when absent, the active editor.
+ */
+async function resolveDeckUriFromArg(resource: vscode.Uri | undefined): Promise<vscode.Uri | undefined> {
+    if (resource) {
+        return resolveDeckUriForResource(resource);
+    }
+    return resolveDeckUri(vscode.window.activeTextEditor);
+}
+
+/**
+ * Resolve a deck URI from a concrete file URI (open or on disk):
+ *  - `.deck.md` → itself.
+ *  - `.deck.yaml` → sibling `.deck.md`, else itself when it declares `content:`.
+ *  - any other file → the deck whose `content:` imports it.
+ */
+async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+    const filePath = uri.fsPath;
+    if (filePath.endsWith('.deck.md')) {
+        return uri;
+    }
+    if (filePath.endsWith('.deck.yaml')) {
+        const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        if (fs.existsSync(deckMdPath)) {
+            return vscode.Uri.file(deckMdPath);
+        }
+        let raw: string | undefined;
+        try {
+            const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === filePath);
+            raw = openDoc ? openDoc.getText() : await fs.promises.readFile(filePath, 'utf-8');
+        } catch {
+            raw = undefined;
+        }
+        return raw && readDeckContentImport(raw, filePath) ? uri : undefined;
+    }
+    return findDeckImporting(filePath);
+}
+
+/**
+ * Find all deck files in the workspace. Uses two separate globs (rather than a
+ * `{md,yaml}` brace group) for maximum compatibility across VS Code versions.
+ */
+async function findDeckFiles(): Promise<vscode.Uri[]> {
+    const [md, yaml] = await Promise.all([
+        vscode.workspace.findFiles('**/*.deck.md', '**/node_modules/**'),
+        vscode.workspace.findFiles('**/*.deck.yaml', '**/node_modules/**'),
+    ]);
+    return [...md, ...yaml];
+}
+
+/**
+ * Index of absolute paths of markdown files referenced by some deck's
+ * `content:`. Maintained so the active-editor context key can be computed
+ * synchronously (no per-switch workspace scan → no menu timing gaps).
+ */
+const deckContentFiles = new Set<string>();
+
+/** Rebuild the deck→content index from the current workspace decks. */
+async function rebuildDeckContentIndex(): Promise<void> {
+    const decks = await findDeckFiles().catch(() => [] as vscode.Uri[]);
+    const next = new Set<string>();
+    for (const deckUri of decks) {
+        try {
+            const buf = await vscode.workspace.fs.readFile(deckUri);
+            const raw = Buffer.from(buf).toString('utf-8');
+            const importPath = readDeckContentImport(raw, deckUri.fsPath);
+            if (!importPath) {
+                continue;
+            }
+            const deckDir = path.dirname(deckUri.fsPath);
+            const resolved = path.isAbsolute(importPath)
+                ? importPath
+                : path.resolve(deckDir, importPath);
+            next.add(path.normalize(resolved));
+        } catch {
+            // ignore unreadable / unparseable decks
+        }
+    }
+    deckContentFiles.clear();
+    for (const p of next) {
+        deckContentFiles.add(p);
+    }
+}
+
+/**
+ * Update `when`-clause context keys for the active editor so the editor-title
+ * icon and context-menu entries appear on deck files and on markdown files a
+ * deck imports. The content check is a synchronous index lookup.
+ */
+async function updateDeckContextKeys(editor: vscode.TextEditor | undefined): Promise<void> {
+    const filePath = editor?.document.uri.fsPath;
+    const isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
+    const isContent = !!filePath && !isDeck && deckContentFiles.has(path.normalize(filePath));
+    await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeck', isDeck);
+    await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeckContent', isContent);
+}
+
 export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI {
     console.log('Deckpilot extension is now active');
     initializeDiagramLogger(context);
@@ -93,14 +194,35 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
     conductor = new Conductor(context.extensionUri);
     context.subscriptions.push(conductor);
 
+    // Keep menu `when`-clause context keys in sync with the active editor, so
+    // the editor-title icon and context-menu entries show on deck files and on
+    // markdown files a deck imports. The deck→content index is built once and
+    // refreshed whenever a deck file changes, so the per-switch check is fast.
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            void updateDeckContextKeys(editor);
+        }),
+    );
+    const refreshDeckIndex = (): void => {
+        void rebuildDeckContentIndex().then(() =>
+            updateDeckContextKeys(vscode.window.activeTextEditor),
+        );
+    };
+    refreshDeckIndex();
+    const deckWatcher = vscode.workspace.createFileSystemWatcher('**/*.deck.{md,yaml}');
+    deckWatcher.onDidCreate(refreshDeckIndex);
+    deckWatcher.onDidChange(refreshDeckIndex);
+    deckWatcher.onDidDelete(refreshDeckIndex);
+    context.subscriptions.push(deckWatcher);
+
     // Register commands
     const openPresentationDisposable = vscode.commands.registerCommand(
         'deckPilot.openPresentation',
-        async () => {
+        async (resource?: vscode.Uri) => {
             const editor = vscode.window.activeTextEditor;
             
             // Resolve deck URI (.deck.md, .deck.yaml sidecar, or a content-imported file).
-            const deckUri = await resolveDeckUri(editor);
+            const deckUri = await resolveDeckUriFromArg(resource);
             
             if (!deckUri) {
                 const activeFile = editor?.document.fileName;
@@ -197,9 +319,8 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
 
     const openPreviewDisposable = vscode.commands.registerCommand(
         'deckPilot.openPreview',
-        async () => {
-            const editor = vscode.window.activeTextEditor;
-            const deckUri = await resolveDeckUri(editor);
+        async (resource?: vscode.Uri) => {
+            const deckUri = await resolveDeckUriFromArg(resource);
             if (!deckUri) {
                 void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to preview.');
                 return;

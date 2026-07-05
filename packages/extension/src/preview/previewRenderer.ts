@@ -32,6 +32,10 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
   const deckCwd = path.dirname(opts.deckPath);
   const env = deck.resolvedEnvironment;
   const slidesHtml = deck.slides.map((slide) => renderSlide(slide, deckCwd, env)).join('\n');
+  const hasNotes = deck.slides.some(slideHasPresenterContent);
+  const notesToggle = hasNotes
+    ? `<button type="button" class="preview-notes-toggle" id="notes-toggle" aria-pressed="true">Notes &amp; cues</button>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -45,7 +49,10 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
 <body class="preview-body">
   <header class="preview-header">
     <span class="preview-title">${title}</span>
-    <span class="preview-meta">${slideCount} slide${slideCount === 1 ? '' : 's'} &middot; live preview</span>
+    <span class="preview-meta">
+      ${notesToggle}
+      <span class="preview-count">${slideCount} slide${slideCount === 1 ? '' : 's'} &middot; live preview</span>
+    </span>
   </header>
   ${warningsHtml}
   <main class="preview-slides">
@@ -54,6 +61,24 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
   <script nonce="${opts.nonce}">
     (function () {
       var vscode = acquireVsCodeApi();
+
+      // Speaker-notes visibility toggle (persisted across live-preview refreshes).
+      var notesToggle = document.getElementById('notes-toggle');
+      function applyNotesState() {
+        var st = vscode.getState() || {};
+        var hidden = !!st.notesHidden;
+        document.body.classList.toggle('notes-hidden', hidden);
+        if (notesToggle) notesToggle.setAttribute('aria-pressed', String(!hidden));
+      }
+      applyNotesState();
+      if (notesToggle) {
+        notesToggle.addEventListener('click', function () {
+          var st = vscode.getState() || {};
+          st.notesHidden = !st.notesHidden;
+          vscode.setState(st);
+          applyNotesState();
+        });
+      }
 
       // Inert preview: swallow clicks on action links and render-directive cards,
       // but allow propagation for slide-level reverse sync (handled below).
@@ -131,10 +156,68 @@ function renderSlide(slide: Slide, deckCwd: string, env?: Record<string, string>
   const header = title
     ? `<div class="preview-slide-label">#${slide.index + 1} &middot; ${escapeHtml(String(title))}</div>`
     : `<div class="preview-slide-label">#${slide.index + 1}</div>`;
+  const notes = renderPresenterBlock(slide);
   return `<section class="preview-slide" data-slide-index="${slide.index}">
     ${header}
     <div class="preview-slide-body">${withEnv}</div>
+    ${notes}
   </section>`;
+}
+
+/** True when a slide carries any presenter content (notes, cues, or voice cues). */
+function slideHasPresenterContent(slide: Slide): boolean {
+  return (
+    (!!slide.speakerNotes && slide.speakerNotes.trim().length > 0) ||
+    (Array.isArray(slide.cues) && slide.cues.some((c) => c.trim().length > 0)) ||
+    (Array.isArray(slide.voiceCues) && slide.voiceCues.some((c) => c.text.trim().length > 0))
+  );
+}
+
+/**
+ * Render the presenter footer for a slide: speaker notes (a blob), sidecar
+ * `cues` (an ordered list), and inline `<!-- voice -->` cues (with fragment
+ * association). Returns '' when the slide has none. Hidden via `.notes-hidden`.
+ */
+function renderPresenterBlock(slide: Slide): string {
+  const parts: string[] = [];
+
+  if (slide.speakerNotes && slide.speakerNotes.trim().length > 0) {
+    parts.push(`<div class="preview-notes-item">
+      <span class="preview-slide-notes-label">Speaker notes</span>
+      <div class="preview-slide-notes-body">${escapeHtml(slide.speakerNotes)}</div>
+    </div>`);
+  }
+
+  const cues = (slide.cues ?? []).filter((c) => c.trim().length > 0);
+  if (cues.length > 0) {
+    const items = cues.map((c) => `<li>${escapeHtml(c.trim())}</li>`).join('');
+    parts.push(`<div class="preview-notes-item">
+      <span class="preview-slide-notes-label">Cues</span>
+      <ol class="preview-slide-cues">${items}</ol>
+    </div>`);
+  }
+
+  const voice = (slide.voiceCues ?? []).filter((c) => c.text.trim().length > 0);
+  if (voice.length > 0) {
+    const items = voice
+      .map((c) => {
+        const frag =
+          c.fragmentIndex !== undefined
+            ? `<span class="preview-cue-frag">fragment ${c.fragmentIndex}</span> `
+            : '';
+        return `<li>${frag}${escapeHtml(c.text.trim())}</li>`;
+      })
+      .join('');
+    parts.push(`<div class="preview-notes-item">
+      <span class="preview-slide-notes-label">Voice cues</span>
+      <ul class="preview-slide-cues">${items}</ul>
+    </div>`);
+  }
+
+  if (parts.length === 0) {
+    return '';
+  }
+  return `<footer class="preview-slide-notes">${parts.join('')}</footer>`;
 }
 
 /**

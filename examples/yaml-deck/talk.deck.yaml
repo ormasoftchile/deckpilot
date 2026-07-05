@@ -1,0 +1,53 @@
+# talk.deck.yaml — a single-file deck.
+#
+# Content lives in an untouched README.md. This manifest points at it and
+# carries ALL presentation overlays inline — no companion .deck.md needed.
+# Slides are sliced at each H1/H2 heading (`split: heading`) and overlays
+# attach to them by heading slug. Level shorthands are also supported:
+#   split: heading   → H1 and H2   (default)
+#   split: h2        → only H2
+#   split: h1-h3     → H1 through H3
+
+content: README.md
+split: heading
+
+deck:
+  title: Acme CLI — Guided Tour
+  theme: dark
+
+# Per-slide overlays, keyed by the slide's heading slug (from README headings).
+slides:
+  - id: installation
+    cues:
+      - Emphasize the zero-config install
+    actions:
+      - type: terminal.run
+        cmd: npm install -g acme-cli
+    duration: 10s
+
+  - id: usage
+    cues:
+      - Run a real build against a sample file
+    actions:
+      - type: terminal.run
+        cmd: acme build ./src/index.ts
+    duration: 12s
+
+  - id: configuration
+    notes: Pause here and take questions about config options.
+    layout: columns
+
+# Named scenes anchor to slides by heading slug.
+scenes:
+  - name: intro
+    slide: acme-cli
+  - name: hands-on
+    slide: usage
+
+recording:
+  autoStart: false
+  format: mp4
+
+export:
+  subtitles: true
+  srtFormat: srt

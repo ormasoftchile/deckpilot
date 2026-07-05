@@ -49,7 +49,9 @@ export function App(): JSX.Element {
   const load = useCallback(async (url: string, controller: AbortController) => {
     setState({ kind: 'loading', url });
     try {
-      const deck = await loadDeckFromUrl(url, controller.signal);
+      const params = new URLSearchParams(window.location.search);
+      const split = params.get('split') ?? params.get('slideBreak') ?? undefined;
+      const deck = await loadDeckFromUrl(url, controller.signal, split ? { slideBreak: split } : undefined);
       if (controller.signal.aborted) return;
       saveRecent(url);
       setRecent(loadRecent());

@@ -11,6 +11,7 @@
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 import { parseSlides } from '@deckpilot/core/parser/slideParser';
+import { resolveSlideBreakConfig } from '@deckpilot/core/parser/slideBreakResolver';
 import {
   mergeSidecarIntoSlides,
   mergeSidecarDeckMetadata,
@@ -66,7 +67,20 @@ function mergeSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   return c.signal;
 }
 
-export async function loadDeckFromUrl(rawUrl: string, signal?: AbortSignal): Promise<LoadedDeck> {
+export interface LoadDeckOptions {
+  /**
+   * Slide-break mode override (from the viewer URL, e.g. `?split=heading`).
+   * Takes precedence over the deck's frontmatter `slideBreak:`/`split:`.
+   * Accepts 'marker' | 'blank' | 'heading' | 'hN' | 'hN-hM'.
+   */
+  slideBreak?: string;
+}
+
+export async function loadDeckFromUrl(
+  rawUrl: string,
+  signal?: AbortSignal,
+  options?: LoadDeckOptions,
+): Promise<LoadedDeck> {
   const validation = validateDeckUrl(rawUrl);
   if (!validation.ok || !validation.url) {
     throw new DeckLoadError(validation.error ?? 'Invalid URL.');
@@ -116,9 +130,15 @@ export async function loadDeckFromUrl(rawUrl: string, signal?: AbortSignal): Pro
   }
 
   // 3. Parse slides via core (browser-safe — uses gray-matter stub + markdown-it).
+  //    Slide-break mode precedence: URL override > deck frontmatter > default.
+  const asStr = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
+  const breakCfg = resolveSlideBreakConfig(
+    options?.slideBreak ?? asStr(rawMetadata.slideBreak) ?? asStr(rawMetadata.split),
+  );
   let slides: Slide[];
   try {
-    slides = parseSlides(body);
+    slides = parseSlides(body, { slideBreak: breakCfg.mode, headingLevels: breakCfg.headingLevels });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown parse error';
     throw new DeckLoadError(`Failed to parse deck: ${msg}`, err);
