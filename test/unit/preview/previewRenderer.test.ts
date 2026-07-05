@@ -247,5 +247,7 @@ describe('renderPreviewHtml', () => {
     expect(html).to.include('acquireVsCodeApi');
     expect(html).to.include('scrollToSlide');
     expect(html).to.include('revealSource');
+    expect(html).to.include('renderBlockUpdate');
+    expect(html).to.include('data-render-id');
   });
 });

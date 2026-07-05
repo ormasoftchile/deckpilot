@@ -37,10 +37,14 @@ export function injectDiagramPlaceholders(html: string, blocks: DiagramBlockRef[
 function buildLoadingPlaceholder(block: DiagramBlockRef): string {
   const lang = escapeAttr(block.fence.language);
   const sourceEscaped = escapeHtml(block.source);
+  const caption = block.fence.attributes?.caption?.trim();
+  const theme = block.fence.attributes?.theme?.trim();
+  const captionAttr = caption ? ` data-diagram-caption="${escapeAttr(caption)}"` : '';
+  const themeAttr = theme ? ` data-diagram-theme="${escapeAttr(theme)}"` : '';
 
   return (
     `<figure class="diagram-block diagram-block--loading" ` +
-    `data-render-id="${block.id}" data-diagram-language="${lang}">` +
+    `data-render-id="${block.id}" data-diagram-language="${lang}"${captionAttr}${themeAttr}>` +
     // Fallback source shown until SVG arrives (or if no renderer is registered)
     `<pre class="diagram-block__source-fallback" data-no-fragment><code class="language-${lang}">${sourceEscaped}</code></pre>` +
     `</figure>`

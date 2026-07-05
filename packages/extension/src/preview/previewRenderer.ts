@@ -116,6 +116,18 @@ export function renderPreviewHtml(deck: Deck, opts: RenderPreviewOptions): strin
               if (others[i] !== el) others[i].classList.remove('preview-slide--active');
             }
           }
+          return;
+        }
+        if (msg.type === 'renderBlockUpdate' && msg.payload && msg.payload.blockId && msg.payload.html) {
+          var block = document.querySelector('[data-render-id="' + msg.payload.blockId + '"]');
+          if (!block) return;
+          var temp = document.createElement('div');
+          temp.innerHTML = msg.payload.html;
+          var next = temp.firstElementChild;
+          if (next) {
+            next.setAttribute('data-render-id', msg.payload.blockId);
+            block.replaceWith(next);
+          }
         }
       });
     })();

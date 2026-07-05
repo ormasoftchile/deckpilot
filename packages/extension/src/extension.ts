@@ -326,7 +326,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 return;
             }
             if (!previewProvider) {
-                previewProvider = new PreviewProvider(context.extensionUri);
+                previewProvider = new PreviewProvider(context.extensionUri, conductor!.getDiagramRegistry());
                 context.subscriptions.push(previewProvider);
             }
             await previewProvider.show(deckUri);
