@@ -99,3 +99,4 @@ CLI validation can build and test the extensions, but it cannot visually confirm
 - Expose advanced Mermaid config passthrough where safe
 - Validate export parity across recording/export paths
 - Add optional visual regression coverage for rendered SVG output
+# Release retry
