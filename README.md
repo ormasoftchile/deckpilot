@@ -229,21 +229,6 @@ command:
 
 ---
 
-## `@deck` chat participant
-
-Generate or improve decks without leaving Copilot Chat.
-
-```
-@deck /create a five-slide intro to Kubernetes for platform engineers
-@deck /convert #file:SETUP.md into a deck with terminal actions
-@deck /enrich #file:demo.deck.md — add voice cues and fragments
-@deck how do I make a two-column layout?
-```
-
-By default `/create` and `/convert` produce a sidecar file alongside the Markdown. Say `without sidecar` in the prompt to get a single-file deck. Say `zen mode` to enable Zen Mode in the frontmatter.
-
----
-
 ## Action reference
 
 ### Core actions
