@@ -171,6 +171,12 @@
     "configuration": {
       "title": "Deckpilot",
       "properties": {
+        "deckPilot.treatAllMarkdownAsDeck": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "Treat every Markdown file as a Deckpilot deck. When enabled, the slide-presentation and live-preview actions appear for any Markdown file that contains at least one heading, not only .deck.md files. Default: off."
+        },
         "deckPilot.recording.startCommand": {
           "type": "string",
           "default": "",
@@ -238,12 +244,12 @@
       "explorer/context": [
         {
           "command": "deckPilot.openPresentation",
-          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || (config.deckPilot.treatAllMarkdownAsDeck && resourceExtname == .md)",
           "group": "deckpilot@1"
         },
         {
           "command": "deckPilot.openPreview",
-          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || (config.deckPilot.treatAllMarkdownAsDeck && resourceExtname == .md)",
           "group": "deckpilot@2"
         }
       ]
