@@ -95,8 +95,8 @@
         "command": "deckPilot.openPreview",
         "title": "Deckpilot: Open Live Preview",
         "icon": {
-          "light": "resources/presentation-light.svg",
-          "dark": "resources/presentation-dark.svg"
+          "light": "resources/preview-light.svg",
+          "dark": "resources/preview-dark.svg"
         }
       },
       {

@@ -10,13 +10,9 @@ scenes:
     slide: 6
 ---
 
-<!-- center -->
 # Refactoring the Conductor
 
-### A live walkthrough
-<!-- /center -->
-
----
+A live walkthrough.
 
 # What We'll Touch
 
@@ -25,8 +21,6 @@ scenes:
 - The action registry
 
 [Open the entry point](action:file.open?path=src/conductor/conductor.ts)
-
----
 
 # The Dispatcher
 
@@ -43,8 +37,6 @@ steps:
 ```
 
 Notice how each message has a dedicated handler — no `switch` smell.
-
----
 
 # The Test Suite
 
@@ -63,8 +55,6 @@ showCommand: true
 The `npm test` script invokes Mocha against `test/**/*.test.ts` with the VS Code test electron host.
 <!-- /advanced -->
 
----
-
 # Before / After
 
 <!-- columns -->
@@ -80,10 +70,6 @@ Cleaner dispatch, no manual routing.
 <!-- /right -->
 <!-- /columns -->
 
----
-
-<!-- center -->
 # Thanks
 
-### Repo: github.com/you/project
-<!-- /center -->
+Repo: github.com/you/project

@@ -16,26 +16,29 @@ scenes:                     # optional — named jump points
     slide: 4
 ---
 
+# Slide 1 Title
+
 Slide 1 content
 
----
+# Slide 2 Title
 
 Slide 2 content
 ```
 
-- Slides are separated by `---` on its own line (Markdown horizontal rule).
-- Frontmatter is YAML. `title` is required. All other fields optional.
-- `content: <path>` imports body Markdown from another file. Use this for "wrapper decks" — keep the prose in a plain `.md` and wrap with thin frontmatter.
+- **Slides are separated by headings.** Every `#` (h1) or `##` (h2) starts a new slide — this is the default (`slideBreak: heading`, levels 1–2). Do **not** put a `---` between slides: a bare `---` is a *deprecated* separator and the parser emits a warning (`The `---` slide separator is deprecated`). Just start the next slide with a heading.
+- Frontmatter is YAML delimited by `---` fences (this is the one place `---` is correct — it opens and closes the frontmatter block, nothing else). `title` is required. All other fields optional.
+- `content: <path>` imports body Markdown from another file. Use this for "wrapper decks" — keep the prose in a plain `.md` (whose own `##` headings already delimit the slides) and wrap with thin frontmatter.
 
 ## Slide ID anchors
 
-Add a hidden anchor to reference a slide from a sidecar or scene:
+Add a hidden anchor to reference a slide from a sidecar or scene. Place it **after** the slide's heading — anything above the heading belongs to the previous slide, so an anchor placed before the heading is orphaned onto the wrong slide:
 
 ```markdown
----
+# Setup
+
 <!-- id: setup -->
 
-# Setup
+Install dependencies…
 ```
 
 Slide IDs must be unique within a deck. They are referenced by `.deck.yaml` sidecar entries.
@@ -51,6 +54,8 @@ Layouts are HTML comments that wrap a region of the slide. They nest.
 | `<!-- advanced -->...<!-- /advanced -->` | Collapsed by default; audience clicks to expand. Use for optional deep-dives. |
 | `<!-- optional -->...<!-- /optional -->` | Visible but visually marked as skippable. |
 | `<!-- group -->...<!-- /group -->` | Keeps adjacent blocks together when fragments are on. |
+
+> **Heading caveat:** A layout wrapper must **not** contain a slide-splitting heading (`#` or `##`). Those headings start a new slide, which splits the wrapper across two slides and orphans the opening comment. Inside a wrapper, use `###`+ (h3 and deeper) for headings. To give a slide a title, put the `#`/`##` heading first, then open the wrapper below it.
 
 Example:
 
@@ -125,19 +130,20 @@ scenes:
 
 ## Title slide convention
 
+The first slide is just a leading heading. In the default heading mode the `#` starts slide 1 — don't wrap it in `<!-- center -->` (the heading would split out of the wrapper). Follow it with a subtitle and a call to advance:
+
 ```markdown
-<!-- center -->
 # Deckpilot
 
-### Live-code presentations inside VS Code
+Live-code presentations inside VS Code.
 
 Press **→** to start
-<!-- /center -->
 ```
 
 ## Anti-patterns
 
 - Don't put YAML frontmatter on any slide except the first one.
+- Don't put a `---` between slides — it's a deprecated separator that triggers a parser warning. Start the next slide with a `#`/`##` heading instead.
+- Don't place `<!-- id: … -->` anchors or layout-open comments (`<!-- center -->`, `<!-- columns -->`, …) *above* a slide's heading. The heading starts a new slide and orphans them onto the previous slide — put them **after** the heading.
+- Don't wrap a `#`/`##` heading inside a layout container — the heading splits the slide. Use `###`+ inside wrappers.
 - Don't nest the same layout type (e.g. `<!-- center -->` inside `<!-- center -->`).
-- Don't use `---` inside fenced code blocks expecting it to be a slide break — it won't be (code blocks are protected).
-- Don't put more than one `#` heading on a slide. Use `##` or split.

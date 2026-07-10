@@ -2,18 +2,16 @@
 title: "Recorded Walkthrough"
 ---
 
-<!-- id: intro -->
-
 # Welcome
+
+<!-- id: intro -->
 
 This deck has a sidecar (`with-sidecar.deck.yaml`) holding voice cues, timing,
 and recording settings. The `.deck.md` stays clean and readable.
 
----
+# Setup
 
 <!-- id: setup -->
-
-# Setup
 
 Install dependencies before running anything:
 
@@ -21,11 +19,9 @@ Install dependencies before running anything:
 npm install
 ```
 
----
+# Run the Demo
 
 <!-- id: demo -->
-
-# Run the Demo
 
 Once installed, start the application:
 
@@ -33,10 +29,8 @@ Once installed, start the application:
 npm start
 ```
 
----
+# Wrap-up
 
 <!-- id: outro -->
-
-# Wrap-up
 
 Recap and next steps.
