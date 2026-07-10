@@ -53,7 +53,20 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
         return undefined;
     }
 
-    return findDeckImporting(filePath);
+    const importer = await findDeckImporting(filePath);
+    if (importer) {
+        return importer;
+    }
+    // Self-present: when enabled, a markdown document with at least one heading
+    // is treated as its own deck.
+    if (
+        editor.document.languageId === 'markdown' &&
+        treatAllMarkdownAsDeck(editor.document.uri) &&
+        hasHeading(editor.document.getText())
+    ) {
+        return editor.document.uri;
+    }
+    return undefined;
 }
 
 /**
@@ -120,7 +133,26 @@ async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | 
         }
         return raw && readDeckContentImport(raw, filePath) ? uri : undefined;
     }
-    return findDeckImporting(filePath);
+    const importer = await findDeckImporting(filePath);
+    if (importer) {
+        return importer;
+    }
+    // Self-present: when enabled, a `.md` file with at least one heading is
+    // treated as its own deck. Explorer-invoked resources may not be open, so
+    // read from the open document if present, else from disk.
+    if (filePath.endsWith('.md') && treatAllMarkdownAsDeck(uri)) {
+        let raw: string | undefined;
+        try {
+            const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === filePath);
+            raw = openDoc ? openDoc.getText() : await fs.promises.readFile(filePath, 'utf-8');
+        } catch {
+            raw = undefined;
+        }
+        if (raw && hasHeading(raw)) {
+            return uri;
+        }
+    }
+    return undefined;
 }
 
 /**
@@ -170,13 +202,45 @@ async function rebuildDeckContentIndex(): Promise<void> {
 }
 
 /**
+ * Whether the `deckPilot.treatAllMarkdownAsDeck` setting is enabled for the
+ * given resource. Read with the resource URI as scope so `resource`-scoped
+ * per-workspace/folder overrides resolve correctly.
+ */
+function treatAllMarkdownAsDeck(uri: vscode.Uri | undefined): boolean {
+    return (
+        vscode.workspace
+            .getConfiguration('deckPilot', uri)
+            .get<boolean>('treatAllMarkdownAsDeck') ?? false
+    );
+}
+
+/** Matches any Markdown ATX heading line (`#` through `######`). */
+const HEADING_RE = /^#{1,6}\s/m;
+
+/** True when `text` contains at least one Markdown heading line. */
+function hasHeading(text: string): boolean {
+    return HEADING_RE.test(text);
+}
+
+/**
  * Update `when`-clause context keys for the active editor so the editor-title
  * icon and context-menu entries appear on deck files and on markdown files a
  * deck imports. The content check is a synchronous index lookup.
  */
 async function updateDeckContextKeys(editor: vscode.TextEditor | undefined): Promise<void> {
     const filePath = editor?.document.uri.fsPath;
-    const isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
+    let isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
+    // When enabled, any markdown document with at least one heading counts as a
+    // deck (existing `.deck.*` files are always decks regardless of setting).
+    if (
+        !isDeck &&
+        editor &&
+        editor.document.languageId === 'markdown' &&
+        treatAllMarkdownAsDeck(editor.document.uri) &&
+        hasHeading(editor.document.getText())
+    ) {
+        isDeck = true;
+    }
     const isContent = !!filePath && !isDeck && deckContentFiles.has(path.normalize(filePath));
     await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeck', isDeck);
     await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeckContent', isContent);
@@ -215,6 +279,17 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
     deckWatcher.onDidDelete(refreshDeckIndex);
     context.subscriptions.push(deckWatcher);
 
+    // Re-evaluate the active editor's deck context keys immediately when the
+    // `treatAllMarkdownAsDeck` setting is toggled, so the icon appears/hides
+    // without needing an editor switch.
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('deckPilot.treatAllMarkdownAsDeck')) {
+                void updateDeckContextKeys(vscode.window.activeTextEditor);
+            }
+        }),
+    );
+
     // Register commands
     const openPresentationDisposable = vscode.commands.registerCommand(
         'deckPilot.openPresentation',
@@ -231,7 +306,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                         'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
                     );
                 } else {
-                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md file (or a markdown file imported by one) first.');
+                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md file (or a markdown file imported by one) first, or enable "Deckpilot: Treat all Markdown as deck".');
                 }
                 return;
             }
@@ -322,7 +397,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
         async (resource?: vscode.Uri) => {
             const deckUri = await resolveDeckUriFromArg(resource);
             if (!deckUri) {
-                void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to preview.');
+                void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to preview, or enable "Deckpilot: Treat all Markdown as deck".');
                 return;
             }
             if (!previewProvider) {
