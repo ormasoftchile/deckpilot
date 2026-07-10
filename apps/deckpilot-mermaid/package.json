@@ -2,7 +2,7 @@
   "name": "deckpilot-mermaid",
   "displayName": "Mermaid Diagrams for Deckpilot",
   "description": "Native Mermaid diagram renderer for Deckpilot.",
-  "version": "0.12.6",
+  "version": "0.12.7",
   "private": true,
   "publisher": "focus-space",
   "license": "MIT",
