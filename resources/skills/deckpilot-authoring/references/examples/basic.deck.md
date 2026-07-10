@@ -2,15 +2,11 @@
 title: "A Lightning Talk"
 ---
 
-<!-- center -->
 # A Lightning Talk
 
-### Subtitle or hook in one line
+Subtitle or hook in one line.
 
-Press **→** to begin
-<!-- /center -->
-
----
+Press **→** to begin.
 
 # The Problem
 
@@ -20,15 +16,11 @@ Describe the pain point in one breath. Concrete is better than abstract.
 - Another symptom
 - The cost of doing nothing
 
----
-
 # The Insight
 
 The shift in framing that makes the problem tractable.
 
 > One quote-sized line that captures the idea.
-
----
 
 # The Approach
 
@@ -37,8 +29,6 @@ A high-level sketch — three to five bullets, no more.
 - Step one
 - Step two
 - Step three
-
----
 
 # How It Works
 
@@ -49,8 +39,6 @@ function example(): void {
   // The thing that matters
 }
 ```
-
----
 
 # Trade-offs
 
@@ -69,8 +57,6 @@ function example(): void {
 - Slight learning curve
 <!-- /right -->
 <!-- /columns -->
-
----
 
 # What's Next
 

@@ -5,7 +5,7 @@ description: '**WORKFLOW SKILL** — Author Deckpilot presentations (`.deck.md` 
 
 # Deckpilot Authoring
 
-Deckpilot turns Markdown into executable presentations inside VS Code. A deck is a `.deck.md` file split into slides by `---`. Buttons and inline links can open files, highlight code, run terminal commands, start debug sessions — orchestrating the real IDE during a talk.
+Deckpilot turns Markdown into executable presentations inside VS Code. A deck is a `.deck.md` file split into slides by headings — every `#` or `##` starts a new slide. Buttons and inline links can open files, highlight code, run terminal commands, start debug sessions — orchestrating the real IDE during a talk.
 
 This skill covers three workflows. Use the section that matches the user's intent.
 
@@ -39,9 +39,9 @@ Triggered by: "convert this README to a deck", "turn this doc into a presentatio
 2. **Read the source** and outline its sections.
 3. **Decide cut points.** Each `##` heading typically becomes a slide; long sections may need to be split or summarised. Bullet-heavy sections often need consolidation.
 4. **Two options for the output:**
-   - **Wrapper deck** (preferred when the source is well-structured prose): create `<source-name>.deck.md` containing only frontmatter + `content: ./<source-name>.md`. The deck inherits the Markdown body verbatim and splits on `---`. Insert `---` into the source where needed, OR ask the user if they want the wrapper to embed split markers.
+   - **Wrapper deck** (preferred when the source is well-structured prose): create `<source-name>.deck.md` containing only frontmatter + `content: ./<source-name>.md`. The deck inherits the Markdown body verbatim and splits on headings — each `#`/`##` in the source becomes a slide (the default heading mode is ideal for untouched READMEs). No separators to insert.
    - **Standalone deck**: copy + restructure into a new `.deck.md`. Use when the source needs significant rewriting for pacing.
-5. **Add layout containers** (`<!-- center -->` for title/section slides, `<!-- columns -->` to pair code with explanation) where they improve pacing.
+5. **Add layout containers** (`<!-- columns -->` to pair code with explanation) where they improve pacing. Keep the slide's `#`/`##` heading *above* the container — a heading inside a wrapper splits the slide.
 6. **Save next to the source** as `<source-name>.deck.md`.
 
 ## Workflow: Enrich an existing deck
