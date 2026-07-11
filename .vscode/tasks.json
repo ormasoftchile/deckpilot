@@ -24,6 +24,16 @@
       }
     },
     {
+      "label": "build extension host",
+      "type": "shell",
+      "command": "npm run compile",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      },
+      "group": "build"
+    },
+    {
       "label": "bundle extension host",
       "type": "shell",
       "command": "npm run bundle",

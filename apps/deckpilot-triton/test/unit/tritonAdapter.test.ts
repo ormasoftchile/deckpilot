@@ -1,5 +1,5 @@
 import * as assert from 'node:assert/strict';
-import { applyTritonTheme, TritonDiagramRenderer, resolveTritonTheme } from '../../src/tritonAdapter';
+import { applyTritonTheme, TritonDiagramRenderer, resolveTritonTheme, stripBackgroundRect } from '../../src/tritonAdapter';
 
 /**
  * Unit tests for TritonDiagramRenderer.
@@ -154,5 +154,52 @@ describe('TritonDiagramRenderer — render()', () => {
     );
 
     assert.equal(capturedTheme, 'midnight');
+  });
+});
+
+describe('stripBackgroundRect()', () => {
+  const svgWith = (viewBox: string, bgRect: string, rest = '') =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="100" height="100">\n${bgRect}${rest}</svg>`;
+
+  it('removes the full-viewport background rect', () => {
+    const svg = svgWith(
+      '0 0 300 400',
+      '  <rect x="0" y="0" width="300" height="400" fill="#0d1b2a" />\n',
+    );
+    const out = stripBackgroundRect(svg);
+    assert.ok(!out.includes('#0d1b2a'), 'background rect should be removed');
+  });
+
+  it('handles negative origins and decimal dimensions', () => {
+    const svg = svgWith(
+      '-4 -4 300.5 400',
+      '  <rect x="-4" y="-4" width="300.5" height="400" fill="#123456" />\n',
+    );
+    const out = stripBackgroundRect(svg);
+    assert.ok(!out.includes('#123456'), 'decimal/negative background rect should be removed');
+  });
+
+  it('keeps content rects that do not match the viewBox', () => {
+    const svg = svgWith(
+      '0 0 300 400',
+      '  <rect x="0" y="0" width="300" height="400" fill="#0d1b2a" />\n',
+      '  <rect x="10" y="10" width="120" height="40" fill="#abcdef" stroke="#fff" stroke-width="1" />\n',
+    );
+    const out = stripBackgroundRect(svg);
+    assert.ok(!out.includes('#0d1b2a'), 'background rect removed');
+    assert.ok(out.includes('#abcdef'), 'content rect kept');
+  });
+
+  it('returns the SVG unchanged when there is no viewBox', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="#000" /></svg>';
+    assert.equal(stripBackgroundRect(svg), svg);
+  });
+
+  it('leaves the SVG untouched when no background rect matches', () => {
+    const svg = svgWith(
+      '0 0 300 400',
+      '  <rect x="10" y="10" width="120" height="40" fill="#abcdef" />\n',
+    );
+    assert.equal(stripBackgroundRect(svg), svg);
   });
 });

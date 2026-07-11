@@ -111,7 +111,7 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
       return {
         ok: true,
         format: 'svg',
-        svg: result.svg,
+        svg: stripBackgroundRect(result.svg),
         warnings: result.warnings,
         rendererId: this.id,
       };
@@ -139,6 +139,35 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
     }
     return this.modulePromise;
   }
+}
+
+/**
+ * Triton bakes its theme background into the SVG as a full-viewport <rect>
+ * (see triton's render/svg.ts). Inside a deck slide we want diagrams to inherit
+ * the slide background, so strip that leading background rect. It is uniquely
+ * identified as the first <rect> whose x/y/width/height match the viewBox.
+ */
+export function stripBackgroundRect(svg: string): string {
+  const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
+  if (!viewBoxMatch) {
+    return svg;
+  }
+
+  const parts = viewBoxMatch[1].trim().split(/\s+/);
+  if (parts.length !== 4) {
+    return svg;
+  }
+
+  const [x, y, width, height] = parts.map(escapeRegExp);
+  const bgRectPattern = new RegExp(
+    `\\s*<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="[^"]*"\\s*/>`,
+  );
+
+  return svg.replace(bgRectPattern, '');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function extractDiagramType(source: string): string | undefined {
