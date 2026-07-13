@@ -1,6 +1,20 @@
 import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);
 
 // ../../node_modules/@cristianormazabal/triton-core/dist/index.js
+var CONNECTOR_ANIMATIONS = [
+  "march",
+  "particle",
+  "draw",
+  "pulse",
+  "glow",
+  "comet",
+  "stream",
+  "flow",
+  "colorcycle"
+];
+function isRenderedConnectorAnimation(value) {
+  return typeof value === "string" && CONNECTOR_ANIMATIONS.includes(value);
+}
 function ok(value) {
   return { ok: true, value };
 }
@@ -86,6 +100,24 @@ function detect(input) {
     return { format: "yaml", diagramType: typeMatch?.[1] ?? "flowchart" };
   }
   return { format: "mermaid", diagramType: matchMermaid(trimmed) ?? "flowchart" };
+}
+function stripComments(input) {
+  const trimmed = input.trimStart();
+  if (/^type:\s/.test(trimmed)) return input;
+  if (trimmed.startsWith("---")) {
+    const fmMatch = trimmed.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+    if (fmMatch) {
+      const leadingWs = input.slice(0, input.length - trimmed.length);
+      const frontmatter = fmMatch[0];
+      const body = trimmed.slice(frontmatter.length);
+      return leadingWs + frontmatter + removeCommentLines(body);
+    }
+    return input;
+  }
+  return removeCommentLines(input);
+}
+function removeCommentLines(text) {
+  return text.split("\n").filter((line) => !/^\s*%%/.test(line)).join("\n");
 }
 var registry = /* @__PURE__ */ new Map();
 function registerDiagram(kind, module) {
@@ -371,6 +403,7 @@ var THEMES = {
   "subject-timeline": subjectTimelineTheme,
   showcase: showcaseTheme
 };
+var themePresetNames = Object.freeze(Object.keys(THEMES));
 function getThemePreset(name) {
   return name !== void 0 && THEMES[name] || defaultTheme;
 }
@@ -383,6 +416,145 @@ function resolveTheme(input, base) {
     edges: { ...base.edges, ...input.edges },
     panel: { ...base.panel, ...input.panel }
   };
+}
+var PREFIX_RE = /^[a-z][a-z0-9-]*$/;
+var NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+var DEFAULT_WIDTH = 16;
+var DEFAULT_HEIGHT = 16;
+var DEFAULT_LEFT = 0;
+var DEFAULT_TOP = 0;
+var MAX_ALIAS_DEPTH = 4;
+function parseIconRef(token) {
+  if (typeof token !== "string" || token.length === 0) {
+    return err("ICON_NOT_FOUND", `Icon token must be a non-empty string, got ${JSON.stringify(token)}`);
+  }
+  const colonIdx = token.indexOf(":");
+  if (colonIdx === -1) {
+    return err("ICON_NOT_FOUND", `Invalid icon token ${JSON.stringify(token)}: must be "prefix:name"`);
+  }
+  if (token.indexOf(":", colonIdx + 1) !== -1) {
+    return err(
+      "ICON_NOT_FOUND",
+      `Invalid icon token ${JSON.stringify(token)}: too many colons \u2014 expected "prefix:name"`
+    );
+  }
+  const prefix = token.slice(0, colonIdx);
+  const name = token.slice(colonIdx + 1);
+  if (!PREFIX_RE.test(prefix)) {
+    return err(
+      "ICON_NOT_FOUND",
+      `Invalid icon token ${JSON.stringify(token)}: prefix ${JSON.stringify(prefix)} must match ^[a-z][a-z0-9-]*$`
+    );
+  }
+  if (!NAME_RE.test(name)) {
+    return err(
+      "ICON_NOT_FOUND",
+      `Invalid icon token ${JSON.stringify(token)}: name ${JSON.stringify(name)} must match ^[a-z0-9][a-z0-9-]*$`
+    );
+  }
+  return ok({ prefix, name });
+}
+function detectColorMode(body) {
+  if (body.includes("<linearGradient") || body.includes("<radialGradient")) {
+    return "brand";
+  }
+  const ATTR_RE = /(?:fill|stroke)=["']([^"']+)["']/g;
+  const NEUTRAL = /* @__PURE__ */ new Set(["none", "currentcolor", "inherit"]);
+  let match;
+  while ((match = ATTR_RE.exec(body)) !== null) {
+    const value = match[1];
+    if (value === void 0) continue;
+    const lower = value.toLowerCase();
+    if (!NEUTRAL.has(lower)) {
+      return "brand";
+    }
+  }
+  return "monochrome";
+}
+function mergeViewBox(aliasLevel, iconLevel, packLevel) {
+  return {
+    width: aliasLevel.width ?? iconLevel.width ?? packLevel.width ?? DEFAULT_WIDTH,
+    height: aliasLevel.height ?? iconLevel.height ?? packLevel.height ?? DEFAULT_HEIGHT,
+    left: aliasLevel.left ?? iconLevel.left ?? packLevel.left ?? DEFAULT_LEFT,
+    top: aliasLevel.top ?? iconLevel.top ?? packLevel.top ?? DEFAULT_TOP
+  };
+}
+function composeTransforms(icon, alias) {
+  const iconRotate = icon.rotate ?? 0;
+  const iconHFlip = icon.hFlip ?? false;
+  const iconVFlip = icon.vFlip ?? false;
+  if (alias === null) {
+    return {
+      rotate: iconRotate,
+      hFlip: iconHFlip,
+      vFlip: iconVFlip
+    };
+  }
+  const aliasRotate = alias.rotate ?? 0;
+  const aliasHFlip = alias.hFlip ?? false;
+  const aliasVFlip = alias.vFlip ?? false;
+  return {
+    rotate: (iconRotate + aliasRotate) % 4,
+    hFlip: iconHFlip !== aliasHFlip,
+    // XOR
+    vFlip: iconVFlip !== aliasVFlip
+    // XOR
+  };
+}
+function resolveIcon(ref, packs) {
+  const pack = packs.get(ref.prefix);
+  if (pack === void 0) {
+    return err("ICON_NOT_FOUND", `Icon pack "${ref.prefix}" not loaded (looking up "${ref.prefix}:${ref.name}")`);
+  }
+  const directIcon = pack.icons[ref.name];
+  if (directIcon !== void 0) {
+    const viewBox = mergeViewBox({}, directIcon, pack);
+    const transforms = composeTransforms(directIcon, null);
+    return ok({
+      body: directIcon.body,
+      viewBox,
+      transforms,
+      colorMode: detectColorMode(directIcon.body)
+    });
+  }
+  const aliases = pack.aliases;
+  if (aliases === void 0 || !(ref.name in aliases)) {
+    return err(
+      "ICON_NOT_FOUND",
+      `Icon "${ref.name}" not found in pack "${ref.prefix}" (checked icons and aliases)`
+    );
+  }
+  let currentName = ref.name;
+  let currentAlias = aliases[ref.name] ?? null;
+  const topAlias = currentAlias;
+  for (let depth = 0; depth < MAX_ALIAS_DEPTH; depth++) {
+    if (currentAlias === null) break;
+    const parentName = currentAlias.parent;
+    const parentIcon = pack.icons[parentName];
+    if (parentIcon !== void 0) {
+      const viewBox = mergeViewBox(topAlias ?? {}, parentIcon, pack);
+      const transforms = composeTransforms(parentIcon, topAlias);
+      return ok({
+        body: parentIcon.body,
+        viewBox,
+        transforms,
+        colorMode: detectColorMode(parentIcon.body)
+      });
+    }
+    const parentAlias = aliases[parentName];
+    if (parentAlias === void 0) {
+      return err(
+        "ICON_NOT_FOUND",
+        `Alias "${currentName}" in pack "${ref.prefix}" points to parent "${parentName}" which does not exist`
+      );
+    }
+    currentName = parentName;
+    currentAlias = parentAlias;
+  }
+  return err(
+    "ICON_NOT_FOUND",
+    `Alias chain for "${ref.name}" in pack "${ref.prefix}" exceeds maximum depth of ${MAX_ALIAS_DEPTH}`
+  );
 }
 var registry3 = /* @__PURE__ */ new Map();
 function registerRouter(style, router) {
@@ -447,12 +619,19 @@ var OrthogonalRouter = class {
     const midX = (from.x + to.x) / 2;
     const midY = (from.y + to.y) / 2;
     const pad = padding ?? 12;
-    if (Math.abs(dx) < 1 || Math.abs(dy) < 1) {
-      return {
-        points: [from, to],
-        path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
-        labelPosition: { x: midX, y: midY }
-      };
+    const STUB = Math.max(pad, 20);
+    const straightH = Math.abs(dy) < 1;
+    const straightV = Math.abs(dx) < 1;
+    if (straightH || straightV) {
+      const dirsOk = straightDirsOk(from, to, straightH, straightV, fromDir, toDir);
+      const clear = !obstacles || countRouteCollisions([from, to], obstacles) === 0;
+      if (dirsOk && clear) {
+        return {
+          points: [from, to],
+          path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+          labelPosition: { x: midX, y: midY }
+        };
+      }
     }
     if (fromDir && toDir) {
       const exitH = fromDir === "E" || fromDir === "W";
@@ -460,12 +639,22 @@ var OrthogonalRouter = class {
       let points2;
       let path2;
       if (exitH && entryH) {
-        let bendX = clearVerticalBend(midX, from.y, to.y, from.x, to.x, obstacles, pad);
-        bendX = clearHorizontalSegments(bendX, from, to, obstacles, pad);
+        const sameWall = fromDir === toDir;
+        const baseX = sameWall ? fromDir === "E" ? Math.max(from.x, to.x) + STUB : Math.min(from.x, to.x) - STUB : midX;
+        let bendX;
+        if (sameWall) {
+          bendX = clearBendXOutboard(baseX, from, to, obstacles, pad, fromDir === "E" ? 1 : -1);
+        } else {
+          bendX = clearVerticalBend(baseX, from.y, to.y, from.x, to.x, obstacles, pad);
+          bendX = clearHorizontalSegments(bendX, from, to, obstacles, pad);
+        }
         const v1 = { x: bendX, y: from.y };
         const v2 = { x: bendX, y: to.y };
-        const hhPoints = [from, v1, v2, to];
-        if (obstacles && countRouteCollisions(hhPoints, obstacles) > 0) {
+        let hhPoints = [from, v1, v2, to];
+        if (sameWall && obstacles && routeHitsEndpointObstacle(hhPoints, from, to, obstacles)) {
+          hhPoints = buildSameHorizontalWallRoute(from, to, fromDir, obstacles, pad, STUB);
+        }
+        if (!sameWall && obstacles && countRouteCollisions(hhPoints, obstacles) > 0) {
           const vvRoute = buildVVRouteWithStubs(from, to, fromDir, toDir, obstacles, pad);
           if (countRouteCollisions(vvRoute, obstacles) < countRouteCollisions(hhPoints, obstacles)) {
             points2 = vvRoute;
@@ -477,12 +666,22 @@ var OrthogonalRouter = class {
         }
         path2 = points2.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
       } else if (!exitH && !entryH) {
-        let bendY = clearHorizontalBend(midY, from.x, to.x, from.y, to.y, obstacles, pad);
-        bendY = clearVerticalSegments(bendY, from, to, obstacles, pad);
+        const sameWall = fromDir === toDir;
+        const baseY = sameWall ? fromDir === "S" ? Math.max(from.y, to.y) + STUB : Math.min(from.y, to.y) - STUB : midY;
+        let bendY;
+        if (sameWall) {
+          bendY = clearBendYOutboard(baseY, from, to, obstacles, pad, fromDir === "S" ? 1 : -1);
+        } else {
+          bendY = clearHorizontalBend(baseY, from.x, to.x, from.y, to.y, obstacles, pad);
+          bendY = clearVerticalSegments(bendY, from, to, obstacles, pad);
+        }
         const v1 = { x: from.x, y: bendY };
         const v2 = { x: to.x, y: bendY };
-        const vvPoints = [from, v1, v2, to];
-        if (obstacles && countRouteCollisions(vvPoints, obstacles) > 0) {
+        let vvPoints = [from, v1, v2, to];
+        if (sameWall && obstacles && routeHitsEndpointObstacle(vvPoints, from, to, obstacles)) {
+          vvPoints = buildSameVerticalWallRoute(from, to, fromDir, obstacles, pad, STUB);
+        }
+        if (!sameWall && obstacles && countRouteCollisions(vvPoints, obstacles) > 0) {
           const hhRoute = buildHHRouteWithStubs(from, to, fromDir, toDir, obstacles, pad);
           if (countRouteCollisions(hhRoute, obstacles) < countRouteCollisions(vvPoints, obstacles)) {
             points2 = hhRoute;
@@ -522,6 +721,166 @@ var OrthogonalRouter = class {
     return { points, path, labelPosition: { x: midX, y: midY } };
   }
 };
+function clearBendXOutboard(baseX, from, to, obstacles, pad, dir) {
+  if (!obstacles || obstacles.length === 0) return baseX;
+  let x = baseX;
+  const yMin = Math.min(from.y, to.y);
+  const yMax = Math.max(from.y, to.y);
+  for (let pass = 0; pass < obstacles.length * 2 + 2; pass++) {
+    let moved = false;
+    for (const obs of obstacles) {
+      const oLeft = obs.x - pad;
+      const oRight = obs.x + obs.width + pad;
+      const oTop = obs.y;
+      const oBottom = obs.y + obs.height;
+      const vHits = x > oLeft && x < oRight && yMax > oTop && yMin < oBottom;
+      const hHitTo = segCrossesInterior({ x, y: to.y }, { x: to.x, y: to.y }, obs, pad);
+      const hHitFrom = segCrossesInterior({ x: from.x, y: from.y }, { x, y: from.y }, obs, pad);
+      if (vHits || hHitTo || hHitFrom) {
+        const edge = dir < 0 ? oLeft : oRight;
+        if (dir < 0 && edge < x || dir > 0 && edge > x) {
+          x = edge;
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return x;
+}
+function clearBendYOutboard(baseY, from, to, obstacles, pad, dir) {
+  if (!obstacles || obstacles.length === 0) return baseY;
+  let y = baseY;
+  const xMin = Math.min(from.x, to.x);
+  const xMax = Math.max(from.x, to.x);
+  for (let pass = 0; pass < obstacles.length * 2 + 2; pass++) {
+    let moved = false;
+    for (const obs of obstacles) {
+      const oTop = obs.y - pad;
+      const oBottom = obs.y + obs.height + pad;
+      const oLeft = obs.x;
+      const oRight = obs.x + obs.width;
+      const hHits = y > oTop && y < oBottom && xMax > oLeft && xMin < oRight;
+      const vHitTo = segCrossesInterior({ x: to.x, y }, { x: to.x, y: to.y }, obs, pad);
+      const vHitFrom = segCrossesInterior({ x: from.x, y: from.y }, { x: from.x, y }, obs, pad);
+      if (hHits || vHitTo || vHitFrom) {
+        const edge = dir < 0 ? oTop : oBottom;
+        if (dir < 0 && edge < y || dir > 0 && edge > y) {
+          y = edge;
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return y;
+}
+function straightDirsOk(from, to, straightH, straightV, fromDir, toDir) {
+  if (!fromDir && !toDir) return true;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (straightH && Math.abs(dx) < 1) return true;
+  let requiredFrom;
+  let requiredTo;
+  if (straightH) {
+    requiredFrom = dx > 0 ? "E" : "W";
+    requiredTo = dx > 0 ? "W" : "E";
+  } else if (straightV) {
+    requiredFrom = dy > 0 ? "S" : "N";
+    requiredTo = dy > 0 ? "N" : "S";
+  } else {
+    return false;
+  }
+  return (!fromDir || fromDir === requiredFrom) && (!toDir || toDir === requiredTo);
+}
+function buildSameVerticalWallRoute(from, to, wall, obstacles, pad, stub) {
+  const dir = wall === "S" ? 1 : -1;
+  const fromOut = { x: from.x, y: from.y + dir * stub };
+  const toOut = { x: to.x, y: to.y + dir * stub };
+  const colliders = collidingObstacles([from, fromOut, { x: to.x, y: fromOut.y }, to], obstacles);
+  const relevant = colliders.length > 0 ? colliders : obstacles;
+  const leftX = Math.min(...relevant.map((o) => o.x - pad));
+  const rightX = Math.max(...relevant.map((o) => o.x + o.width + pad));
+  return bestSameVerticalCandidate(from, to, fromOut, toOut, [leftX, rightX], obstacles);
+}
+function buildSameHorizontalWallRoute(from, to, wall, obstacles, pad, stub) {
+  const dir = wall === "E" ? 1 : -1;
+  const fromOut = { x: from.x + dir * stub, y: from.y };
+  const toOut = { x: to.x + dir * stub, y: to.y };
+  const colliders = collidingObstacles([from, fromOut, { x: fromOut.x, y: to.y }, to], obstacles);
+  const relevant = colliders.length > 0 ? colliders : obstacles;
+  const topY = Math.min(...relevant.map((o) => o.y - pad));
+  const bottomY = Math.max(...relevant.map((o) => o.y + o.height + pad));
+  return bestSameHorizontalCandidate(from, to, fromOut, toOut, [topY, bottomY], obstacles);
+}
+function bestSameVerticalCandidate(from, to, fromOut, toOut, escapeXs, obstacles) {
+  let best;
+  let bestCost = Infinity;
+  for (const escapeX of escapeXs) {
+    const candidate = [
+      from,
+      fromOut,
+      { x: escapeX, y: fromOut.y },
+      { x: escapeX, y: toOut.y },
+      toOut,
+      to
+    ];
+    const cost = countRouteCollisions(candidate, obstacles) * 1e6 + polylineLength(candidate);
+    if (cost < bestCost) {
+      best = candidate;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
+function bestSameHorizontalCandidate(from, to, fromOut, toOut, escapeYs, obstacles) {
+  let best;
+  let bestCost = Infinity;
+  for (const escapeY of escapeYs) {
+    const candidate = [
+      from,
+      fromOut,
+      { x: fromOut.x, y: escapeY },
+      { x: toOut.x, y: escapeY },
+      toOut,
+      to
+    ];
+    const cost = countRouteCollisions(candidate, obstacles) * 1e6 + polylineLength(candidate);
+    if (cost < bestCost) {
+      best = candidate;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
+function collidingObstacles(points, obstacles) {
+  return obstacles.filter((obs) => {
+    for (let i = 0; i < points.length - 1; i++) {
+      if (segCrossesInterior(points[i], points[i + 1], obs, 0)) return true;
+    }
+    return false;
+  });
+}
+function routeHitsEndpointObstacle(points, from, to, obstacles) {
+  return collidingObstacles(points, obstacles).some(
+    (obs) => pointInOrOnRect(from, obs) || pointInOrOnRect(to, obs)
+  );
+}
+function pointInOrOnRect(p, r) {
+  const eps = 1e-6;
+  return p.x >= r.x - eps && p.x <= r.x + r.width + eps && p.y >= r.y - eps && p.y <= r.y + r.height + eps;
+}
+function polylineLength(points) {
+  let len = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    len += Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+  }
+  return len;
+}
 function clearVerticalBend(bendX, y1, y2, fromX, toX, obstacles, pad) {
   if (!obstacles || obstacles.length === 0) return bendX;
   const yMin = Math.min(y1, y2);
@@ -1053,6 +1412,8 @@ function elementBoundsAt(el, ox, oy) {
     }
     case "path":
       return null;
+    case "icon":
+      return { x: el.x + ox, y: el.y + oy, width: el.size, height: el.size };
   }
 }
 function parseTranslate(transform) {
@@ -1140,6 +1501,7 @@ function pen(theme) {
         stroke,
         strokeWidth,
         ...opts2.rx !== void 0 ? { rx: opts2.rx } : {},
+        ...opts2.fillOpacity !== void 0 ? { fillOpacity: opts2.fillOpacity } : {},
         ...opts2.opacity !== void 0 ? { opacity: opts2.opacity } : {}
       };
     },
@@ -1176,12 +1538,228 @@ function pen(theme) {
         ...opts2.transform !== void 0 ? { transform: opts2.transform } : {},
         ...opts2.opacity !== void 0 ? { opacity: opts2.opacity } : {}
       };
+    },
+    icon(resolvedIcon, x, y, size, opts2 = {}) {
+      return {
+        type: "icon",
+        icon: resolvedIcon,
+        x,
+        y,
+        size,
+        ...opts2.color !== void 0 ? { color: opts2.color } : {},
+        ...opts2.opacity !== void 0 ? { opacity: opts2.opacity } : {}
+      };
     }
   };
+}
+var ADVANCE = {
+  32: 0.2793,
+  33: 0.2793,
+  34: 0.3574,
+  35: 0.5576,
+  36: 0.5576,
+  37: 0.8906,
+  38: 0.6699,
+  39: 0.1914,
+  40: 0.334,
+  41: 0.334,
+  42: 0.3906,
+  43: 0.5859,
+  44: 0.2793,
+  45: 0.334,
+  46: 0.2793,
+  47: 0.3125,
+  48: 0.5576,
+  49: 0.5576,
+  50: 0.5576,
+  51: 0.5576,
+  52: 0.5576,
+  53: 0.5576,
+  54: 0.5576,
+  55: 0.5576,
+  56: 0.5576,
+  57: 0.5576,
+  58: 0.2793,
+  59: 0.2793,
+  60: 0.5859,
+  61: 0.5859,
+  62: 0.5859,
+  63: 0.5576,
+  64: 1.0186,
+  65: 0.6699,
+  66: 0.6699,
+  67: 0.7227,
+  68: 0.7227,
+  69: 0.6699,
+  70: 0.6133,
+  71: 0.7793,
+  72: 0.7227,
+  73: 0.2783,
+  74: 0.5,
+  75: 0.6699,
+  76: 0.5576,
+  77: 0.8359,
+  78: 0.7227,
+  79: 0.7793,
+  80: 0.6133,
+  81: 0.7793,
+  82: 0.7227,
+  83: 0.6133,
+  84: 0.6133,
+  85: 0.7227,
+  86: 0.6699,
+  87: 0.9453,
+  88: 0.6699,
+  89: 0.6699,
+  90: 0.6133,
+  91: 0.2793,
+  92: 0.3125,
+  93: 0.2793,
+  94: 0.5859,
+  95: 0.5576,
+  96: 0.334,
+  97: 0.5576,
+  98: 0.5576,
+  99: 0.5,
+  100: 0.5576,
+  101: 0.5576,
+  102: 0.2793,
+  103: 0.5576,
+  104: 0.5576,
+  105: 0.2217,
+  106: 0.2217,
+  107: 0.5,
+  108: 0.2217,
+  109: 0.8359,
+  110: 0.5576,
+  111: 0.5576,
+  112: 0.5576,
+  113: 0.5576,
+  114: 0.334,
+  115: 0.5,
+  116: 0.334,
+  117: 0.5576,
+  118: 0.5,
+  119: 0.7227,
+  120: 0.5,
+  121: 0.5,
+  122: 0.5,
+  123: 0.334,
+  124: 0.2598,
+  125: 0.334,
+  126: 0.5859
+};
+var DEFAULT_ADVANCE = 0.5576;
+var LINE_HEIGHT_FACTOR = 1.2;
+function measureText(text, fontSizePx) {
+  let totalEm = 0;
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.codePointAt(i) ?? 32;
+    totalEm += ADVANCE[cp] ?? DEFAULT_ADVANCE;
+  }
+  return {
+    width: totalEm * fontSizePx,
+    height: fontSizePx * LINE_HEIGHT_FACTOR
+  };
+}
+var ELLIPSIS = "\u2026";
+function wrapText2(text, fontSizePx, maxWidth, maxLines) {
+  if (!text || maxLines <= 0 || maxWidth <= 0) return { lines: [] };
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { lines: [] };
+  const lines2 = [];
+  let current = "";
+  for (let wi = 0; wi < words.length; wi++) {
+    const word = words[wi];
+    const candidate = current ? `${current} ${word}` : word;
+    if (measureText(candidate, fontSizePx).width <= maxWidth) {
+      current = candidate;
+    } else {
+      if (current) {
+        if (lines2.length === maxLines - 1) {
+          const remaining = words.slice(wi).join(" ");
+          const full = current ? `${current} ${remaining}` : remaining;
+          lines2.push(truncateText(full, fontSizePx, maxWidth));
+          return { lines: lines2 };
+        }
+        lines2.push(current);
+        current = word;
+      } else {
+        if (lines2.length === maxLines - 1) {
+          lines2.push(truncateText(word, fontSizePx, maxWidth));
+          return { lines: lines2 };
+        }
+        lines2.push(truncateText(word, fontSizePx, maxWidth));
+        current = "";
+      }
+    }
+  }
+  if (current) {
+    if (lines2.length < maxLines) {
+      lines2.push(current);
+    } else {
+      const last = lines2[lines2.length - 1] ?? "";
+      lines2[lines2.length - 1] = truncateText(`${last} ${current}`, fontSizePx, maxWidth);
+    }
+  }
+  return { lines: lines2 };
+}
+function truncateText(text, fontSizePx, maxWidth) {
+  if (measureText(text, fontSizePx).width <= maxWidth) return text;
+  const ellipsisWidth = measureText(ELLIPSIS, fontSizePx).width;
+  const budget = maxWidth - ellipsisWidth;
+  if (budget <= 0) return ELLIPSIS;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi + 1) / 2);
+    if (measureText(text.slice(0, mid), fontSizePx).width <= budget) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return text.slice(0, lo) + ELLIPSIS;
 }
 var NODE_W = 120;
 var NODE_H = 40;
 var ARROW_MARKER_ID = "triton-arrow";
+var CARD_PAD = 8;
+var CARD_ICON_BOX = 40;
+var CARD_ICON_GAP = 12;
+var CARD_MIN_W = 192;
+var CARD_MAX_W = 400;
+var CARD_MAX_BODY_LINES = 3;
+function splitCardLabel(label) {
+  const idx = label.search(/\\n|\n/);
+  if (idx === -1) return { title: label.trim(), body: "" };
+  const sep = label[idx] === "\n" ? 1 : 2;
+  return { title: label.slice(0, idx).trim(), body: label.slice(idx + sep).trim() };
+}
+function measureCardNode(node, typography) {
+  const { title, body } = splitCardLabel(node.label);
+  const titleW = measureText(title, typography.baseFontSize).width * 1.1;
+  const titleLH = typography.baseFontSize * 1.2;
+  const maxRightW = CARD_MAX_W - CARD_ICON_BOX - CARD_ICON_GAP - 2 * CARD_PAD;
+  let bodyH = 0;
+  let bodyW = 0;
+  if (body) {
+    const wrapped = wrapText2(body, typography.smallFontSize, maxRightW, CARD_MAX_BODY_LINES);
+    bodyH = wrapped.lines.length * typography.smallFontSize * 1.2;
+    bodyW = wrapped.lines.reduce(
+      (mx, l) => Math.max(mx, measureText(l, typography.smallFontSize).width),
+      0
+    );
+  }
+  const textW = Math.max(titleW, bodyW);
+  const width = Math.min(CARD_MAX_W, Math.max(
+    CARD_MIN_W,
+    CARD_ICON_BOX + CARD_ICON_GAP + textW + 2 * CARD_PAD
+  ));
+  const textH = body ? titleLH + bodyH : titleLH;
+  const height = Math.max(CARD_ICON_BOX, textH) + 2 * CARD_PAD;
+  return { width, height };
+}
 function layoutFlowchart(ir, theme, options) {
   const { spacing, palette, typography, edges: edgeTheme } = theme;
   const p = pen(theme);
@@ -1190,29 +1768,33 @@ function layoutFlowchart(ir, theme, options) {
   const isReverse = ir.direction === "RL" || ir.direction === "BT";
   const layers = assignLayers(ir.nodes, ir.edges);
   const byLayer = groupByLayer(ir.nodes, layers);
-  const numLayers = byLayer.size;
+  const backEdges = findBackEdges(ir.nodes, ir.edges);
+  const orderedByLayer = minimizeCrossings(byLayer, ir.edges, backEdges);
   const colGap = spacing.nodeGap;
   const rowGap = spacing.nodeGap;
   let maxNodesInLayer = 0;
-  for (const [, nodes] of byLayer) maxNodesInLayer = Math.max(maxNodesInLayer, nodes.length);
-  const nodePos = /* @__PURE__ */ new Map();
-  for (const [layerIdx, layerNodes] of byLayer) {
-    const layer = isReverse ? numLayers - 1 - layerIdx : layerIdx;
-    const count = layerNodes.length;
-    for (let i = 0; i < count; i++) {
-      const node = layerNodes[i];
-      let x;
-      let y;
-      if (isLR) {
-        x = margin + layer * (NODE_W + colGap);
-        y = margin + i * (NODE_H + rowGap) + (maxNodesInLayer - count) * (NODE_H + rowGap) / 2;
-      } else {
-        x = margin + i * (NODE_W + colGap) + (maxNodesInLayer - count) * (NODE_W + colGap) / 2;
-        y = margin + layer * (NODE_H + rowGap);
-      }
-      nodePos.set(node.id, { x, y, width: NODE_W, height: NODE_H });
-    }
+  for (const [, nodes] of orderedByLayer) maxNodesInLayer = Math.max(maxNodesInLayer, nodes.length);
+  const nodeSizeMap = /* @__PURE__ */ new Map();
+  for (const node of ir.nodes) {
+    nodeSizeMap.set(
+      node.id,
+      node.shape === "card" ? measureCardNode(node, typography) : { width: NODE_W, height: NODE_H }
+    );
   }
+  const nodePos = assignCoordinatesBK(
+    orderedByLayer,
+    ir.edges,
+    backEdges,
+    isLR,
+    isReverse,
+    maxNodesInLayer,
+    NODE_W,
+    NODE_H,
+    colGap,
+    rowGap,
+    margin,
+    nodeSizeMap
+  );
   const elements = [];
   if (ir.metadata.title) {
     elements.push(p.text(ir.metadata.title, margin, margin - 8, typography.titleFontSize, palette.text, { weight: "bold" }));
@@ -1228,18 +1810,19 @@ function layoutFlowchart(ir, theme, options) {
     elements.push(p.rect({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, palette.surface, palette.border, 1, { rx: 6, opacity: 0.6 }));
     elements.push(p.text(sg.label, minX + 8, minY + 14, typography.smallFontSize, palette.textMuted));
   }
-  const backEdges = findBackEdges(ir.nodes, ir.edges);
   let bowMaxX = -Infinity;
   let bowMaxY = -Infinity;
   for (let ei = 0; ei < ir.edges.length; ei++) {
     const edge = ir.edges[ei];
     const fromRect = nodePos.get(edge.from);
-    const toRect = nodePos.get(edge.to);
-    if (!fromRect || !toRect) continue;
+    const toRect2 = nodePos.get(edge.to);
+    if (!fromRect || !toRect2) continue;
     const dash = edge.style === "dotted" ? "6 3" : edge.style === "dashed" ? "8 4" : void 0;
+    const sw = edge.style === "thick" ? edgeTheme.strokeWidth * 2 : edgeTheme.strokeWidth;
+    const color = edge.style === "dotted" ? palette.textMuted : palette.primary;
     if (edge.from === edge.to) {
       const loop = selfLoopRoute(fromRect, isLR);
-      elements.push(p.path(loop.path, edge.kind === "async" ? palette.textMuted : palette.primary, edgeTheme.strokeWidth, {
+      elements.push(p.path(loop.path, color, sw, {
         ...dash !== void 0 ? { dash } : {},
         markerEnd: ARROW_MARKER_ID
       }));
@@ -1251,8 +1834,8 @@ function layoutFlowchart(ir, theme, options) {
       continue;
     }
     if (backEdges.has(ei)) {
-      const bow = backEdgeRoute(fromRect, toRect, isLR);
-      elements.push(p.path(bow.path, edge.kind === "async" ? palette.textMuted : palette.primary, edgeTheme.strokeWidth, {
+      const bow = backEdgeRoute(fromRect, toRect2, isLR);
+      elements.push(p.path(bow.path, color, sw, {
         ...dash !== void 0 ? { dash } : {},
         markerEnd: ARROW_MARKER_ID
       }));
@@ -1263,20 +1846,21 @@ function layoutFlowchart(ir, theme, options) {
       }
       continue;
     }
-    const fromAnchor = edgeAnchor(fromRect, ir.direction, "exit", toRect);
-    const toAnchor = edgeAnchor(toRect, ir.direction, "enter", fromRect);
-    const style = "orthogonal";
+    const fromAnchor = edge.exitWall ? wallAnchor(fromRect, edge.exitWall) : edgeAnchor(fromRect, ir.direction, "exit", toRect2);
+    const toAnchor = edge.entryWall ? wallAnchor(toRect2, edge.entryWall) : edgeAnchor(toRect2, ir.direction, "enter", fromRect);
+    const style = edge.routing ?? "orthogonal";
     const router = getRouter(style) ?? defaultRouter;
     const route = router.route({
       from: fromAnchor.point,
       to: toAnchor.point,
       style,
+      curveStyle: "linear",
       obstacles: [],
       padding: 8,
       fromDir: fromAnchor.portDir,
       toDir: toAnchor.portDir
     });
-    elements.push(p.path(route.path, edge.kind === "async" ? palette.textMuted : palette.primary, edgeTheme.strokeWidth, {
+    elements.push(p.path(route.path, color, sw, {
       ...dash !== void 0 ? { dash } : {},
       markerEnd: ARROW_MARKER_ID
     }));
@@ -1285,14 +1869,67 @@ function layoutFlowchart(ir, theme, options) {
       elements.push(p.text(edge.label, lp.x, lp.y - 4, edgeTheme.labelFontSize, palette.textMuted, { anchor: "middle" }));
     }
   }
+  const icons = options?.icons;
   for (const node of ir.nodes) {
     const r = nodePos.get(node.id);
     if (!r) continue;
     const nodeElements = [];
     const fill = nodeStatusFill(node, palette);
     const stroke = palette.border;
-    nodeElements.push(...renderNodeShape(node, r, fill, stroke, edgeTheme.strokeWidth));
-    nodeElements.push(p.text(node.label, r.x + NODE_W / 2, r.y + NODE_H / 2 + typography.baseFontSize * 0.35, typography.baseFontSize, palette.text, { anchor: "middle" }));
+    const sw = edgeTheme.strokeWidth;
+    if (node.shape === "card") {
+      nodeElements.push(p.rect(r, fill, stroke, sw, { rx: 6, fillOpacity: 0.85 }));
+      const { title, body } = splitCardLabel(node.label);
+      const iconX = r.x + CARD_PAD;
+      const iconY = r.y + (r.height - CARD_ICON_BOX) / 2;
+      const textX = r.x + CARD_PAD + CARD_ICON_BOX + CARD_ICON_GAP;
+      const rightW = r.width - 2 * CARD_PAD - CARD_ICON_BOX - CARD_ICON_GAP;
+      if (node.icon !== void 0 && icons !== void 0) {
+        const resolved = resolveIcon(node.icon, icons);
+        if (resolved.ok) {
+          const glyphSize = CARD_ICON_BOX - 8;
+          const gx = iconX + (CARD_ICON_BOX - glyphSize) / 2;
+          const gy = iconY + (CARD_ICON_BOX - glyphSize) / 2;
+          nodeElements.push(p.icon(resolved.value, gx, gy, glyphSize, { color: palette.primary }));
+        }
+      }
+      const bodyText = body ? body.replace(/\\n|\n/g, " ").trim() : "";
+      const wrapped = bodyText ? wrapText2(bodyText, typography.smallFontSize, rightW, CARD_MAX_BODY_LINES) : { lines: [] };
+      const hasBody = wrapped.lines.length > 0;
+      const titleBaseY = hasBody ? r.y + CARD_PAD + typography.baseFontSize * 0.85 : r.y + r.height / 2 + typography.baseFontSize * 0.35;
+      nodeElements.push(
+        p.text(title, textX, titleBaseY, typography.baseFontSize, palette.text, { weight: "bold" })
+      );
+      if (hasBody) {
+        const titleLH = typography.baseFontSize * 1.2;
+        let bodyY = r.y + CARD_PAD + titleLH + typography.smallFontSize * 0.85;
+        for (const line of wrapped.lines) {
+          nodeElements.push(
+            p.text(line, textX, bodyY, typography.smallFontSize, palette.textMuted)
+          );
+          bodyY += typography.smallFontSize * 1.2;
+        }
+      }
+    } else {
+      nodeElements.push(...renderNodeShape(node, r, fill, stroke, sw));
+      nodeElements.push(p.text(
+        node.label,
+        r.x + r.width / 2,
+        r.y + r.height / 2 + typography.baseFontSize * 0.35,
+        typography.baseFontSize,
+        palette.text,
+        { anchor: "middle" }
+      ));
+      if (node.icon !== void 0 && icons !== void 0) {
+        const resolved = resolveIcon(node.icon, icons);
+        if (resolved.ok) {
+          const iconSize = NODE_H - 8;
+          const ix = r.x + 4;
+          const iy = r.y + (NODE_H - iconSize) / 2;
+          nodeElements.push(p.icon(resolved.value, ix, iy, iconSize, { color: palette.text }));
+        }
+      }
+    }
     elements.push(p.group(nodeElements, { id: node.id }));
   }
   const allRects = [...nodePos.values()];
@@ -1323,10 +1960,10 @@ function layoutFlowchart(ir, theme, options) {
   const occupiedPorts = [];
   for (const edge of ir.edges) {
     const fromRect = nodePos.get(edge.from);
-    const toRect = nodePos.get(edge.to);
-    if (!fromRect || !toRect) continue;
-    const fromAnch = edgeAnchor(fromRect, ir.direction, "exit", toRect);
-    const toAnch = edgeAnchor(toRect, ir.direction, "enter", fromRect);
+    const toRect2 = nodePos.get(edge.to);
+    if (!fromRect || !toRect2) continue;
+    const fromAnch = edgeAnchor(fromRect, ir.direction, "exit", toRect2);
+    const toAnch = edgeAnchor(toRect2, ir.direction, "enter", fromRect);
     occupiedPorts.push({
       nodeKey: edge.from,
       wall: fromAnch.portDir,
@@ -1336,7 +1973,7 @@ function layoutFlowchart(ir, theme, options) {
     occupiedPorts.push({
       nodeKey: edge.to,
       wall: toAnch.portDir,
-      t: wallT(toRect, toAnch.portDir, toAnch.point),
+      t: wallT(toRect2, toAnch.portDir, toAnch.point),
       source: "intra"
     });
   }
@@ -1348,7 +1985,7 @@ function findBackEdges(nodes, edges2) {
   edges2.forEach((e, idx) => {
     adj.get(e.from)?.push({ to: e.to, idx });
   });
-  const WHITE = 0, GRAY = 1, BLACK3 = 2;
+  const WHITE = 0, GRAY = 1, BLACK2 = 2;
   const color = /* @__PURE__ */ new Map();
   for (const n of nodes) color.set(n.id, WHITE);
   const backEdges = /* @__PURE__ */ new Set();
@@ -1370,7 +2007,7 @@ function findBackEdges(nodes, edges2) {
           stack2.push({ id: to, i: 0 });
         }
       } else {
-        color.set(frame.id, BLACK3);
+        color.set(frame.id, BLACK2);
         stack2.pop();
       }
     }
@@ -1413,6 +2050,148 @@ function groupByLayer(nodes, layers) {
   }
   return new Map([...groups.entries()].sort(([a], [b]) => a - b));
 }
+function minimizeCrossings(byLayer, edges2, backEdgeSet) {
+  const pred = /* @__PURE__ */ new Map();
+  const succ = /* @__PURE__ */ new Map();
+  for (const [, nodes] of byLayer) {
+    for (const n of nodes) {
+      pred.set(n.id, []);
+      succ.set(n.id, []);
+    }
+  }
+  edges2.forEach((e, i) => {
+    if (backEdgeSet.has(i) || e.from === e.to) return;
+    pred.get(e.to)?.push(e.from);
+    succ.get(e.from)?.push(e.to);
+  });
+  const layerKeys = [...byLayer.keys()].sort((a, b) => a - b);
+  const origOrder = /* @__PURE__ */ new Map();
+  for (const [, nodes] of byLayer) nodes.forEach((n, i) => origOrder.set(n.id, i));
+  const order = /* @__PURE__ */ new Map();
+  for (const k of layerKeys) order.set(k, [...byLayer.get(k)]);
+  const posInLayer = /* @__PURE__ */ new Map();
+  function rebuildPos() {
+    for (const [, nodes] of order) nodes.forEach((n, i) => posInLayer.set(n.id, i));
+  }
+  rebuildPos();
+  function reorderLayer(layerIdx, neighborMap) {
+    const curr = order.get(layerIdx);
+    const bary = curr.map((node, i) => {
+      const nbrs = neighborMap.get(node.id) ?? [];
+      if (nbrs.length === 0) {
+        return { node, b: i, orig: origOrder.get(node.id) ?? i };
+      }
+      const sum = nbrs.reduce((s, nid) => s + (posInLayer.get(nid) ?? 0), 0);
+      return { node, b: sum / nbrs.length, orig: origOrder.get(node.id) ?? i };
+    });
+    bary.sort((a, b) => a.b !== b.b ? a.b - b.b : a.orig - b.orig);
+    order.set(layerIdx, bary.map((e) => e.node));
+    rebuildPos();
+  }
+  const MAX_PASSES = 4;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    if (pass % 2 === 0) {
+      for (let li = 1; li < layerKeys.length; li++) reorderLayer(layerKeys[li], pred);
+    } else {
+      for (let li = layerKeys.length - 2; li >= 0; li--) reorderLayer(layerKeys[li], succ);
+    }
+  }
+  return order;
+}
+function assignCoordinatesBK(byLayer, edges2, backEdgeSet, isLR, isReverse, maxNodesInLayer, nodeW, nodeH, colGap, rowGap, margin, nodeSizes) {
+  const getW = (id) => nodeSizes?.get(id)?.width ?? nodeW;
+  const getH = (id) => nodeSizes?.get(id)?.height ?? nodeH;
+  const predMap = /* @__PURE__ */ new Map();
+  const succMap = /* @__PURE__ */ new Map();
+  for (const [, nodes] of byLayer) {
+    for (const n of nodes) {
+      predMap.set(n.id, []);
+      succMap.set(n.id, []);
+    }
+  }
+  edges2.forEach((e, i) => {
+    if (backEdgeSet.has(i) || e.from === e.to) return;
+    predMap.get(e.to)?.push(e.from);
+    succMap.get(e.from)?.push(e.to);
+  });
+  const layerKeys = [...byLayer.keys()].sort((a, b) => a - b);
+  const numLayers = layerKeys.length;
+  const crossGap = isLR ? rowGap : colGap;
+  const mainGap = isLR ? colGap : rowGap;
+  let globalCrossSize = isLR ? nodeH : nodeW;
+  for (const [, nodes] of byLayer) {
+    for (const n of nodes) {
+      const cs = isLR ? getH(n.id) : getW(n.id);
+      if (cs > globalCrossSize) globalCrossSize = cs;
+    }
+  }
+  const crossStep = globalCrossSize + crossGap;
+  const layerMainSizes = layerKeys.map((lk) => {
+    const nodes = byLayer.get(lk);
+    let mx = isLR ? nodeW : nodeH;
+    for (const n of nodes) {
+      const ms = isLR ? getW(n.id) : getH(n.id);
+      if (ms > mx) mx = ms;
+    }
+    return mx;
+  });
+  const fwdMainPos = [];
+  let cumMain = margin;
+  for (let li = 0; li < numLayers; li++) {
+    fwdMainPos.push(cumMain);
+    cumMain += layerMainSizes[li] + mainGap;
+  }
+  function onePass(topDown) {
+    const crossPos = /* @__PURE__ */ new Map();
+    const neighborMap = topDown ? predMap : succMap;
+    const indices = topDown ? Array.from({ length: numLayers }, (_, i) => i) : Array.from({ length: numLayers }, (_, i) => numLayers - 1 - i);
+    for (const li of indices) {
+      const layerIdx = layerKeys[li];
+      const nodes = byLayer.get(layerIdx);
+      const count = nodes.length;
+      if (count === 0) continue;
+      const centeredStart = margin + (maxNodesInLayer - count) * crossStep / 2;
+      const pref = nodes.map((node, i) => {
+        const nbrs = neighborMap.get(node.id) ?? [];
+        const nbrPos = nbrs.map((nid) => crossPos.get(nid)).filter((p) => p !== void 0);
+        if (nbrPos.length === 0) return centeredStart + i * crossStep;
+        return nbrPos.reduce((s, p) => s + p, 0) / nbrPos.length;
+      });
+      const sortedPrefs = [...pref].sort((a, b) => a - b);
+      const medianPref = sortedPrefs[Math.floor((sortedPrefs.length - 1) / 2)];
+      const blockStart = Math.max(margin, medianPref - (count - 1) * crossStep / 2);
+      for (let i = 0; i < count; i++) {
+        crossPos.set(nodes[i].id, blockStart + i * crossStep);
+      }
+    }
+    return crossPos;
+  }
+  const pass1 = onePass(true);
+  const pass2 = onePass(false);
+  const nodePos = /* @__PURE__ */ new Map();
+  for (let li = 0; li < numLayers; li++) {
+    const layerIdx = layerKeys[li];
+    const nodes = byLayer.get(layerIdx);
+    const layerMainSz = layerMainSizes[li];
+    const mainPos = isReverse ? fwdMainPos[numLayers - 1 - li] : fwdMainPos[li];
+    for (const node of nodes) {
+      const c1 = pass1.get(node.id) ?? margin;
+      const c2 = pass2.get(node.id) ?? margin;
+      const slotLeft = (c1 + c2) / 2;
+      const nw = getW(node.id);
+      const nh = getH(node.id);
+      const crossOffset = (globalCrossSize - (isLR ? nh : nw)) / 2;
+      const mainOffset = (layerMainSz - (isLR ? nw : nh)) / 2;
+      nodePos.set(node.id, {
+        x: isLR ? mainPos + mainOffset : slotLeft + crossOffset,
+        y: isLR ? slotLeft + crossOffset : mainPos + mainOffset,
+        width: nw,
+        height: nh
+      });
+    }
+  }
+  return nodePos;
+}
 function renderNodeShape(node, r, fill, stroke, sw) {
   const { x, y, width: w, height: h2 } = r;
   switch (node.shape) {
@@ -1430,8 +2209,24 @@ function renderNodeShape(node, r, fill, stroke, sw) {
         { type: "rect", bounds: r, fill, stroke, strokeWidth: sw },
         { type: "rect", bounds: { x: x + 6, y, width: w - 12, height: h2 }, fill: "none", stroke, strokeWidth: sw * 0.5 }
       ];
+    case "card":
+      return [{ type: "rect", bounds: r, fill, stroke, strokeWidth: sw, rx: 6 }];
     default:
       return [{ type: "rect", bounds: r, fill, stroke, strokeWidth: sw, rx: 2 }];
+  }
+}
+function wallAnchor(r, wall) {
+  const cx = r.x + r.width / 2;
+  const cy = r.y + r.height / 2;
+  switch (wall) {
+    case "N":
+      return { point: { x: cx, y: r.y }, portDir: "N" };
+    case "S":
+      return { point: { x: cx, y: r.y + r.height }, portDir: "S" };
+    case "E":
+      return { point: { x: r.x + r.width, y: cy }, portDir: "E" };
+    case "W":
+      return { point: { x: r.x, y: cy }, portDir: "W" };
   }
 }
 function edgeAnchor(r, dir, role, peer) {
@@ -1445,14 +2240,14 @@ function edgeAnchor(r, dir, role, peer) {
   if (isLR) {
     const offAxis = Math.abs(dy);
     const onAxis = Math.abs(dx);
-    if (offAxis > onAxis && offAxis > r.height / 2) {
+    if (offAxis > onAxis && offAxis > r.height / 2 && onAxis < r.width) {
       return dy > 0 ? { point: { x: cx, y: r.y + r.height }, portDir: "S" } : { point: { x: cx, y: r.y }, portDir: "N" };
     }
     return role === "exit" ? { point: { x: r.x + r.width, y: cy }, portDir: "E" } : { point: { x: r.x, y: cy }, portDir: "W" };
   } else {
     const offAxis = Math.abs(dx);
     const onAxis = Math.abs(dy);
-    if (offAxis > onAxis && offAxis > r.width / 2) {
+    if (offAxis > onAxis && offAxis > r.width / 2 && onAxis < r.height) {
       return dx > 0 ? { point: { x: r.x + r.width, y: cy }, portDir: "E" } : { point: { x: r.x, y: cy }, portDir: "W" };
     }
     return role === "exit" ? { point: { x: cx, y: r.y + r.height }, portDir: "S" } : { point: { x: cx, y: r.y }, portDir: "N" };
@@ -1565,8 +2360,19 @@ function registerNode(rawId, label, shape) {
   }
   return id;
 }
-function addEdge(from, to, label, kind, style) {
-  edges.push({ from, to, label: label || void 0, kind: kind || "sync", style: style || "solid" });
+function addEdge(from, to, label, style, ann, edgeProps) {
+  const e = { from, to, label: label || void 0, style: style || "solid" };
+  if (edgeProps) {
+    if (edgeProps.bidirectional) e.bidirectional = true;
+    if (edgeProps.undirected) e.undirected = true;
+    if (edgeProps.endMarker) e.endMarker = edgeProps.endMarker;
+  }
+  if (ann) {
+    if (ann.routing) e.routing = ann.routing;
+    if (ann.exitWall) e.exitWall = ann.exitWall;
+    if (ann.entryWall) e.entryWall = ann.entryWall;
+  }
+  edges.push(e);
 }
 function reset() {
   nodeMap.clear();
@@ -1717,72 +2523,87 @@ function peg$parse(input, options) {
   var peg$c11 = "subgraph";
   var peg$c12 = "[";
   var peg$c13 = "]";
-  var peg$c14 = "|";
-  var peg$c15 = "<-.->";
-  var peg$c16 = "<-->";
-  var peg$c17 = "<==>";
-  var peg$c18 = "-..->";
-  var peg$c19 = "-.-> ";
-  var peg$c20 = "-.->";
-  var peg$c21 = "--->";
-  var peg$c22 = "-->";
-  var peg$c23 = "==>";
-  var peg$c24 = "--x";
-  var peg$c25 = "--o";
-  var peg$c26 = "-.-";
-  var peg$c27 = "===";
-  var peg$c28 = "((";
-  var peg$c29 = "))";
-  var peg$c30 = "([";
-  var peg$c31 = "])";
-  var peg$c32 = "[[";
-  var peg$c33 = "]]";
-  var peg$c34 = "[(";
-  var peg$c35 = ")]";
-  var peg$c36 = "{{";
-  var peg$c37 = "}}";
-  var peg$c38 = "[/";
-  var peg$c39 = "/]";
-  var peg$c40 = "[\\";
-  var peg$c41 = "\\]";
-  var peg$c42 = ">";
-  var peg$c43 = "{";
-  var peg$c44 = "}";
-  var peg$c45 = "(";
-  var peg$c46 = ")";
-  var peg$c47 = "style";
-  var peg$c48 = "classDef";
-  var peg$c49 = "class";
-  var peg$c50 = "click";
-  var peg$c51 = "note";
-  var peg$c52 = '"';
-  var peg$c53 = "at";
-  var peg$c54 = "offset";
-  var peg$c55 = ",";
-  var peg$c56 = "-";
-  var peg$c57 = "legend";
-  var peg$c58 = "bottom-right";
-  var peg$c59 = "bottom-left";
-  var peg$c60 = "top-right";
-  var peg$c61 = "top-left";
-  var peg$c62 = ":";
-  var peg$c63 = "\r\n";
+  var peg$c14 = "@";
+  var peg$c15 = "|";
+  var peg$c16 = "<-~->";
+  var peg$c17 = "<-_->";
+  var peg$c18 = "<-.->";
+  var peg$c19 = "<==>";
+  var peg$c20 = "<-->";
+  var peg$c21 = "-~->";
+  var peg$c22 = "-_->";
+  var peg$c23 = "-..->";
+  var peg$c24 = "-.->";
+  var peg$c25 = "===>";
+  var peg$c26 = "==>";
+  var peg$c27 = "--->";
+  var peg$c28 = "-->";
+  var peg$c29 = "--x";
+  var peg$c30 = "--o";
+  var peg$c31 = "-~-";
+  var peg$c32 = "-_-";
+  var peg$c33 = "-.-";
+  var peg$c34 = "===";
+  var peg$c35 = ":";
+  var peg$c36 = "straight";
+  var peg$c37 = "orthogonal";
+  var peg$c38 = "bezier";
+  var peg$c39 = "polyline";
+  var peg$c40 = '"';
+  var peg$c41 = "((";
+  var peg$c42 = "))";
+  var peg$c43 = "([";
+  var peg$c44 = "])";
+  var peg$c45 = "[[";
+  var peg$c46 = "]]";
+  var peg$c47 = "[(";
+  var peg$c48 = ")]";
+  var peg$c49 = "{{";
+  var peg$c50 = "}}";
+  var peg$c51 = "[/";
+  var peg$c52 = "/]";
+  var peg$c53 = "[\\";
+  var peg$c54 = "\\]";
+  var peg$c55 = ">";
+  var peg$c56 = "{";
+  var peg$c57 = "}";
+  var peg$c58 = "(";
+  var peg$c59 = ")";
+  var peg$c60 = "style";
+  var peg$c61 = "classDef";
+  var peg$c62 = "class";
+  var peg$c63 = "click";
+  var peg$c64 = "note";
+  var peg$c65 = "at";
+  var peg$c66 = "offset";
+  var peg$c67 = ",";
+  var peg$c68 = "-";
+  var peg$c69 = "legend";
+  var peg$c70 = "bottom-right";
+  var peg$c71 = "bottom-left";
+  var peg$c72 = "top-right";
+  var peg$c73 = "top-left";
+  var peg$c74 = "\r\n";
   var peg$r0 = /^[^\n]/;
   var peg$r1 = /^[a-zA-Z_]/;
   var peg$r2 = /^[a-zA-Z0-9_]/;
   var peg$r3 = /^[^\]]/;
   var peg$r4 = /^[^\n%]/;
   var peg$r5 = /^[^|]/;
-  var peg$r6 = /^[^)]/;
-  var peg$r7 = /^[^}]/;
-  var peg$r8 = /^[^\/]/;
-  var peg$r9 = /^[^\\]/;
-  var peg$r10 = /^[^\n;]/;
-  var peg$r11 = /^[^"]/;
-  var peg$r12 = /^[0-9]/;
-  var peg$r13 = /^[^:\n]/;
-  var peg$r14 = /^[ \t]/;
-  var peg$r15 = /^[\n\r]/;
+  var peg$r6 = /^[ENSW]/;
+  var peg$r7 = /^[a-z]/;
+  var peg$r8 = /^[a-z0-9\-]/;
+  var peg$r9 = /^[^"]/;
+  var peg$r10 = /^[^ \t\r\n@[\](){};]/;
+  var peg$r11 = /^[^)]/;
+  var peg$r12 = /^[^}]/;
+  var peg$r13 = /^[^\/]/;
+  var peg$r14 = /^[^\\]/;
+  var peg$r15 = /^[^\n;]/;
+  var peg$r16 = /^[0-9]/;
+  var peg$r17 = /^[^:\n]/;
+  var peg$r18 = /^[ \t]/;
+  var peg$r19 = /^[\n\r]/;
   var peg$e0 = peg$literalExpectation("---", false);
   var peg$e1 = peg$classExpectation(["\n"], true, false);
   var peg$e2 = peg$literalExpectation("flowchart", false);
@@ -1803,70 +2624,85 @@ function peg$parse(input, options) {
   var peg$e17 = peg$classExpectation(["]"], true, false);
   var peg$e18 = peg$literalExpectation("]", false);
   var peg$e19 = peg$classExpectation(["\n", "%"], true, false);
-  var peg$e20 = peg$literalExpectation("|", false);
-  var peg$e21 = peg$classExpectation(["|"], true, false);
-  var peg$e22 = peg$literalExpectation("<-.->", false);
-  var peg$e23 = peg$literalExpectation("<-->", false);
-  var peg$e24 = peg$literalExpectation("<==>", false);
-  var peg$e25 = peg$literalExpectation("-..->", false);
-  var peg$e26 = peg$literalExpectation("-.-> ", false);
-  var peg$e27 = peg$literalExpectation("-.->", false);
-  var peg$e28 = peg$literalExpectation("--->", false);
-  var peg$e29 = peg$literalExpectation("-->", false);
-  var peg$e30 = peg$literalExpectation("==>", false);
-  var peg$e31 = peg$literalExpectation("--x", false);
-  var peg$e32 = peg$literalExpectation("--o", false);
-  var peg$e33 = peg$literalExpectation("-.-", false);
-  var peg$e34 = peg$literalExpectation("===", false);
-  var peg$e35 = peg$literalExpectation("((", false);
-  var peg$e36 = peg$classExpectation([")"], true, false);
-  var peg$e37 = peg$literalExpectation("))", false);
-  var peg$e38 = peg$literalExpectation("([", false);
-  var peg$e39 = peg$literalExpectation("])", false);
-  var peg$e40 = peg$literalExpectation("[[", false);
-  var peg$e41 = peg$literalExpectation("]]", false);
-  var peg$e42 = peg$literalExpectation("[(", false);
-  var peg$e43 = peg$literalExpectation(")]", false);
-  var peg$e44 = peg$literalExpectation("{{", false);
-  var peg$e45 = peg$classExpectation(["}"], true, false);
-  var peg$e46 = peg$literalExpectation("}}", false);
-  var peg$e47 = peg$literalExpectation("[/", false);
-  var peg$e48 = peg$classExpectation(["/"], true, false);
-  var peg$e49 = peg$literalExpectation("/]", false);
-  var peg$e50 = peg$literalExpectation("[\\", false);
-  var peg$e51 = peg$classExpectation(["\\"], true, false);
-  var peg$e52 = peg$literalExpectation("\\]", false);
-  var peg$e53 = peg$literalExpectation(">", false);
-  var peg$e54 = peg$literalExpectation("{", false);
-  var peg$e55 = peg$literalExpectation("}", false);
-  var peg$e56 = peg$literalExpectation("(", false);
-  var peg$e57 = peg$literalExpectation(")", false);
-  var peg$e58 = peg$literalExpectation("style", false);
-  var peg$e59 = peg$classExpectation(["\n", ";"], true, false);
-  var peg$e60 = peg$literalExpectation("classDef", false);
-  var peg$e61 = peg$literalExpectation("class", false);
-  var peg$e62 = peg$literalExpectation("click", false);
-  var peg$e63 = peg$literalExpectation("note", false);
-  var peg$e64 = peg$literalExpectation('"', false);
-  var peg$e65 = peg$classExpectation(['"'], true, false);
-  var peg$e66 = peg$literalExpectation("at", false);
-  var peg$e67 = peg$literalExpectation("offset", false);
-  var peg$e68 = peg$literalExpectation(",", false);
-  var peg$e69 = peg$literalExpectation("-", false);
-  var peg$e70 = peg$classExpectation([["0", "9"]], false, false);
-  var peg$e71 = peg$literalExpectation("legend", false);
-  var peg$e72 = peg$literalExpectation("bottom-right", false);
-  var peg$e73 = peg$literalExpectation("bottom-left", false);
-  var peg$e74 = peg$literalExpectation("top-right", false);
-  var peg$e75 = peg$literalExpectation("top-left", false);
-  var peg$e76 = peg$classExpectation([":", "\n"], true, false);
-  var peg$e77 = peg$literalExpectation(":", false);
-  var peg$e78 = peg$otherExpectation("optional whitespace");
-  var peg$e79 = peg$classExpectation([" ", "	"], false, false);
-  var peg$e80 = peg$otherExpectation("required whitespace");
-  var peg$e81 = peg$otherExpectation("newline");
-  var peg$e82 = peg$literalExpectation("\r\n", false);
-  var peg$e83 = peg$classExpectation(["\n", "\r"], false, false);
+  var peg$e20 = peg$literalExpectation("@", false);
+  var peg$e21 = peg$literalExpectation("|", false);
+  var peg$e22 = peg$classExpectation(["|"], true, false);
+  var peg$e23 = peg$literalExpectation("<-~->", false);
+  var peg$e24 = peg$literalExpectation("<-_->", false);
+  var peg$e25 = peg$literalExpectation("<-.->", false);
+  var peg$e26 = peg$literalExpectation("<==>", false);
+  var peg$e27 = peg$literalExpectation("<-->", false);
+  var peg$e28 = peg$literalExpectation("-~->", false);
+  var peg$e29 = peg$literalExpectation("-_->", false);
+  var peg$e30 = peg$literalExpectation("-..->", false);
+  var peg$e31 = peg$literalExpectation("-.->", false);
+  var peg$e32 = peg$literalExpectation("===>", false);
+  var peg$e33 = peg$literalExpectation("==>", false);
+  var peg$e34 = peg$literalExpectation("--->", false);
+  var peg$e35 = peg$literalExpectation("-->", false);
+  var peg$e36 = peg$literalExpectation("--x", false);
+  var peg$e37 = peg$literalExpectation("--o", false);
+  var peg$e38 = peg$literalExpectation("-~-", false);
+  var peg$e39 = peg$literalExpectation("-_-", false);
+  var peg$e40 = peg$literalExpectation("-.-", false);
+  var peg$e41 = peg$literalExpectation("===", false);
+  var peg$e42 = peg$literalExpectation(":", false);
+  var peg$e43 = peg$literalExpectation("straight", false);
+  var peg$e44 = peg$literalExpectation("orthogonal", false);
+  var peg$e45 = peg$literalExpectation("bezier", false);
+  var peg$e46 = peg$literalExpectation("polyline", false);
+  var peg$e47 = peg$classExpectation(["E", "N", "S", "W"], false, false);
+  var peg$e48 = peg$classExpectation([["a", "z"]], false, false);
+  var peg$e49 = peg$classExpectation([["a", "z"], ["0", "9"], "-"], false, false);
+  var peg$e50 = peg$literalExpectation('"', false);
+  var peg$e51 = peg$classExpectation(['"'], true, false);
+  var peg$e52 = peg$classExpectation([" ", "	", "\r", "\n", "@", "[", "]", "(", ")", "{", "}", ";"], true, false);
+  var peg$e53 = peg$literalExpectation("((", false);
+  var peg$e54 = peg$classExpectation([")"], true, false);
+  var peg$e55 = peg$literalExpectation("))", false);
+  var peg$e56 = peg$literalExpectation("([", false);
+  var peg$e57 = peg$literalExpectation("])", false);
+  var peg$e58 = peg$literalExpectation("[[", false);
+  var peg$e59 = peg$literalExpectation("]]", false);
+  var peg$e60 = peg$literalExpectation("[(", false);
+  var peg$e61 = peg$literalExpectation(")]", false);
+  var peg$e62 = peg$literalExpectation("{{", false);
+  var peg$e63 = peg$classExpectation(["}"], true, false);
+  var peg$e64 = peg$literalExpectation("}}", false);
+  var peg$e65 = peg$literalExpectation("[/", false);
+  var peg$e66 = peg$classExpectation(["/"], true, false);
+  var peg$e67 = peg$literalExpectation("/]", false);
+  var peg$e68 = peg$literalExpectation("[\\", false);
+  var peg$e69 = peg$classExpectation(["\\"], true, false);
+  var peg$e70 = peg$literalExpectation("\\]", false);
+  var peg$e71 = peg$literalExpectation(">", false);
+  var peg$e72 = peg$literalExpectation("{", false);
+  var peg$e73 = peg$literalExpectation("}", false);
+  var peg$e74 = peg$literalExpectation("(", false);
+  var peg$e75 = peg$literalExpectation(")", false);
+  var peg$e76 = peg$literalExpectation("style", false);
+  var peg$e77 = peg$classExpectation(["\n", ";"], true, false);
+  var peg$e78 = peg$literalExpectation("classDef", false);
+  var peg$e79 = peg$literalExpectation("class", false);
+  var peg$e80 = peg$literalExpectation("click", false);
+  var peg$e81 = peg$literalExpectation("note", false);
+  var peg$e82 = peg$literalExpectation("at", false);
+  var peg$e83 = peg$literalExpectation("offset", false);
+  var peg$e84 = peg$literalExpectation(",", false);
+  var peg$e85 = peg$literalExpectation("-", false);
+  var peg$e86 = peg$classExpectation([["0", "9"]], false, false);
+  var peg$e87 = peg$literalExpectation("legend", false);
+  var peg$e88 = peg$literalExpectation("bottom-right", false);
+  var peg$e89 = peg$literalExpectation("bottom-left", false);
+  var peg$e90 = peg$literalExpectation("top-right", false);
+  var peg$e91 = peg$literalExpectation("top-left", false);
+  var peg$e92 = peg$classExpectation([":", "\n"], true, false);
+  var peg$e93 = peg$otherExpectation("optional whitespace");
+  var peg$e94 = peg$classExpectation([" ", "	"], false, false);
+  var peg$e95 = peg$otherExpectation("required whitespace");
+  var peg$e96 = peg$otherExpectation("newline");
+  var peg$e97 = peg$literalExpectation("\r\n", false);
+  var peg$e98 = peg$classExpectation(["\n", "\r"], false, false);
   var peg$f0 = function(frontmatter, header, statements) {
     return {
       version: "1.0",
@@ -1908,13 +2744,13 @@ function peg$parse(input, options) {
   var peg$f9 = function(label) {
     return stripQuotes(label.trim());
   };
-  var peg$f10 = function(head, edge, target) {
-    return { edge, target };
+  var peg$f10 = function(head, edge, target, ann) {
+    return { edge, target, ann: ann ? ann[2] : null };
   };
   var peg$f11 = function(head, rest) {
     let prev = head;
-    for (const { edge, target } of rest) {
-      addEdge(prev.id, target.id, edge.label, edge.kind, edge.style);
+    for (const { edge, target, ann } of rest) {
+      addEdge(prev.id, target.id, edge.label, edge.style, ann, edge);
       prev = target;
     }
     return { type: "chain" };
@@ -1926,118 +2762,178 @@ function peg$parse(input, options) {
     return text2.trim();
   };
   var peg$f14 = function() {
-    return { kind: "async", style: "dotted" };
+    return { style: "wavy", bidirectional: true };
   };
   var peg$f15 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "dashed", bidirectional: true };
   };
   var peg$f16 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "dotted", bidirectional: true };
   };
   var peg$f17 = function() {
-    return { kind: "async", style: "dotted" };
+    return { style: "thick", bidirectional: true };
   };
   var peg$f18 = function() {
-    return { kind: "async", style: "dotted" };
+    return { style: "solid", bidirectional: true };
   };
   var peg$f19 = function() {
-    return { kind: "async", style: "dotted" };
+    return { style: "wavy" };
   };
   var peg$f20 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "dashed" };
   };
   var peg$f21 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "dotted" };
   };
   var peg$f22 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "dotted" };
   };
   var peg$f23 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "thick" };
   };
   var peg$f24 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "thick" };
   };
   var peg$f25 = function() {
-    return { kind: "async", style: "dotted" };
+    return { style: "solid" };
   };
   var peg$f26 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "solid" };
   };
   var peg$f27 = function() {
-    return { kind: "sync", style: "solid" };
+    return { style: "solid", endMarker: "cross" };
   };
-  var peg$f28 = function(id, shape) {
+  var peg$f28 = function() {
+    return { style: "solid", endMarker: "circle" };
+  };
+  var peg$f29 = function() {
+    return { style: "wavy", undirected: true };
+  };
+  var peg$f30 = function() {
+    return { style: "dashed", undirected: true };
+  };
+  var peg$f31 = function() {
+    return { style: "dotted", undirected: true };
+  };
+  var peg$f32 = function() {
+    return { style: "thick", undirected: true };
+  };
+  var peg$f33 = function() {
+    return { style: "solid", undirected: true };
+  };
+  var peg$f34 = function(route, walls) {
+    return { routing: route, ...walls ? walls[1] : {} };
+  };
+  var peg$f35 = function(walls) {
+    return walls;
+  };
+  var peg$f36 = function() {
+    return "straight";
+  };
+  var peg$f37 = function() {
+    return "orthogonal";
+  };
+  var peg$f38 = function() {
+    return "bezier";
+  };
+  var peg$f39 = function() {
+    return "polyline";
+  };
+  var peg$f40 = function(exit, entry) {
+    return { exitWall: exit, entryWall: entry };
+  };
+  var peg$f41 = function(exit) {
+    return { exitWall: exit };
+  };
+  var peg$f42 = function(w) {
+    return w;
+  };
+  var peg$f43 = function(id, shape) {
     return { id: registerNode(id, shape ? shape.label : null, shape ? shape.shape : null) };
   };
-  var peg$f29 = function(ref) {
+  var peg$f44 = function(ref, key, value) {
+    return { key, value };
+  };
+  var peg$f45 = function(ref, anns) {
+    if (anns.length > 0) {
+      const node = nodeMap.get(ref.id);
+      if (node) {
+        for (const ann of anns) {
+          if (ann.key === "shape") node.shape = ann.value;
+          if (ann.key === "icon") node.iconToken = ann.value;
+        }
+      }
+    }
     return { type: "node", ...ref };
   };
-  var peg$f30 = function(id) {
+  var peg$f46 = function(val) {
+    return val;
+  };
+  var peg$f47 = function(id) {
     return id;
   };
-  var peg$f31 = function(text2) {
+  var peg$f48 = function(text2) {
     return { shape: "circle", label: stripQuotes(text2.trim()) };
   };
-  var peg$f32 = function(text2) {
+  var peg$f49 = function(text2) {
     return { shape: "stadium", label: stripQuotes(text2.trim()) };
   };
-  var peg$f33 = function(text2) {
+  var peg$f50 = function(text2) {
     return { shape: "subroutine", label: stripQuotes(text2.trim()) };
   };
-  var peg$f34 = function(text2) {
+  var peg$f51 = function(text2) {
     return { shape: "cylinder", label: stripQuotes(text2.trim()) };
   };
-  var peg$f35 = function(text2) {
+  var peg$f52 = function(text2) {
     return { shape: "hexagon", label: stripQuotes(text2.trim()) };
   };
-  var peg$f36 = function(text2) {
+  var peg$f53 = function(text2) {
     return { shape: "parallelogram", label: stripQuotes(text2.trim()) };
   };
-  var peg$f37 = function(text2) {
+  var peg$f54 = function(text2) {
     return { shape: "parallelogram-alt", label: stripQuotes(text2.trim()) };
   };
-  var peg$f38 = function(text2) {
+  var peg$f55 = function(text2) {
     return { shape: "asymmetric", label: stripQuotes(text2.trim()) };
   };
-  var peg$f39 = function(text2) {
+  var peg$f56 = function(text2) {
     return { shape: "rect", label: stripQuotes(text2.trim()) };
   };
-  var peg$f40 = function(text2) {
+  var peg$f57 = function(text2) {
     return { shape: "diamond", label: stripQuotes(text2.trim()) };
   };
-  var peg$f41 = function(text2) {
+  var peg$f58 = function(text2) {
     return { shape: "rounded-rect", label: stripQuotes(text2.trim()) };
   };
-  var peg$f42 = function(content) {
+  var peg$f59 = function(content) {
     return { type: "style", raw: content };
   };
-  var peg$f43 = function(content) {
+  var peg$f60 = function(content) {
     return { type: "class", raw: content };
   };
-  var peg$f44 = function(content) {
+  var peg$f61 = function(content) {
     return { type: "click", raw: content };
   };
-  var peg$f45 = function(text2, target, offset2) {
+  var peg$f62 = function(text2, target, offset2) {
     const note = { type: "note", text: text2, target, offset: offset2 || void 0 };
     overlays.push(note);
     return note;
   };
-  var peg$f46 = function(dx, dy) {
+  var peg$f63 = function(dx, dy) {
     return { dx, dy };
   };
-  var peg$f47 = function(sign, digits) {
+  var peg$f64 = function(sign, digits) {
     return parseInt((sign || "") + digits, 10);
   };
-  var peg$f48 = function(corner, t) {
+  var peg$f65 = function(corner, t) {
     return t;
   };
-  var peg$f49 = function(corner, title, entries) {
+  var peg$f66 = function(corner, title, entries) {
     const legend = { type: "legend", corner, title: title || void 0, entries };
     overlays.push(legend);
     return legend;
   };
-  var peg$f50 = function(key, value) {
+  var peg$f67 = function(key, value) {
     return { key: key.trim(), value: value.trim() };
   };
   var peg$currPos = options.peg$currPos | 0;
@@ -2876,7 +3772,7 @@ function peg$parse(input, options) {
     return s0;
   }
   function peg$parseEdgeChain() {
-    var s0, s1, s2, s3, s4, s5, s6, s7;
+    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;
     s0 = peg$currPos;
     s1 = peg$parseNodeRef();
     if (s1 !== peg$FAILED) {
@@ -2888,8 +3784,35 @@ function peg$parse(input, options) {
         s6 = peg$parse_();
         s7 = peg$parseNodeRef();
         if (s7 !== peg$FAILED) {
+          s8 = peg$currPos;
+          s9 = peg$parse_();
+          if (input.charCodeAt(peg$currPos) === 64) {
+            s10 = peg$c14;
+            peg$currPos++;
+          } else {
+            s10 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e20);
+            }
+          }
+          if (s10 !== peg$FAILED) {
+            s11 = peg$parseRouteAnnotation();
+            if (s11 !== peg$FAILED) {
+              s9 = [s9, s10, s11];
+              s8 = s9;
+            } else {
+              peg$currPos = s8;
+              s8 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s8;
+            s8 = peg$FAILED;
+          }
+          if (s8 === peg$FAILED) {
+            s8 = null;
+          }
           peg$savedPos = s3;
-          s3 = peg$f10(s1, s5, s7);
+          s3 = peg$f10(s1, s5, s7, s8);
         } else {
           peg$currPos = s3;
           s3 = peg$FAILED;
@@ -2908,8 +3831,35 @@ function peg$parse(input, options) {
             s6 = peg$parse_();
             s7 = peg$parseNodeRef();
             if (s7 !== peg$FAILED) {
+              s8 = peg$currPos;
+              s9 = peg$parse_();
+              if (input.charCodeAt(peg$currPos) === 64) {
+                s10 = peg$c14;
+                peg$currPos++;
+              } else {
+                s10 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e20);
+                }
+              }
+              if (s10 !== peg$FAILED) {
+                s11 = peg$parseRouteAnnotation();
+                if (s11 !== peg$FAILED) {
+                  s9 = [s9, s10, s11];
+                  s8 = s9;
+                } else {
+                  peg$currPos = s8;
+                  s8 = peg$FAILED;
+                }
+              } else {
+                peg$currPos = s8;
+                s8 = peg$FAILED;
+              }
+              if (s8 === peg$FAILED) {
+                s8 = null;
+              }
               peg$savedPos = s3;
-              s3 = peg$f10(s1, s5, s7);
+              s3 = peg$f10(s1, s5, s7, s8);
             } else {
               peg$currPos = s3;
               s3 = peg$FAILED;
@@ -2956,12 +3906,12 @@ function peg$parse(input, options) {
     var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
     if (input.charCodeAt(peg$currPos) === 124) {
-      s1 = peg$c14;
+      s1 = peg$c15;
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e20);
+        peg$fail(peg$e21);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -2973,7 +3923,7 @@ function peg$parse(input, options) {
       } else {
         s4 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e21);
+          peg$fail(peg$e22);
         }
       }
       if (s4 !== peg$FAILED) {
@@ -2985,7 +3935,7 @@ function peg$parse(input, options) {
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e21);
+              peg$fail(peg$e22);
             }
           }
         }
@@ -2999,12 +3949,12 @@ function peg$parse(input, options) {
       }
       if (s2 !== peg$FAILED) {
         if (input.charCodeAt(peg$currPos) === 124) {
-          s3 = peg$c14;
+          s3 = peg$c15;
           peg$currPos++;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e20);
+            peg$fail(peg$e21);
           }
         }
         if (s3 !== peg$FAILED) {
@@ -3027,13 +3977,13 @@ function peg$parse(input, options) {
   function peg$parseEdgeArrow() {
     var s0, s1;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 5) === peg$c15) {
-      s1 = peg$c15;
+    if (input.substr(peg$currPos, 5) === peg$c16) {
+      s1 = peg$c16;
       peg$currPos += 5;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e22);
+        peg$fail(peg$e23);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -3043,13 +3993,13 @@ function peg$parse(input, options) {
     s0 = s1;
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
-      if (input.substr(peg$currPos, 4) === peg$c16) {
-        s1 = peg$c16;
-        peg$currPos += 4;
+      if (input.substr(peg$currPos, 5) === peg$c17) {
+        s1 = peg$c17;
+        peg$currPos += 5;
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e23);
+          peg$fail(peg$e24);
         }
       }
       if (s1 !== peg$FAILED) {
@@ -3059,13 +4009,13 @@ function peg$parse(input, options) {
       s0 = s1;
       if (s0 === peg$FAILED) {
         s0 = peg$currPos;
-        if (input.substr(peg$currPos, 4) === peg$c17) {
-          s1 = peg$c17;
-          peg$currPos += 4;
+        if (input.substr(peg$currPos, 5) === peg$c18) {
+          s1 = peg$c18;
+          peg$currPos += 5;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e24);
+            peg$fail(peg$e25);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -3075,13 +4025,13 @@ function peg$parse(input, options) {
         s0 = s1;
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
-          if (input.substr(peg$currPos, 5) === peg$c18) {
-            s1 = peg$c18;
-            peg$currPos += 5;
+          if (input.substr(peg$currPos, 4) === peg$c19) {
+            s1 = peg$c19;
+            peg$currPos += 4;
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e25);
+              peg$fail(peg$e26);
             }
           }
           if (s1 !== peg$FAILED) {
@@ -3091,13 +4041,13 @@ function peg$parse(input, options) {
           s0 = s1;
           if (s0 === peg$FAILED) {
             s0 = peg$currPos;
-            if (input.substr(peg$currPos, 5) === peg$c19) {
-              s1 = peg$c19;
-              peg$currPos += 5;
+            if (input.substr(peg$currPos, 4) === peg$c20) {
+              s1 = peg$c20;
+              peg$currPos += 4;
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e26);
+                peg$fail(peg$e27);
               }
             }
             if (s1 !== peg$FAILED) {
@@ -3107,13 +4057,13 @@ function peg$parse(input, options) {
             s0 = s1;
             if (s0 === peg$FAILED) {
               s0 = peg$currPos;
-              if (input.substr(peg$currPos, 4) === peg$c20) {
-                s1 = peg$c20;
+              if (input.substr(peg$currPos, 4) === peg$c21) {
+                s1 = peg$c21;
                 peg$currPos += 4;
               } else {
                 s1 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e27);
+                  peg$fail(peg$e28);
                 }
               }
               if (s1 !== peg$FAILED) {
@@ -3123,13 +4073,13 @@ function peg$parse(input, options) {
               s0 = s1;
               if (s0 === peg$FAILED) {
                 s0 = peg$currPos;
-                if (input.substr(peg$currPos, 4) === peg$c21) {
-                  s1 = peg$c21;
+                if (input.substr(peg$currPos, 4) === peg$c22) {
+                  s1 = peg$c22;
                   peg$currPos += 4;
                 } else {
                   s1 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e28);
+                    peg$fail(peg$e29);
                   }
                 }
                 if (s1 !== peg$FAILED) {
@@ -3139,13 +4089,13 @@ function peg$parse(input, options) {
                 s0 = s1;
                 if (s0 === peg$FAILED) {
                   s0 = peg$currPos;
-                  if (input.substr(peg$currPos, 3) === peg$c22) {
-                    s1 = peg$c22;
-                    peg$currPos += 3;
+                  if (input.substr(peg$currPos, 5) === peg$c23) {
+                    s1 = peg$c23;
+                    peg$currPos += 5;
                   } else {
                     s1 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e29);
+                      peg$fail(peg$e30);
                     }
                   }
                   if (s1 !== peg$FAILED) {
@@ -3155,13 +4105,13 @@ function peg$parse(input, options) {
                   s0 = s1;
                   if (s0 === peg$FAILED) {
                     s0 = peg$currPos;
-                    if (input.substr(peg$currPos, 3) === peg$c23) {
-                      s1 = peg$c23;
-                      peg$currPos += 3;
+                    if (input.substr(peg$currPos, 4) === peg$c24) {
+                      s1 = peg$c24;
+                      peg$currPos += 4;
                     } else {
                       s1 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e30);
+                        peg$fail(peg$e31);
                       }
                     }
                     if (s1 !== peg$FAILED) {
@@ -3171,13 +4121,13 @@ function peg$parse(input, options) {
                     s0 = s1;
                     if (s0 === peg$FAILED) {
                       s0 = peg$currPos;
-                      if (input.substr(peg$currPos, 3) === peg$c24) {
-                        s1 = peg$c24;
-                        peg$currPos += 3;
+                      if (input.substr(peg$currPos, 4) === peg$c25) {
+                        s1 = peg$c25;
+                        peg$currPos += 4;
                       } else {
                         s1 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e31);
+                          peg$fail(peg$e32);
                         }
                       }
                       if (s1 !== peg$FAILED) {
@@ -3187,13 +4137,13 @@ function peg$parse(input, options) {
                       s0 = s1;
                       if (s0 === peg$FAILED) {
                         s0 = peg$currPos;
-                        if (input.substr(peg$currPos, 3) === peg$c25) {
-                          s1 = peg$c25;
+                        if (input.substr(peg$currPos, 3) === peg$c26) {
+                          s1 = peg$c26;
                           peg$currPos += 3;
                         } else {
                           s1 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e32);
+                            peg$fail(peg$e33);
                           }
                         }
                         if (s1 !== peg$FAILED) {
@@ -3203,13 +4153,13 @@ function peg$parse(input, options) {
                         s0 = s1;
                         if (s0 === peg$FAILED) {
                           s0 = peg$currPos;
-                          if (input.substr(peg$currPos, 3) === peg$c26) {
-                            s1 = peg$c26;
-                            peg$currPos += 3;
+                          if (input.substr(peg$currPos, 4) === peg$c27) {
+                            s1 = peg$c27;
+                            peg$currPos += 4;
                           } else {
                             s1 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e33);
+                              peg$fail(peg$e34);
                             }
                           }
                           if (s1 !== peg$FAILED) {
@@ -3219,13 +4169,13 @@ function peg$parse(input, options) {
                           s0 = s1;
                           if (s0 === peg$FAILED) {
                             s0 = peg$currPos;
-                            if (input.substr(peg$currPos, 3) === peg$c0) {
-                              s1 = peg$c0;
+                            if (input.substr(peg$currPos, 3) === peg$c28) {
+                              s1 = peg$c28;
                               peg$currPos += 3;
                             } else {
                               s1 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e0);
+                                peg$fail(peg$e35);
                               }
                             }
                             if (s1 !== peg$FAILED) {
@@ -3235,13 +4185,13 @@ function peg$parse(input, options) {
                             s0 = s1;
                             if (s0 === peg$FAILED) {
                               s0 = peg$currPos;
-                              if (input.substr(peg$currPos, 3) === peg$c27) {
-                                s1 = peg$c27;
+                              if (input.substr(peg$currPos, 3) === peg$c29) {
+                                s1 = peg$c29;
                                 peg$currPos += 3;
                               } else {
                                 s1 = peg$FAILED;
                                 if (peg$silentFails === 0) {
-                                  peg$fail(peg$e34);
+                                  peg$fail(peg$e36);
                                 }
                               }
                               if (s1 !== peg$FAILED) {
@@ -3249,6 +4199,108 @@ function peg$parse(input, options) {
                                 s1 = peg$f27();
                               }
                               s0 = s1;
+                              if (s0 === peg$FAILED) {
+                                s0 = peg$currPos;
+                                if (input.substr(peg$currPos, 3) === peg$c30) {
+                                  s1 = peg$c30;
+                                  peg$currPos += 3;
+                                } else {
+                                  s1 = peg$FAILED;
+                                  if (peg$silentFails === 0) {
+                                    peg$fail(peg$e37);
+                                  }
+                                }
+                                if (s1 !== peg$FAILED) {
+                                  peg$savedPos = s0;
+                                  s1 = peg$f28();
+                                }
+                                s0 = s1;
+                                if (s0 === peg$FAILED) {
+                                  s0 = peg$currPos;
+                                  if (input.substr(peg$currPos, 3) === peg$c31) {
+                                    s1 = peg$c31;
+                                    peg$currPos += 3;
+                                  } else {
+                                    s1 = peg$FAILED;
+                                    if (peg$silentFails === 0) {
+                                      peg$fail(peg$e38);
+                                    }
+                                  }
+                                  if (s1 !== peg$FAILED) {
+                                    peg$savedPos = s0;
+                                    s1 = peg$f29();
+                                  }
+                                  s0 = s1;
+                                  if (s0 === peg$FAILED) {
+                                    s0 = peg$currPos;
+                                    if (input.substr(peg$currPos, 3) === peg$c32) {
+                                      s1 = peg$c32;
+                                      peg$currPos += 3;
+                                    } else {
+                                      s1 = peg$FAILED;
+                                      if (peg$silentFails === 0) {
+                                        peg$fail(peg$e39);
+                                      }
+                                    }
+                                    if (s1 !== peg$FAILED) {
+                                      peg$savedPos = s0;
+                                      s1 = peg$f30();
+                                    }
+                                    s0 = s1;
+                                    if (s0 === peg$FAILED) {
+                                      s0 = peg$currPos;
+                                      if (input.substr(peg$currPos, 3) === peg$c33) {
+                                        s1 = peg$c33;
+                                        peg$currPos += 3;
+                                      } else {
+                                        s1 = peg$FAILED;
+                                        if (peg$silentFails === 0) {
+                                          peg$fail(peg$e40);
+                                        }
+                                      }
+                                      if (s1 !== peg$FAILED) {
+                                        peg$savedPos = s0;
+                                        s1 = peg$f31();
+                                      }
+                                      s0 = s1;
+                                      if (s0 === peg$FAILED) {
+                                        s0 = peg$currPos;
+                                        if (input.substr(peg$currPos, 3) === peg$c34) {
+                                          s1 = peg$c34;
+                                          peg$currPos += 3;
+                                        } else {
+                                          s1 = peg$FAILED;
+                                          if (peg$silentFails === 0) {
+                                            peg$fail(peg$e41);
+                                          }
+                                        }
+                                        if (s1 !== peg$FAILED) {
+                                          peg$savedPos = s0;
+                                          s1 = peg$f32();
+                                        }
+                                        s0 = s1;
+                                        if (s0 === peg$FAILED) {
+                                          s0 = peg$currPos;
+                                          if (input.substr(peg$currPos, 3) === peg$c0) {
+                                            s1 = peg$c0;
+                                            peg$currPos += 3;
+                                          } else {
+                                            s1 = peg$FAILED;
+                                            if (peg$silentFails === 0) {
+                                              peg$fail(peg$e0);
+                                            }
+                                          }
+                                          if (s1 !== peg$FAILED) {
+                                            peg$savedPos = s0;
+                                            s1 = peg$f33();
+                                          }
+                                          s0 = s1;
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
                             }
                           }
                         }
@@ -3264,50 +4316,133 @@ function peg$parse(input, options) {
     }
     return s0;
   }
-  function peg$parseNodeRef() {
-    var s0, s1, s2;
+  function peg$parseRouteAnnotation() {
+    var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
-    s1 = peg$parseNodeId();
-    if (s1 !== peg$FAILED) {
-      s2 = peg$parseShape();
-      if (s2 === peg$FAILED) {
-        s2 = null;
-      }
-      peg$savedPos = s0;
-      s0 = peg$f28(s1, s2);
-    } else {
-      peg$currPos = s0;
-      s0 = peg$FAILED;
-    }
-    return s0;
-  }
-  function peg$parseNodeDecl() {
-    var s0, s1, s2, s3, s4, s5;
-    s0 = peg$currPos;
-    s1 = peg$parseNodeRef();
+    s1 = peg$parseRouteWord();
     if (s1 !== peg$FAILED) {
       s2 = peg$currPos;
-      peg$silentFails++;
-      s3 = peg$currPos;
-      s4 = peg$parse_();
-      s5 = peg$parseEdgeArrow();
-      if (s5 !== peg$FAILED) {
-        s4 = [s4, s5];
-        s3 = s4;
+      if (input.charCodeAt(peg$currPos) === 58) {
+        s3 = peg$c35;
+        peg$currPos++;
       } else {
-        peg$currPos = s3;
         s3 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e42);
+        }
       }
-      peg$silentFails--;
-      if (s3 === peg$FAILED) {
-        s2 = void 0;
+      if (s3 !== peg$FAILED) {
+        s4 = peg$parseWallPair();
+        if (s4 !== peg$FAILED) {
+          s3 = [s3, s4];
+          s2 = s3;
+        } else {
+          peg$currPos = s2;
+          s2 = peg$FAILED;
+        }
       } else {
         peg$currPos = s2;
         s2 = peg$FAILED;
       }
+      if (s2 === peg$FAILED) {
+        s2 = null;
+      }
+      peg$savedPos = s0;
+      s0 = peg$f34(s1, s2);
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      s1 = peg$parseWallPair();
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f35(s1);
+      }
+      s0 = s1;
+    }
+    return s0;
+  }
+  function peg$parseRouteWord() {
+    var s0, s1;
+    s0 = peg$currPos;
+    if (input.substr(peg$currPos, 8) === peg$c36) {
+      s1 = peg$c36;
+      peg$currPos += 8;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e43);
+      }
+    }
+    if (s1 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s1 = peg$f36();
+    }
+    s0 = s1;
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      if (input.substr(peg$currPos, 10) === peg$c37) {
+        s1 = peg$c37;
+        peg$currPos += 10;
+      } else {
+        s1 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e44);
+        }
+      }
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f37();
+      }
+      s0 = s1;
+      if (s0 === peg$FAILED) {
+        s0 = peg$currPos;
+        if (input.substr(peg$currPos, 6) === peg$c38) {
+          s1 = peg$c38;
+          peg$currPos += 6;
+        } else {
+          s1 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e45);
+          }
+        }
+        if (s1 !== peg$FAILED) {
+          peg$savedPos = s0;
+          s1 = peg$f38();
+        }
+        s0 = s1;
+        if (s0 === peg$FAILED) {
+          s0 = peg$currPos;
+          if (input.substr(peg$currPos, 8) === peg$c39) {
+            s1 = peg$c39;
+            peg$currPos += 8;
+          } else {
+            s1 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e46);
+            }
+          }
+          if (s1 !== peg$FAILED) {
+            peg$savedPos = s0;
+            s1 = peg$f39();
+          }
+          s0 = s1;
+        }
+      }
+    }
+    return s0;
+  }
+  function peg$parseWallPair() {
+    var s0, s1, s2;
+    s0 = peg$currPos;
+    s1 = peg$parseWall();
+    if (s1 !== peg$FAILED) {
+      s2 = peg$parseWall();
       if (s2 !== peg$FAILED) {
         peg$savedPos = s0;
-        s0 = peg$f29(s1);
+        s0 = peg$f40(s1, s2);
       } else {
         peg$currPos = s0;
         s0 = peg$FAILED;
@@ -3315,6 +4450,362 @@ function peg$parse(input, options) {
     } else {
       peg$currPos = s0;
       s0 = peg$FAILED;
+    }
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      s1 = peg$parseWall();
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f41(s1);
+      }
+      s0 = s1;
+    }
+    return s0;
+  }
+  function peg$parseWall() {
+    var s0, s1;
+    s0 = peg$currPos;
+    s1 = input.charAt(peg$currPos);
+    if (peg$r6.test(s1)) {
+      peg$currPos++;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e47);
+      }
+    }
+    if (s1 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s1 = peg$f42(s1);
+    }
+    s0 = s1;
+    return s0;
+  }
+  function peg$parseNodeRef() {
+    var s0, s1, s2, s3;
+    s0 = peg$currPos;
+    s1 = peg$parseNodeId();
+    if (s1 !== peg$FAILED) {
+      s2 = peg$parse_();
+      s3 = peg$parseShape();
+      if (s3 === peg$FAILED) {
+        s3 = null;
+      }
+      peg$savedPos = s0;
+      s0 = peg$f43(s1, s3);
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    return s0;
+  }
+  function peg$parseNodeDecl() {
+    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+    s0 = peg$currPos;
+    s1 = peg$parseNodeRef();
+    if (s1 !== peg$FAILED) {
+      s2 = [];
+      s3 = peg$currPos;
+      s4 = peg$parse_();
+      if (input.charCodeAt(peg$currPos) === 64) {
+        s5 = peg$c14;
+        peg$currPos++;
+      } else {
+        s5 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e20);
+        }
+      }
+      if (s5 !== peg$FAILED) {
+        s6 = peg$currPos;
+        s7 = peg$currPos;
+        s8 = input.charAt(peg$currPos);
+        if (peg$r7.test(s8)) {
+          peg$currPos++;
+        } else {
+          s8 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e48);
+          }
+        }
+        if (s8 !== peg$FAILED) {
+          s9 = [];
+          s10 = input.charAt(peg$currPos);
+          if (peg$r8.test(s10)) {
+            peg$currPos++;
+          } else {
+            s10 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e49);
+            }
+          }
+          while (s10 !== peg$FAILED) {
+            s9.push(s10);
+            s10 = input.charAt(peg$currPos);
+            if (peg$r8.test(s10)) {
+              peg$currPos++;
+            } else {
+              s10 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e49);
+              }
+            }
+          }
+          s8 = [s8, s9];
+          s7 = s8;
+        } else {
+          peg$currPos = s7;
+          s7 = peg$FAILED;
+        }
+        if (s7 !== peg$FAILED) {
+          s6 = input.substring(s6, peg$currPos);
+        } else {
+          s6 = s7;
+        }
+        if (s6 !== peg$FAILED) {
+          if (input.charCodeAt(peg$currPos) === 58) {
+            s7 = peg$c35;
+            peg$currPos++;
+          } else {
+            s7 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e42);
+            }
+          }
+          if (s7 !== peg$FAILED) {
+            s8 = peg$parseAnnotationValue();
+            if (s8 !== peg$FAILED) {
+              peg$savedPos = s3;
+              s3 = peg$f44(s1, s6, s8);
+            } else {
+              peg$currPos = s3;
+              s3 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s3;
+            s3 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s3;
+          s3 = peg$FAILED;
+        }
+      } else {
+        peg$currPos = s3;
+        s3 = peg$FAILED;
+      }
+      while (s3 !== peg$FAILED) {
+        s2.push(s3);
+        s3 = peg$currPos;
+        s4 = peg$parse_();
+        if (input.charCodeAt(peg$currPos) === 64) {
+          s5 = peg$c14;
+          peg$currPos++;
+        } else {
+          s5 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e20);
+          }
+        }
+        if (s5 !== peg$FAILED) {
+          s6 = peg$currPos;
+          s7 = peg$currPos;
+          s8 = input.charAt(peg$currPos);
+          if (peg$r7.test(s8)) {
+            peg$currPos++;
+          } else {
+            s8 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e48);
+            }
+          }
+          if (s8 !== peg$FAILED) {
+            s9 = [];
+            s10 = input.charAt(peg$currPos);
+            if (peg$r8.test(s10)) {
+              peg$currPos++;
+            } else {
+              s10 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e49);
+              }
+            }
+            while (s10 !== peg$FAILED) {
+              s9.push(s10);
+              s10 = input.charAt(peg$currPos);
+              if (peg$r8.test(s10)) {
+                peg$currPos++;
+              } else {
+                s10 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e49);
+                }
+              }
+            }
+            s8 = [s8, s9];
+            s7 = s8;
+          } else {
+            peg$currPos = s7;
+            s7 = peg$FAILED;
+          }
+          if (s7 !== peg$FAILED) {
+            s6 = input.substring(s6, peg$currPos);
+          } else {
+            s6 = s7;
+          }
+          if (s6 !== peg$FAILED) {
+            if (input.charCodeAt(peg$currPos) === 58) {
+              s7 = peg$c35;
+              peg$currPos++;
+            } else {
+              s7 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e42);
+              }
+            }
+            if (s7 !== peg$FAILED) {
+              s8 = peg$parseAnnotationValue();
+              if (s8 !== peg$FAILED) {
+                peg$savedPos = s3;
+                s3 = peg$f44(s1, s6, s8);
+              } else {
+                peg$currPos = s3;
+                s3 = peg$FAILED;
+              }
+            } else {
+              peg$currPos = s3;
+              s3 = peg$FAILED;
+            }
+          } else {
+            peg$currPos = s3;
+            s3 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s3;
+          s3 = peg$FAILED;
+        }
+      }
+      s3 = peg$currPos;
+      peg$silentFails++;
+      s4 = peg$currPos;
+      s5 = peg$parse_();
+      s6 = peg$parseEdgeArrow();
+      if (s6 !== peg$FAILED) {
+        s5 = [s5, s6];
+        s4 = s5;
+      } else {
+        peg$currPos = s4;
+        s4 = peg$FAILED;
+      }
+      peg$silentFails--;
+      if (s4 === peg$FAILED) {
+        s3 = void 0;
+      } else {
+        peg$currPos = s3;
+        s3 = peg$FAILED;
+      }
+      if (s3 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s0 = peg$f45(s1, s2);
+      } else {
+        peg$currPos = s0;
+        s0 = peg$FAILED;
+      }
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    return s0;
+  }
+  function peg$parseAnnotationValue() {
+    var s0, s1, s2, s3, s4;
+    s0 = peg$currPos;
+    if (input.charCodeAt(peg$currPos) === 34) {
+      s1 = peg$c40;
+      peg$currPos++;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e50);
+      }
+    }
+    if (s1 !== peg$FAILED) {
+      s2 = peg$currPos;
+      s3 = [];
+      s4 = input.charAt(peg$currPos);
+      if (peg$r9.test(s4)) {
+        peg$currPos++;
+      } else {
+        s4 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e51);
+        }
+      }
+      while (s4 !== peg$FAILED) {
+        s3.push(s4);
+        s4 = input.charAt(peg$currPos);
+        if (peg$r9.test(s4)) {
+          peg$currPos++;
+        } else {
+          s4 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e51);
+          }
+        }
+      }
+      s2 = input.substring(s2, peg$currPos);
+      if (input.charCodeAt(peg$currPos) === 34) {
+        s3 = peg$c40;
+        peg$currPos++;
+      } else {
+        s3 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e50);
+        }
+      }
+      if (s3 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s0 = peg$f46(s2);
+      } else {
+        peg$currPos = s0;
+        s0 = peg$FAILED;
+      }
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      s1 = [];
+      s2 = input.charAt(peg$currPos);
+      if (peg$r10.test(s2)) {
+        peg$currPos++;
+      } else {
+        s2 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e52);
+        }
+      }
+      if (s2 !== peg$FAILED) {
+        while (s2 !== peg$FAILED) {
+          s1.push(s2);
+          s2 = input.charAt(peg$currPos);
+          if (peg$r10.test(s2)) {
+            peg$currPos++;
+          } else {
+            s2 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e52);
+            }
+          }
+        }
+      } else {
+        s1 = peg$FAILED;
+      }
+      if (s1 !== peg$FAILED) {
+        s0 = input.substring(s0, peg$currPos);
+      } else {
+        s0 = s1;
+      }
     }
     return s0;
   }
@@ -3468,7 +4959,7 @@ function peg$parse(input, options) {
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f30(s3);
+          s0 = peg$f47(s3);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -3486,37 +4977,37 @@ function peg$parse(input, options) {
   function peg$parseShape() {
     var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 2) === peg$c28) {
-      s1 = peg$c28;
+    if (input.substr(peg$currPos, 2) === peg$c41) {
+      s1 = peg$c41;
       peg$currPos += 2;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e35);
+        peg$fail(peg$e53);
       }
     }
     if (s1 !== peg$FAILED) {
       s2 = peg$currPos;
       s3 = [];
       s4 = input.charAt(peg$currPos);
-      if (peg$r6.test(s4)) {
+      if (peg$r11.test(s4)) {
         peg$currPos++;
       } else {
         s4 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e36);
+          peg$fail(peg$e54);
         }
       }
       if (s4 !== peg$FAILED) {
         while (s4 !== peg$FAILED) {
           s3.push(s4);
           s4 = input.charAt(peg$currPos);
-          if (peg$r6.test(s4)) {
+          if (peg$r11.test(s4)) {
             peg$currPos++;
           } else {
             s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e36);
+              peg$fail(peg$e54);
             }
           }
         }
@@ -3529,18 +5020,18 @@ function peg$parse(input, options) {
         s2 = s3;
       }
       if (s2 !== peg$FAILED) {
-        if (input.substr(peg$currPos, 2) === peg$c29) {
-          s3 = peg$c29;
+        if (input.substr(peg$currPos, 2) === peg$c42) {
+          s3 = peg$c42;
           peg$currPos += 2;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e37);
+            peg$fail(peg$e55);
           }
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f31(s2);
+          s0 = peg$f48(s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -3555,13 +5046,13 @@ function peg$parse(input, options) {
     }
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
-      if (input.substr(peg$currPos, 2) === peg$c30) {
-        s1 = peg$c30;
+      if (input.substr(peg$currPos, 2) === peg$c43) {
+        s1 = peg$c43;
         peg$currPos += 2;
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e38);
+          peg$fail(peg$e56);
         }
       }
       if (s1 !== peg$FAILED) {
@@ -3589,18 +5080,18 @@ function peg$parse(input, options) {
           }
         }
         s2 = input.substring(s2, peg$currPos);
-        if (input.substr(peg$currPos, 2) === peg$c31) {
-          s3 = peg$c31;
+        if (input.substr(peg$currPos, 2) === peg$c44) {
+          s3 = peg$c44;
           peg$currPos += 2;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e39);
+            peg$fail(peg$e57);
           }
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f32(s2);
+          s0 = peg$f49(s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -3611,13 +5102,13 @@ function peg$parse(input, options) {
       }
       if (s0 === peg$FAILED) {
         s0 = peg$currPos;
-        if (input.substr(peg$currPos, 2) === peg$c32) {
-          s1 = peg$c32;
+        if (input.substr(peg$currPos, 2) === peg$c45) {
+          s1 = peg$c45;
           peg$currPos += 2;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e40);
+            peg$fail(peg$e58);
           }
         }
         if (s1 !== peg$FAILED) {
@@ -3645,18 +5136,18 @@ function peg$parse(input, options) {
             }
           }
           s2 = input.substring(s2, peg$currPos);
-          if (input.substr(peg$currPos, 2) === peg$c33) {
-            s3 = peg$c33;
+          if (input.substr(peg$currPos, 2) === peg$c46) {
+            s3 = peg$c46;
             peg$currPos += 2;
           } else {
             s3 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e41);
+              peg$fail(peg$e59);
             }
           }
           if (s3 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f33(s2);
+            s0 = peg$f50(s2);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -3667,52 +5158,52 @@ function peg$parse(input, options) {
         }
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
-          if (input.substr(peg$currPos, 2) === peg$c34) {
-            s1 = peg$c34;
+          if (input.substr(peg$currPos, 2) === peg$c47) {
+            s1 = peg$c47;
             peg$currPos += 2;
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e42);
+              peg$fail(peg$e60);
             }
           }
           if (s1 !== peg$FAILED) {
             s2 = peg$currPos;
             s3 = [];
             s4 = input.charAt(peg$currPos);
-            if (peg$r6.test(s4)) {
+            if (peg$r11.test(s4)) {
               peg$currPos++;
             } else {
               s4 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e36);
+                peg$fail(peg$e54);
               }
             }
             while (s4 !== peg$FAILED) {
               s3.push(s4);
               s4 = input.charAt(peg$currPos);
-              if (peg$r6.test(s4)) {
+              if (peg$r11.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e36);
+                  peg$fail(peg$e54);
                 }
               }
             }
             s2 = input.substring(s2, peg$currPos);
-            if (input.substr(peg$currPos, 2) === peg$c35) {
-              s3 = peg$c35;
+            if (input.substr(peg$currPos, 2) === peg$c48) {
+              s3 = peg$c48;
               peg$currPos += 2;
             } else {
               s3 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e43);
+                peg$fail(peg$e61);
               }
             }
             if (s3 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f34(s2);
+              s0 = peg$f51(s2);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -3723,52 +5214,52 @@ function peg$parse(input, options) {
           }
           if (s0 === peg$FAILED) {
             s0 = peg$currPos;
-            if (input.substr(peg$currPos, 2) === peg$c36) {
-              s1 = peg$c36;
+            if (input.substr(peg$currPos, 2) === peg$c49) {
+              s1 = peg$c49;
               peg$currPos += 2;
             } else {
               s1 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e44);
+                peg$fail(peg$e62);
               }
             }
             if (s1 !== peg$FAILED) {
               s2 = peg$currPos;
               s3 = [];
               s4 = input.charAt(peg$currPos);
-              if (peg$r7.test(s4)) {
+              if (peg$r12.test(s4)) {
                 peg$currPos++;
               } else {
                 s4 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e45);
+                  peg$fail(peg$e63);
                 }
               }
               while (s4 !== peg$FAILED) {
                 s3.push(s4);
                 s4 = input.charAt(peg$currPos);
-                if (peg$r7.test(s4)) {
+                if (peg$r12.test(s4)) {
                   peg$currPos++;
                 } else {
                   s4 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e45);
+                    peg$fail(peg$e63);
                   }
                 }
               }
               s2 = input.substring(s2, peg$currPos);
-              if (input.substr(peg$currPos, 2) === peg$c37) {
-                s3 = peg$c37;
+              if (input.substr(peg$currPos, 2) === peg$c50) {
+                s3 = peg$c50;
                 peg$currPos += 2;
               } else {
                 s3 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e46);
+                  peg$fail(peg$e64);
                 }
               }
               if (s3 !== peg$FAILED) {
                 peg$savedPos = s0;
-                s0 = peg$f35(s2);
+                s0 = peg$f52(s2);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -3779,52 +5270,52 @@ function peg$parse(input, options) {
             }
             if (s0 === peg$FAILED) {
               s0 = peg$currPos;
-              if (input.substr(peg$currPos, 2) === peg$c38) {
-                s1 = peg$c38;
+              if (input.substr(peg$currPos, 2) === peg$c51) {
+                s1 = peg$c51;
                 peg$currPos += 2;
               } else {
                 s1 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e47);
+                  peg$fail(peg$e65);
                 }
               }
               if (s1 !== peg$FAILED) {
                 s2 = peg$currPos;
                 s3 = [];
                 s4 = input.charAt(peg$currPos);
-                if (peg$r8.test(s4)) {
+                if (peg$r13.test(s4)) {
                   peg$currPos++;
                 } else {
                   s4 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e48);
+                    peg$fail(peg$e66);
                   }
                 }
                 while (s4 !== peg$FAILED) {
                   s3.push(s4);
                   s4 = input.charAt(peg$currPos);
-                  if (peg$r8.test(s4)) {
+                  if (peg$r13.test(s4)) {
                     peg$currPos++;
                   } else {
                     s4 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e48);
+                      peg$fail(peg$e66);
                     }
                   }
                 }
                 s2 = input.substring(s2, peg$currPos);
-                if (input.substr(peg$currPos, 2) === peg$c39) {
-                  s3 = peg$c39;
+                if (input.substr(peg$currPos, 2) === peg$c52) {
+                  s3 = peg$c52;
                   peg$currPos += 2;
                 } else {
                   s3 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e49);
+                    peg$fail(peg$e67);
                   }
                 }
                 if (s3 !== peg$FAILED) {
                   peg$savedPos = s0;
-                  s0 = peg$f36(s2);
+                  s0 = peg$f53(s2);
                 } else {
                   peg$currPos = s0;
                   s0 = peg$FAILED;
@@ -3835,52 +5326,52 @@ function peg$parse(input, options) {
               }
               if (s0 === peg$FAILED) {
                 s0 = peg$currPos;
-                if (input.substr(peg$currPos, 2) === peg$c40) {
-                  s1 = peg$c40;
+                if (input.substr(peg$currPos, 2) === peg$c53) {
+                  s1 = peg$c53;
                   peg$currPos += 2;
                 } else {
                   s1 = peg$FAILED;
                   if (peg$silentFails === 0) {
-                    peg$fail(peg$e50);
+                    peg$fail(peg$e68);
                   }
                 }
                 if (s1 !== peg$FAILED) {
                   s2 = peg$currPos;
                   s3 = [];
                   s4 = input.charAt(peg$currPos);
-                  if (peg$r9.test(s4)) {
+                  if (peg$r14.test(s4)) {
                     peg$currPos++;
                   } else {
                     s4 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e51);
+                      peg$fail(peg$e69);
                     }
                   }
                   while (s4 !== peg$FAILED) {
                     s3.push(s4);
                     s4 = input.charAt(peg$currPos);
-                    if (peg$r9.test(s4)) {
+                    if (peg$r14.test(s4)) {
                       peg$currPos++;
                     } else {
                       s4 = peg$FAILED;
                       if (peg$silentFails === 0) {
-                        peg$fail(peg$e51);
+                        peg$fail(peg$e69);
                       }
                     }
                   }
                   s2 = input.substring(s2, peg$currPos);
-                  if (input.substr(peg$currPos, 2) === peg$c41) {
-                    s3 = peg$c41;
+                  if (input.substr(peg$currPos, 2) === peg$c54) {
+                    s3 = peg$c54;
                     peg$currPos += 2;
                   } else {
                     s3 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e52);
+                      peg$fail(peg$e70);
                     }
                   }
                   if (s3 !== peg$FAILED) {
                     peg$savedPos = s0;
-                    s0 = peg$f37(s2);
+                    s0 = peg$f54(s2);
                   } else {
                     peg$currPos = s0;
                     s0 = peg$FAILED;
@@ -3892,12 +5383,12 @@ function peg$parse(input, options) {
                 if (s0 === peg$FAILED) {
                   s0 = peg$currPos;
                   if (input.charCodeAt(peg$currPos) === 62) {
-                    s1 = peg$c42;
+                    s1 = peg$c55;
                     peg$currPos++;
                   } else {
                     s1 = peg$FAILED;
                     if (peg$silentFails === 0) {
-                      peg$fail(peg$e53);
+                      peg$fail(peg$e71);
                     }
                   }
                   if (s1 !== peg$FAILED) {
@@ -3936,7 +5427,7 @@ function peg$parse(input, options) {
                     }
                     if (s3 !== peg$FAILED) {
                       peg$savedPos = s0;
-                      s0 = peg$f38(s2);
+                      s0 = peg$f55(s2);
                     } else {
                       peg$currPos = s0;
                       s0 = peg$FAILED;
@@ -3992,7 +5483,7 @@ function peg$parse(input, options) {
                       }
                       if (s3 !== peg$FAILED) {
                         peg$savedPos = s0;
-                        s0 = peg$f39(s2);
+                        s0 = peg$f56(s2);
                       } else {
                         peg$currPos = s0;
                         s0 = peg$FAILED;
@@ -4004,51 +5495,51 @@ function peg$parse(input, options) {
                     if (s0 === peg$FAILED) {
                       s0 = peg$currPos;
                       if (input.charCodeAt(peg$currPos) === 123) {
-                        s1 = peg$c43;
+                        s1 = peg$c56;
                         peg$currPos++;
                       } else {
                         s1 = peg$FAILED;
                         if (peg$silentFails === 0) {
-                          peg$fail(peg$e54);
+                          peg$fail(peg$e72);
                         }
                       }
                       if (s1 !== peg$FAILED) {
                         s2 = peg$currPos;
                         s3 = [];
                         s4 = input.charAt(peg$currPos);
-                        if (peg$r7.test(s4)) {
+                        if (peg$r12.test(s4)) {
                           peg$currPos++;
                         } else {
                           s4 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e45);
+                            peg$fail(peg$e63);
                           }
                         }
                         while (s4 !== peg$FAILED) {
                           s3.push(s4);
                           s4 = input.charAt(peg$currPos);
-                          if (peg$r7.test(s4)) {
+                          if (peg$r12.test(s4)) {
                             peg$currPos++;
                           } else {
                             s4 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e45);
+                              peg$fail(peg$e63);
                             }
                           }
                         }
                         s2 = input.substring(s2, peg$currPos);
                         if (input.charCodeAt(peg$currPos) === 125) {
-                          s3 = peg$c44;
+                          s3 = peg$c57;
                           peg$currPos++;
                         } else {
                           s3 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e55);
+                            peg$fail(peg$e73);
                           }
                         }
                         if (s3 !== peg$FAILED) {
                           peg$savedPos = s0;
-                          s0 = peg$f40(s2);
+                          s0 = peg$f57(s2);
                         } else {
                           peg$currPos = s0;
                           s0 = peg$FAILED;
@@ -4060,51 +5551,51 @@ function peg$parse(input, options) {
                       if (s0 === peg$FAILED) {
                         s0 = peg$currPos;
                         if (input.charCodeAt(peg$currPos) === 40) {
-                          s1 = peg$c45;
+                          s1 = peg$c58;
                           peg$currPos++;
                         } else {
                           s1 = peg$FAILED;
                           if (peg$silentFails === 0) {
-                            peg$fail(peg$e56);
+                            peg$fail(peg$e74);
                           }
                         }
                         if (s1 !== peg$FAILED) {
                           s2 = peg$currPos;
                           s3 = [];
                           s4 = input.charAt(peg$currPos);
-                          if (peg$r6.test(s4)) {
+                          if (peg$r11.test(s4)) {
                             peg$currPos++;
                           } else {
                             s4 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e36);
+                              peg$fail(peg$e54);
                             }
                           }
                           while (s4 !== peg$FAILED) {
                             s3.push(s4);
                             s4 = input.charAt(peg$currPos);
-                            if (peg$r6.test(s4)) {
+                            if (peg$r11.test(s4)) {
                               peg$currPos++;
                             } else {
                               s4 = peg$FAILED;
                               if (peg$silentFails === 0) {
-                                peg$fail(peg$e36);
+                                peg$fail(peg$e54);
                               }
                             }
                           }
                           s2 = input.substring(s2, peg$currPos);
                           if (input.charCodeAt(peg$currPos) === 41) {
-                            s3 = peg$c46;
+                            s3 = peg$c59;
                             peg$currPos++;
                           } else {
                             s3 = peg$FAILED;
                             if (peg$silentFails === 0) {
-                              peg$fail(peg$e57);
+                              peg$fail(peg$e75);
                             }
                           }
                           if (s3 !== peg$FAILED) {
                             peg$savedPos = s0;
-                            s0 = peg$f41(s2);
+                            s0 = peg$f58(s2);
                           } else {
                             peg$currPos = s0;
                             s0 = peg$FAILED;
@@ -4128,13 +5619,13 @@ function peg$parse(input, options) {
   function peg$parseStyleDirective() {
     var s0, s1, s2, s3, s4, s5;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 5) === peg$c47) {
-      s1 = peg$c47;
+    if (input.substr(peg$currPos, 5) === peg$c60) {
+      s1 = peg$c60;
       peg$currPos += 5;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e58);
+        peg$fail(peg$e76);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -4143,24 +5634,24 @@ function peg$parse(input, options) {
         s3 = peg$currPos;
         s4 = [];
         s5 = input.charAt(peg$currPos);
-        if (peg$r10.test(s5)) {
+        if (peg$r15.test(s5)) {
           peg$currPos++;
         } else {
           s5 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e59);
+            peg$fail(peg$e77);
           }
         }
         if (s5 !== peg$FAILED) {
           while (s5 !== peg$FAILED) {
             s4.push(s5);
             s5 = input.charAt(peg$currPos);
-            if (peg$r10.test(s5)) {
+            if (peg$r15.test(s5)) {
               peg$currPos++;
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e59);
+                peg$fail(peg$e77);
               }
             }
           }
@@ -4174,7 +5665,7 @@ function peg$parse(input, options) {
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f42(s3);
+          s0 = peg$f59(s3);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -4192,23 +5683,23 @@ function peg$parse(input, options) {
   function peg$parseClassDirective() {
     var s0, s1, s2, s3, s4, s5;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 8) === peg$c48) {
-      s1 = peg$c48;
+    if (input.substr(peg$currPos, 8) === peg$c61) {
+      s1 = peg$c61;
       peg$currPos += 8;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e60);
+        peg$fail(peg$e78);
       }
     }
     if (s1 === peg$FAILED) {
-      if (input.substr(peg$currPos, 5) === peg$c49) {
-        s1 = peg$c49;
+      if (input.substr(peg$currPos, 5) === peg$c62) {
+        s1 = peg$c62;
         peg$currPos += 5;
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e61);
+          peg$fail(peg$e79);
         }
       }
     }
@@ -4218,24 +5709,24 @@ function peg$parse(input, options) {
         s3 = peg$currPos;
         s4 = [];
         s5 = input.charAt(peg$currPos);
-        if (peg$r10.test(s5)) {
+        if (peg$r15.test(s5)) {
           peg$currPos++;
         } else {
           s5 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e59);
+            peg$fail(peg$e77);
           }
         }
         if (s5 !== peg$FAILED) {
           while (s5 !== peg$FAILED) {
             s4.push(s5);
             s5 = input.charAt(peg$currPos);
-            if (peg$r10.test(s5)) {
+            if (peg$r15.test(s5)) {
               peg$currPos++;
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e59);
+                peg$fail(peg$e77);
               }
             }
           }
@@ -4249,7 +5740,7 @@ function peg$parse(input, options) {
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f43(s3);
+          s0 = peg$f60(s3);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -4267,13 +5758,13 @@ function peg$parse(input, options) {
   function peg$parseClickDirective() {
     var s0, s1, s2, s3, s4, s5;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 5) === peg$c50) {
-      s1 = peg$c50;
+    if (input.substr(peg$currPos, 5) === peg$c63) {
+      s1 = peg$c63;
       peg$currPos += 5;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e62);
+        peg$fail(peg$e80);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -4282,24 +5773,24 @@ function peg$parse(input, options) {
         s3 = peg$currPos;
         s4 = [];
         s5 = input.charAt(peg$currPos);
-        if (peg$r10.test(s5)) {
+        if (peg$r15.test(s5)) {
           peg$currPos++;
         } else {
           s5 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e59);
+            peg$fail(peg$e77);
           }
         }
         if (s5 !== peg$FAILED) {
           while (s5 !== peg$FAILED) {
             s4.push(s5);
             s5 = input.charAt(peg$currPos);
-            if (peg$r10.test(s5)) {
+            if (peg$r15.test(s5)) {
               peg$currPos++;
             } else {
               s5 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e59);
+                peg$fail(peg$e77);
               }
             }
           }
@@ -4313,7 +5804,7 @@ function peg$parse(input, options) {
         }
         if (s3 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f44(s3);
+          s0 = peg$f61(s3);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -4331,71 +5822,71 @@ function peg$parse(input, options) {
   function peg$parseNoteDirective() {
     var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 4) === peg$c51) {
-      s1 = peg$c51;
+    if (input.substr(peg$currPos, 4) === peg$c64) {
+      s1 = peg$c64;
       peg$currPos += 4;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e63);
+        peg$fail(peg$e81);
       }
     }
     if (s1 !== peg$FAILED) {
       s2 = peg$parse__();
       if (s2 !== peg$FAILED) {
         if (input.charCodeAt(peg$currPos) === 34) {
-          s3 = peg$c52;
+          s3 = peg$c40;
           peg$currPos++;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e64);
+            peg$fail(peg$e50);
           }
         }
         if (s3 !== peg$FAILED) {
           s4 = peg$currPos;
           s5 = [];
           s6 = input.charAt(peg$currPos);
-          if (peg$r11.test(s6)) {
+          if (peg$r9.test(s6)) {
             peg$currPos++;
           } else {
             s6 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e65);
+              peg$fail(peg$e51);
             }
           }
           while (s6 !== peg$FAILED) {
             s5.push(s6);
             s6 = input.charAt(peg$currPos);
-            if (peg$r11.test(s6)) {
+            if (peg$r9.test(s6)) {
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e65);
+                peg$fail(peg$e51);
               }
             }
           }
           s4 = input.substring(s4, peg$currPos);
           if (input.charCodeAt(peg$currPos) === 34) {
-            s5 = peg$c52;
+            s5 = peg$c40;
             peg$currPos++;
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e64);
+              peg$fail(peg$e50);
             }
           }
           if (s5 !== peg$FAILED) {
             s6 = peg$parse__();
             if (s6 !== peg$FAILED) {
-              if (input.substr(peg$currPos, 2) === peg$c53) {
-                s7 = peg$c53;
+              if (input.substr(peg$currPos, 2) === peg$c65) {
+                s7 = peg$c65;
                 peg$currPos += 2;
               } else {
                 s7 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e66);
+                  peg$fail(peg$e82);
                 }
               }
               if (s7 !== peg$FAILED) {
@@ -4452,7 +5943,7 @@ function peg$parse(input, options) {
                       s10 = null;
                     }
                     peg$savedPos = s0;
-                    s0 = peg$f45(s4, s9, s10);
+                    s0 = peg$f62(s4, s9, s10);
                   } else {
                     peg$currPos = s0;
                     s0 = peg$FAILED;
@@ -4492,13 +5983,13 @@ function peg$parse(input, options) {
     s0 = peg$currPos;
     s1 = peg$parse__();
     if (s1 !== peg$FAILED) {
-      if (input.substr(peg$currPos, 6) === peg$c54) {
-        s2 = peg$c54;
+      if (input.substr(peg$currPos, 6) === peg$c66) {
+        s2 = peg$c66;
         peg$currPos += 6;
       } else {
         s2 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e67);
+          peg$fail(peg$e83);
         }
       }
       if (s2 !== peg$FAILED) {
@@ -4508,12 +5999,12 @@ function peg$parse(input, options) {
           if (s4 !== peg$FAILED) {
             s5 = peg$parse_();
             if (input.charCodeAt(peg$currPos) === 44) {
-              s6 = peg$c55;
+              s6 = peg$c67;
               peg$currPos++;
             } else {
               s6 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e68);
+                peg$fail(peg$e84);
               }
             }
             if (s6 !== peg$FAILED) {
@@ -4521,7 +6012,7 @@ function peg$parse(input, options) {
               s8 = peg$parseSignedInt();
               if (s8 !== peg$FAILED) {
                 peg$savedPos = s0;
-                s0 = peg$f46(s4, s8);
+                s0 = peg$f63(s4, s8);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;
@@ -4552,12 +6043,12 @@ function peg$parse(input, options) {
     var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
     if (input.charCodeAt(peg$currPos) === 45) {
-      s1 = peg$c56;
+      s1 = peg$c68;
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e69);
+        peg$fail(peg$e85);
       }
     }
     if (s1 === peg$FAILED) {
@@ -4566,24 +6057,24 @@ function peg$parse(input, options) {
     s2 = peg$currPos;
     s3 = [];
     s4 = input.charAt(peg$currPos);
-    if (peg$r12.test(s4)) {
+    if (peg$r16.test(s4)) {
       peg$currPos++;
     } else {
       s4 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e70);
+        peg$fail(peg$e86);
       }
     }
     if (s4 !== peg$FAILED) {
       while (s4 !== peg$FAILED) {
         s3.push(s4);
         s4 = input.charAt(peg$currPos);
-        if (peg$r12.test(s4)) {
+        if (peg$r16.test(s4)) {
           peg$currPos++;
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e70);
+            peg$fail(peg$e86);
           }
         }
       }
@@ -4597,7 +6088,7 @@ function peg$parse(input, options) {
     }
     if (s2 !== peg$FAILED) {
       peg$savedPos = s0;
-      s0 = peg$f47(s1, s2);
+      s0 = peg$f64(s1, s2);
     } else {
       peg$currPos = s0;
       s0 = peg$FAILED;
@@ -4607,13 +6098,13 @@ function peg$parse(input, options) {
   function peg$parseLegendBlock() {
     var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 6) === peg$c57) {
-      s1 = peg$c57;
+    if (input.substr(peg$currPos, 6) === peg$c69) {
+      s1 = peg$c69;
       peg$currPos += 6;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e71);
+        peg$fail(peg$e87);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -4624,51 +6115,51 @@ function peg$parse(input, options) {
           s4 = peg$currPos;
           s5 = peg$parse_();
           if (input.charCodeAt(peg$currPos) === 34) {
-            s6 = peg$c52;
+            s6 = peg$c40;
             peg$currPos++;
           } else {
             s6 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e64);
+              peg$fail(peg$e50);
             }
           }
           if (s6 !== peg$FAILED) {
             s7 = peg$currPos;
             s8 = [];
             s9 = input.charAt(peg$currPos);
-            if (peg$r11.test(s9)) {
+            if (peg$r9.test(s9)) {
               peg$currPos++;
             } else {
               s9 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e65);
+                peg$fail(peg$e51);
               }
             }
             while (s9 !== peg$FAILED) {
               s8.push(s9);
               s9 = input.charAt(peg$currPos);
-              if (peg$r11.test(s9)) {
+              if (peg$r9.test(s9)) {
                 peg$currPos++;
               } else {
                 s9 = peg$FAILED;
                 if (peg$silentFails === 0) {
-                  peg$fail(peg$e65);
+                  peg$fail(peg$e51);
                 }
               }
             }
             s7 = input.substring(s7, peg$currPos);
             if (input.charCodeAt(peg$currPos) === 34) {
-              s8 = peg$c52;
+              s8 = peg$c40;
               peg$currPos++;
             } else {
               s8 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e64);
+                peg$fail(peg$e50);
               }
             }
             if (s8 !== peg$FAILED) {
               peg$savedPos = s4;
-              s4 = peg$f48(s3, s7);
+              s4 = peg$f65(s3, s7);
             } else {
               peg$currPos = s4;
               s4 = peg$FAILED;
@@ -4701,7 +6192,7 @@ function peg$parse(input, options) {
             }
             if (s9 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f49(s3, s4, s7);
+              s0 = peg$f66(s3, s4, s7);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -4726,43 +6217,43 @@ function peg$parse(input, options) {
   }
   function peg$parseLegendCorner() {
     var s0;
-    if (input.substr(peg$currPos, 12) === peg$c58) {
-      s0 = peg$c58;
+    if (input.substr(peg$currPos, 12) === peg$c70) {
+      s0 = peg$c70;
       peg$currPos += 12;
     } else {
       s0 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e72);
+        peg$fail(peg$e88);
       }
     }
     if (s0 === peg$FAILED) {
-      if (input.substr(peg$currPos, 11) === peg$c59) {
-        s0 = peg$c59;
+      if (input.substr(peg$currPos, 11) === peg$c71) {
+        s0 = peg$c71;
         peg$currPos += 11;
       } else {
         s0 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e73);
+          peg$fail(peg$e89);
         }
       }
       if (s0 === peg$FAILED) {
-        if (input.substr(peg$currPos, 9) === peg$c60) {
-          s0 = peg$c60;
+        if (input.substr(peg$currPos, 9) === peg$c72) {
+          s0 = peg$c72;
           peg$currPos += 9;
         } else {
           s0 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e74);
+            peg$fail(peg$e90);
           }
         }
         if (s0 === peg$FAILED) {
-          if (input.substr(peg$currPos, 8) === peg$c61) {
-            s0 = peg$c61;
+          if (input.substr(peg$currPos, 8) === peg$c73) {
+            s0 = peg$c73;
             peg$currPos += 8;
           } else {
             s0 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e75);
+              peg$fail(peg$e91);
             }
           }
         }
@@ -4827,24 +6318,24 @@ function peg$parse(input, options) {
       s3 = peg$currPos;
       s4 = [];
       s5 = input.charAt(peg$currPos);
-      if (peg$r13.test(s5)) {
+      if (peg$r17.test(s5)) {
         peg$currPos++;
       } else {
         s5 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e76);
+          peg$fail(peg$e92);
         }
       }
       if (s5 !== peg$FAILED) {
         while (s5 !== peg$FAILED) {
           s4.push(s5);
           s5 = input.charAt(peg$currPos);
-          if (peg$r13.test(s5)) {
+          if (peg$r17.test(s5)) {
             peg$currPos++;
           } else {
             s5 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e76);
+              peg$fail(peg$e92);
             }
           }
         }
@@ -4858,12 +6349,12 @@ function peg$parse(input, options) {
       }
       if (s3 !== peg$FAILED) {
         if (input.charCodeAt(peg$currPos) === 58) {
-          s4 = peg$c62;
+          s4 = peg$c35;
           peg$currPos++;
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e77);
+            peg$fail(peg$e42);
           }
         }
         if (s4 !== peg$FAILED) {
@@ -4903,7 +6394,7 @@ function peg$parse(input, options) {
             s6 = peg$parseNL();
             if (s6 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f50(s3, s5);
+              s0 = peg$f67(s3, s5);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -4931,30 +6422,30 @@ function peg$parse(input, options) {
     peg$silentFails++;
     s0 = [];
     s1 = input.charAt(peg$currPos);
-    if (peg$r14.test(s1)) {
+    if (peg$r18.test(s1)) {
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e79);
+        peg$fail(peg$e94);
       }
     }
     while (s1 !== peg$FAILED) {
       s0.push(s1);
       s1 = input.charAt(peg$currPos);
-      if (peg$r14.test(s1)) {
+      if (peg$r18.test(s1)) {
         peg$currPos++;
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e79);
+          peg$fail(peg$e94);
         }
       }
     }
     peg$silentFails--;
     s1 = peg$FAILED;
     if (peg$silentFails === 0) {
-      peg$fail(peg$e78);
+      peg$fail(peg$e93);
     }
     return s0;
   }
@@ -4963,24 +6454,24 @@ function peg$parse(input, options) {
     peg$silentFails++;
     s0 = [];
     s1 = input.charAt(peg$currPos);
-    if (peg$r14.test(s1)) {
+    if (peg$r18.test(s1)) {
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e79);
+        peg$fail(peg$e94);
       }
     }
     if (s1 !== peg$FAILED) {
       while (s1 !== peg$FAILED) {
         s0.push(s1);
         s1 = input.charAt(peg$currPos);
-        if (peg$r14.test(s1)) {
+        if (peg$r18.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e79);
+            peg$fail(peg$e94);
           }
         }
       }
@@ -4991,7 +6482,7 @@ function peg$parse(input, options) {
     if (s0 === peg$FAILED) {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e80);
+        peg$fail(peg$e95);
       }
     }
     return s0;
@@ -4999,23 +6490,23 @@ function peg$parse(input, options) {
   function peg$parseNL() {
     var s0, s1;
     peg$silentFails++;
-    if (input.substr(peg$currPos, 2) === peg$c63) {
-      s0 = peg$c63;
+    if (input.substr(peg$currPos, 2) === peg$c74) {
+      s0 = peg$c74;
       peg$currPos += 2;
     } else {
       s0 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e82);
+        peg$fail(peg$e97);
       }
     }
     if (s0 === peg$FAILED) {
       s0 = input.charAt(peg$currPos);
-      if (peg$r15.test(s0)) {
+      if (peg$r19.test(s0)) {
         peg$currPos++;
       } else {
         s0 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e83);
+          peg$fail(peg$e98);
         }
       }
     }
@@ -5023,7 +6514,7 @@ function peg$parse(input, options) {
     if (s0 === peg$FAILED) {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e81);
+        peg$fail(peg$e96);
       }
     }
     return s0;
@@ -5058,11 +6549,28 @@ function peg$parse(input, options) {
 var flowchart = {
   parseMermaid(input) {
     const raw = peg$parse(input);
+    const nodes = raw.flow.nodes.map((n) => {
+      const base = {
+        id: n.id,
+        label: n.label,
+        shape: n.shape || "rect",
+        status: n.status || "default",
+        ...n.subgraph !== void 0 ? { subgraph: n.subgraph } : {}
+      };
+      if (n.iconToken !== void 0) {
+        const result = parseIconRef(String(n.iconToken));
+        if (!result.ok) {
+          throw new Error(`Flowchart parse error: invalid @icon value "${n.iconToken}": ${result.error.message}`);
+        }
+        return { ...base, icon: result.value };
+      }
+      return base;
+    });
     return {
       version: raw.version,
       metadata: raw.metadata ?? {},
       direction: raw.direction,
-      nodes: raw.flow.nodes,
+      nodes,
       edges: raw.flow.edges,
       subgraphs: raw.subgraphs ?? [],
       overlays: raw.overlays?.length > 0 ? raw.overlays : void 0
@@ -5330,177 +6838,8 @@ function rhuInt(v) {
   return Math.floor(v + 0.5);
 }
 function rhu(v, decimals = 2) {
-  const f = 10 ** decimals;
-  return Math.floor(v * f + 0.5) / f;
-}
-var ADVANCE = {
-  32: 0.2793,
-  33: 0.2793,
-  34: 0.3574,
-  35: 0.5576,
-  36: 0.5576,
-  37: 0.8906,
-  38: 0.6699,
-  39: 0.1914,
-  40: 0.334,
-  41: 0.334,
-  42: 0.3906,
-  43: 0.5859,
-  44: 0.2793,
-  45: 0.334,
-  46: 0.2793,
-  47: 0.3125,
-  48: 0.5576,
-  49: 0.5576,
-  50: 0.5576,
-  51: 0.5576,
-  52: 0.5576,
-  53: 0.5576,
-  54: 0.5576,
-  55: 0.5576,
-  56: 0.5576,
-  57: 0.5576,
-  58: 0.2793,
-  59: 0.2793,
-  60: 0.5859,
-  61: 0.5859,
-  62: 0.5859,
-  63: 0.5576,
-  64: 1.0186,
-  65: 0.6699,
-  66: 0.6699,
-  67: 0.7227,
-  68: 0.7227,
-  69: 0.6699,
-  70: 0.6133,
-  71: 0.7793,
-  72: 0.7227,
-  73: 0.2783,
-  74: 0.5,
-  75: 0.6699,
-  76: 0.5576,
-  77: 0.8359,
-  78: 0.7227,
-  79: 0.7793,
-  80: 0.6133,
-  81: 0.7793,
-  82: 0.7227,
-  83: 0.6133,
-  84: 0.6133,
-  85: 0.7227,
-  86: 0.6699,
-  87: 0.9453,
-  88: 0.6699,
-  89: 0.6699,
-  90: 0.6133,
-  91: 0.2793,
-  92: 0.3125,
-  93: 0.2793,
-  94: 0.5859,
-  95: 0.5576,
-  96: 0.334,
-  97: 0.5576,
-  98: 0.5576,
-  99: 0.5,
-  100: 0.5576,
-  101: 0.5576,
-  102: 0.2793,
-  103: 0.5576,
-  104: 0.5576,
-  105: 0.2217,
-  106: 0.2217,
-  107: 0.5,
-  108: 0.2217,
-  109: 0.8359,
-  110: 0.5576,
-  111: 0.5576,
-  112: 0.5576,
-  113: 0.5576,
-  114: 0.334,
-  115: 0.5,
-  116: 0.334,
-  117: 0.5576,
-  118: 0.5,
-  119: 0.7227,
-  120: 0.5,
-  121: 0.5,
-  122: 0.5,
-  123: 0.334,
-  124: 0.2598,
-  125: 0.334,
-  126: 0.5859
-};
-var DEFAULT_ADVANCE = 0.5576;
-var LINE_HEIGHT_FACTOR = 1.2;
-function measureText(text, fontSizePx) {
-  let totalEm = 0;
-  for (let i = 0; i < text.length; i++) {
-    const cp = text.codePointAt(i) ?? 32;
-    totalEm += ADVANCE[cp] ?? DEFAULT_ADVANCE;
-  }
-  return {
-    width: totalEm * fontSizePx,
-    height: fontSizePx * LINE_HEIGHT_FACTOR
-  };
-}
-var ELLIPSIS = "\u2026";
-function wrapText2(text, fontSizePx, maxWidth, maxLines) {
-  if (!text || maxLines <= 0 || maxWidth <= 0) return { lines: [] };
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return { lines: [] };
-  const lines2 = [];
-  let current = "";
-  for (let wi = 0; wi < words.length; wi++) {
-    const word = words[wi];
-    const candidate = current ? `${current} ${word}` : word;
-    if (measureText(candidate, fontSizePx).width <= maxWidth) {
-      current = candidate;
-    } else {
-      if (current) {
-        if (lines2.length === maxLines - 1) {
-          const remaining = words.slice(wi).join(" ");
-          const full = current ? `${current} ${remaining}` : remaining;
-          lines2.push(truncateText(full, fontSizePx, maxWidth));
-          return { lines: lines2 };
-        }
-        lines2.push(current);
-        current = word;
-      } else {
-        if (lines2.length === maxLines - 1) {
-          lines2.push(truncateText(word, fontSizePx, maxWidth));
-          return { lines: lines2 };
-        }
-        lines2.push(truncateText(word, fontSizePx, maxWidth));
-        current = "";
-      }
-    }
-  }
-  if (current) {
-    if (lines2.length < maxLines) {
-      lines2.push(current);
-    } else {
-      const last = lines2[lines2.length - 1] ?? "";
-      lines2[lines2.length - 1] = truncateText(`${last} ${current}`, fontSizePx, maxWidth);
-    }
-  }
-  return { lines: lines2 };
-}
-function truncateText(text, fontSizePx, maxWidth) {
-  if (measureText(text, fontSizePx).width <= maxWidth) return text;
-  const ellipsisWidth = measureText(ELLIPSIS, fontSizePx).width;
-  const budget = maxWidth - ellipsisWidth;
-  if (budget <= 0) return ELLIPSIS;
-  let lo = 0;
-  let hi = text.length;
-  while (lo < hi) {
-    const mid = Math.floor((lo + hi + 1) / 2);
-    if (measureText(text.slice(0, mid), fontSizePx).width <= budget) {
-      lo = mid;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return text.slice(0, lo) + ELLIPSIS;
+  const f2 = 10 ** decimals;
+  return Math.floor(v * f2 + 0.5) / f2;
 }
 var CATEGORICAL_HUES = [
   "#7C3AED",
@@ -8860,988 +10199,95 @@ var timeline = {
     return layoutTimeline(ir, theme);
   }
 };
-var CELL_SHRINK = 12;
-function resolveCrossLinks(links2, anchors, cellRects) {
-  const resolved = [];
-  const diagnostics = [];
-  const allAnchorEntries = Object.entries(anchors);
-  const allBounds = allAnchorEntries.map(([, a]) => a.bounds);
-  for (let i = 0; i < links2.length; i++) {
-    const link = links2[i];
-    const fromKey = addressToKey(link.from);
-    const toKey = addressToKey(link.to);
-    const fromAnchor = anchors[fromKey];
-    const toAnchor = anchors[toKey];
-    if (!fromAnchor) {
-      diagnostics.push({ linkIndex: i, message: `Cannot resolve source: "${fromKey}" not found in anchor registry` });
-      continue;
-    }
-    if (!toAnchor) {
-      diagnostics.push({ linkIndex: i, message: `Cannot resolve target: "${toKey}" not found in anchor registry` });
-      continue;
-    }
-    const srcCellPrefix = link.from.cellPath.join(".") + ".";
-    const dstCellPrefix = link.to.cellPath.join(".") + ".";
-    const ownBoundsSet = /* @__PURE__ */ new Set();
-    for (const [key, anchor] of allAnchorEntries) {
-      if (key.startsWith(srcCellPrefix) || key.startsWith(dstCellPrefix)) {
-        ownBoundsSet.add(anchor.bounds);
+function wavifyPath(points, amplitude, wavelength) {
+  if (points.length < 2) {
+    return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  }
+  const sampleInterval = wavelength / 4;
+  const arcLen = [0];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    arcLen.push(arcLen[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const totalLen = arcLen[arcLen.length - 1];
+  if (totalLen < 1) {
+    return `M ${points[0].x} ${points[0].y}`;
+  }
+  const sampleCount = Math.max(2, Math.ceil(totalLen / sampleInterval) + 1);
+  const samples = [];
+  const sampleArcLens = [];
+  function polylineAt(s) {
+    s = Math.max(0, Math.min(s, totalLen));
+    for (let i = 1; i < points.length; i++) {
+      if (arcLen[i] >= s - 1e-9) {
+        const segStart = arcLen[i - 1];
+        const segEnd = arcLen[i];
+        const segLen = segEnd - segStart;
+        const t = segLen < 1e-9 ? 0 : (s - segStart) / segLen;
+        const a = points[i - 1], b = points[i];
+        const pt = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+        const dx2 = b.x - a.x, dy2 = b.y - a.y;
+        const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        const tx = len2 > 1e-9 ? dx2 / len2 : 1;
+        const ty = len2 > 1e-9 ? dy2 / len2 : 0;
+        return { pt, tangentX: tx, tangentY: ty };
       }
     }
-    const crossingObstacles = allBounds.filter((b) => !ownBoundsSet.has(b));
-    if (cellRects) {
-      const srcId = link.from.cellPath.join(".");
-      const dstId = link.to.cellPath.join(".");
-      for (const [cellId, r] of cellRects) {
-        if (cellId === srcId || cellId === dstId) continue;
-        const sw = r.width - 2 * CELL_SHRINK;
-        const sh = r.height - 2 * CELL_SHRINK;
-        if (sw > 0 && sh > 0) {
-          crossingObstacles.push({ x: r.x + CELL_SHRINK, y: r.y + CELL_SHRINK, width: sw, height: sh });
-        }
-      }
-    }
-    const { fromPort, toPort, fromSide, toSide } = selectBestPorts(fromAnchor, toAnchor, crossingObstacles);
-    resolved.push({ link, fromAnchor, toAnchor, fromPort, toPort, fromSide, toSide });
-  }
-  spreadSharedPorts(resolved, anchors);
-  return { resolved, diagnostics };
-}
-function addressToKey(addr) {
-  return [...addr.cellPath, addr.nodeId].join(".");
-}
-var SIDES = ["N", "S", "E", "W"];
-var OBSTACLE_PENALTY = 1e6;
-function selectBestPorts(from, to, obstacles) {
-  const fromPorts = availablePorts(from);
-  const toPorts = availablePorts(to);
-  let bestScore = Infinity;
-  let bestFrom = fromPorts[0][1];
-  let bestTo = toPorts[0][1];
-  let bestFromSide = fromPorts[0][0];
-  let bestToSide = toPorts[0][0];
-  for (const [fSide, fPt] of fromPorts) {
-    for (const [tSide, tPt] of toPorts) {
-      const dx = tPt.x - fPt.x;
-      const dy = tPt.y - fPt.y;
-      const dist = dx * dx + dy * dy;
-      const crossings = countOrthogonalRouteCrossings(fPt, tPt, fSide, tSide, obstacles);
-      const score = dist + crossings * OBSTACLE_PENALTY;
-      if (score < bestScore) {
-        bestScore = score;
-        bestFrom = fPt;
-        bestTo = tPt;
-        bestFromSide = fSide;
-        bestToSide = tSide;
-      }
-    }
-  }
-  return { fromPort: bestFrom, toPort: bestTo, fromSide: bestFromSide, toSide: bestToSide };
-}
-function countOrthogonalRouteCrossings(from, to, fromSide, toSide, obstacles) {
-  const segments = simulateOrthogonalRoute(from, to, fromSide, toSide);
-  let crossings = 0;
-  for (const [p1, p2] of segments) {
-    crossings += countSegmentObstacleCrossings(p1, p2, obstacles);
-  }
-  return crossings;
-}
-function simulateOrthogonalRoute(from, to, fromSide, toSide) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const midX = (from.x + to.x) / 2;
-  const midY = (from.y + to.y) / 2;
-  if (Math.abs(dx) < 1 || Math.abs(dy) < 1) {
-    return [[from, to]];
-  }
-  const exitH = fromSide === "E" || fromSide === "W";
-  const entryH = toSide === "E" || toSide === "W";
-  if (exitH && entryH) {
-    const v1 = { x: midX, y: from.y };
-    const v2 = { x: midX, y: to.y };
-    return [[from, v1], [v1, v2], [v2, to]];
-  } else if (!exitH && !entryH) {
-    const v1 = { x: from.x, y: midY };
-    const v2 = { x: to.x, y: midY };
-    return [[from, v1], [v1, v2], [v2, to]];
-  } else if (exitH && !entryH) {
-    const corner = { x: to.x, y: from.y };
-    return [[from, corner], [corner, to]];
-  } else {
-    const corner = { x: from.x, y: to.y };
-    return [[from, corner], [corner, to]];
-  }
-}
-function countSegmentObstacleCrossings(p1, p2, obstacles) {
-  let count = 0;
-  const segMinX = Math.min(p1.x, p2.x);
-  const segMaxX = Math.max(p1.x, p2.x);
-  const segMinY = Math.min(p1.y, p2.y);
-  const segMaxY = Math.max(p1.y, p2.y);
-  for (const obs of obstacles) {
-    const oRight = obs.x + obs.width;
-    const oBottom = obs.y + obs.height;
-    if (segMaxX < obs.x || segMinX > oRight) continue;
-    if (segMaxY < obs.y || segMinY > oBottom) continue;
-    if (segmentIntersectsRect(p1, p2, obs)) {
-      count++;
-    }
-  }
-  return count;
-}
-function segmentIntersectsRect(p1, p2, r) {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  const xmin = r.x;
-  const xmax = r.x + r.width;
-  const ymin = r.y;
-  const ymax = r.y + r.height;
-  let tmin = 0;
-  let tmax = 1;
-  const edges2 = [
-    { p: -dx, q: p1.x - xmin },
-    { p: dx, q: xmax - p1.x },
-    { p: -dy, q: p1.y - ymin },
-    { p: dy, q: ymax - p1.y }
-  ];
-  for (const { p, q } of edges2) {
-    if (Math.abs(p) < 1e-10) {
-      if (q < 0) return false;
-    } else {
-      const t = q / p;
-      if (p < 0) {
-        tmin = Math.max(tmin, t);
-      } else {
-        tmax = Math.min(tmax, t);
-      }
-      if (tmin > tmax) return false;
-    }
-  }
-  return tmin < tmax;
-}
-function availablePorts(anchor) {
-  const { bounds } = anchor;
-  const cx = bounds.x + bounds.width / 2;
-  const cy = bounds.y + bounds.height / 2;
-  const defaults = {
-    N: { x: cx, y: bounds.y },
-    S: { x: cx, y: bounds.y + bounds.height },
-    E: { x: bounds.x + bounds.width, y: cy },
-    W: { x: bounds.x, y: cy }
-  };
-  return SIDES.map((side) => [
-    side,
-    anchor.ports?.[side] ?? defaults[side]
-  ]);
-}
-function spreadSharedPorts(resolved, anchors) {
-  const groups = /* @__PURE__ */ new Map();
-  for (let i = 0; i < resolved.length; i++) {
-    const r = resolved[i];
-    const fromKey = addressToKey(r.link.from);
-    const toKey = addressToKey(r.link.to);
-    const fGroup = `${fromKey}.${r.fromSide}`;
-    const tGroup = `${toKey}.${r.toSide}`;
-    if (!groups.has(fGroup)) groups.set(fGroup, []);
-    groups.get(fGroup).push({ index: i, isFrom: true });
-    if (!groups.has(tGroup)) groups.set(tGroup, []);
-    groups.get(tGroup).push({ index: i, isFrom: false });
-  }
-  for (const [key, members] of groups) {
-    if (members.length < 2) continue;
-    const parts = key.split(".");
-    const side = parts[parts.length - 1];
-    const nodeKey = parts.slice(0, parts.length - 1).join(".");
-    const anchor = anchors[nodeKey];
-    if (!anchor) continue;
-    const { bounds } = anchor;
-    const n = members.length;
-    for (let i = 0; i < n; i++) {
-      const t = (i + 1) / (n + 1);
-      let pt;
-      switch (side) {
-        case "N":
-          pt = { x: bounds.x + bounds.width * t, y: bounds.y };
-          break;
-        case "S":
-          pt = { x: bounds.x + bounds.width * t, y: bounds.y + bounds.height };
-          break;
-        case "E":
-          pt = { x: bounds.x + bounds.width, y: bounds.y + bounds.height * t };
-          break;
-        case "W":
-          pt = { x: bounds.x, y: bounds.y + bounds.height * t };
-          break;
-      }
-      const { index, isFrom } = members[i];
-      const r = resolved[index];
-      if (isFrom) {
-        r.fromPort = pt;
-      } else {
-        r.toPort = pt;
-      }
-    }
-  }
-}
-var CROSSLINK_ARROW_ID = "triton-crosslink-arrow";
-var CROSSLINK_ARROW_BOTH_ID = "triton-crosslink-arrow-both";
-var CELL_SHRINK2 = 12;
-function renderCrossLinks(resolved, traces2, theme, anchors, occupiedRects, routingObstacles, cellRects) {
-  const { palette, typography, edges: edgeTheme } = theme;
-  const elements = [];
-  const defs = [];
-  let needsArrow = false;
-  let needsBiArrow = false;
-  const obstacles = [];
-  if (anchors) {
-    for (const anchor of Object.values(anchors)) {
-      obstacles.push(anchor.bounds);
-    }
-  }
-  const traceColors = /* @__PURE__ */ new Map();
-  const categoricalPalette = [
-    "#E11D48",
-    "#16A34A",
-    "#9333EA",
-    "#0891B2",
-    "#CA8A04",
-    "#DC2626",
-    "#2563EB",
-    "#7C3AED"
-  ];
-  for (let i = 0; i < traces2.length; i++) {
-    const t = traces2[i];
-    traceColors.set(t.id, t.color ?? categoricalPalette[i % categoricalPalette.length]);
-  }
-  let explicitColorIdx = 0;
-  const pendingLabels = [];
-  const pendingRoutes = [];
-  for (const rLink of resolved) {
-    const { link, fromPort, toPort, fromSide, toSide } = rLink;
-    let color;
-    if (link.traceId) {
-      color = traceColors.get(link.traceId) ?? palette.primary;
-    } else {
-      color = categoricalPalette[explicitColorIdx % categoricalPalette.length];
-      explicitColorIdx++;
-    }
-    const fromDir = sideToPortDir(fromSide);
-    const toDir = sideToPortDir(toSide);
-    const routeStyle = link.routing ?? "orthogonal";
-    const router = getRouter(routeStyle) ?? createRouter(routeStyle);
-    const tension = link.props?.tension;
-    let linkObstacles = obstacles;
-    if (cellRects) {
-      const srcId = link.from.cellPath.join(".");
-      const dstId = link.to.cellPath.join(".");
-      const extra = [];
-      for (const [cellId, r] of cellRects) {
-        if (cellId === srcId || cellId === dstId) continue;
-        const sw = r.width - 2 * CELL_SHRINK2;
-        const sh = r.height - 2 * CELL_SHRINK2;
-        if (sw > 0 && sh > 0) {
-          extra.push({ x: r.x + CELL_SHRINK2, y: r.y + CELL_SHRINK2, width: sw, height: sh });
-        }
-      }
-      if (extra.length > 0) linkObstacles = [...obstacles, ...extra];
-    }
-    const route = router.route({
-      from: fromPort,
-      to: toPort,
-      style: routeStyle,
-      obstacles: linkObstacles,
-      padding: 12,
-      fromDir,
-      toDir,
-      ...tension != null ? { tension } : {}
-    });
-    const dash = edgeStyleToDash(link.style);
-    const animation = link.animation === "none" ? void 0 : link.animation === "particle" ? "particle" : link.animation === "march" ? "march" : dash ? "march" : void 0;
-    let markerEnd;
-    let markerStart;
-    if (link.direction === "directed") {
-      markerEnd = CROSSLINK_ARROW_ID;
-      needsArrow = true;
-    } else if (link.direction === "bidirectional") {
-      markerEnd = CROSSLINK_ARROW_ID;
-      markerStart = CROSSLINK_ARROW_BOTH_ID;
-      needsArrow = true;
-      needsBiArrow = true;
-    }
-    pendingRoutes.push({
-      points: route.points,
-      routePath: routeStyle !== "orthogonal" ? route.path : void 0,
-      routing: routeStyle,
-      fromDir,
-      toDir,
-      color,
-      dash,
-      animation,
-      markerEnd,
-      markerStart,
-      label: link.label
-    });
-  }
-  deflectCrossingStraightRoutes(pendingRoutes, obstacles);
-  if (routingObstacles && routingObstacles.length > 0) {
-    const orthoRoutes = pendingRoutes.filter((r) => r.routing === "orthogonal");
-    nudgeOffBorders(orthoRoutes, routingObstacles);
-  }
-  const CHANNEL_GAP2 = 12;
-  separateBezierCurves(pendingRoutes.filter((r) => r.routing === "bezier"), CHANNEL_GAP2, obstacles, pendingRoutes);
-  separateOverlappingChannels(pendingRoutes.filter((r) => r.routing === "orthogonal"), CHANNEL_GAP2);
-  const CORRIDOR_TOL = 20;
-  const labelFractions = new Array(pendingRoutes.length).fill(0.5);
-  const labeledIndices = pendingRoutes.map((pr, i) => pr.label ? i : -1).filter((i) => i >= 0);
-  const staggerAssigned = /* @__PURE__ */ new Set();
-  for (const i of labeledIndices) {
-    if (staggerAssigned.has(i)) continue;
-    const infoI = dominantSegmentInfo(pendingRoutes[i].points);
-    const group = [i];
-    for (const j of labeledIndices) {
-      if (j === i || staggerAssigned.has(j)) continue;
-      const infoJ = dominantSegmentInfo(pendingRoutes[j].points);
-      if (infoI.axis === infoJ.axis && Math.abs(infoI.coord - infoJ.coord) < CORRIDOR_TOL) {
-        group.push(j);
-      }
-    }
-    if (group.length > 1) {
-      group.sort((a, b) => a - b);
-      const n = group.length;
-      group.forEach((idx, k) => {
-        labelFractions[idx] = (k + 1) / (n + 1);
-      });
-      group.forEach((idx) => staggerAssigned.add(idx));
-    }
-  }
-  for (let prIdx = 0; prIdx < pendingRoutes.length; prIdx++) {
-    const pr = pendingRoutes[prIdx];
-    const path = pr.routePath ?? pr.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-    const pathEl = {
-      type: "path",
-      d: path,
-      stroke: pr.color,
-      strokeWidth: edgeTheme.strokeWidth + 0.5,
-      ...pr.dash ? { strokeDasharray: pr.dash } : {},
-      ...pr.animation ? { animated: pr.animation } : {},
-      ...pr.markerEnd ? { markerEnd: pr.markerEnd } : {},
-      ...pr.markerStart ? { markerStart: pr.markerStart } : {}
-    };
-    elements.push(pathEl);
-    if (pr.label) {
-      const labelPos = pointAtFraction(pr.points, labelFractions[prIdx] ?? 0.5);
-      pendingLabels.push({
-        content: pr.label,
-        x: labelPos.x,
-        y: labelPos.y - 6,
-        fontSize: edgeTheme.labelFontSize,
-        fontFamily: typography.fontFamily,
-        fill: pr.color,
-        anchor: "middle",
-        fontWeight: "bold"
-      });
-    }
-  }
-  const CHAR_WIDTH_FACTOR = 0.65;
-  const LABEL_PAD = 4;
-  const fixedRects = [...obstacles, ...occupiedRects ?? []];
-  const labelRects = pendingLabels.map((l) => {
-    const w = l.content.length * l.fontSize * CHAR_WIDTH_FACTOR + LABEL_PAD * 2;
-    const h2 = l.fontSize + LABEL_PAD * 2;
-    return { x: l.x - w / 2, y: l.y - h2 + LABEL_PAD, width: w, height: h2 };
-  });
-  deCollideLabels(labelRects, fixedRects);
-  for (let i = 0; i < pendingLabels.length; i++) {
-    const l = pendingLabels[i];
-    const r = labelRects[i];
-    const finalX = r.x + r.width / 2;
-    const finalY = r.y + r.height - LABEL_PAD;
-    elements.push({
-      type: "text",
-      content: l.content,
-      position: { x: finalX, y: finalY },
-      fontSize: l.fontSize,
-      fontFamily: l.fontFamily,
-      fill: l.fill,
-      anchor: l.anchor,
-      fontWeight: l.fontWeight
-    });
-  }
-  if (needsArrow) {
-    const s = edgeTheme.arrowSize;
-    defs.push(
-      `<marker id="${CROSSLINK_ARROW_ID}" markerWidth="${s}" markerHeight="${s * 0.7}" refX="${s - 1}" refY="${s * 0.35}" orient="auto"><polygon points="0 0, ${s} ${s * 0.35}, 0 ${s * 0.7}" fill="currentColor" /></marker>`
-    );
-  }
-  if (needsBiArrow) {
-    const s = edgeTheme.arrowSize;
-    defs.push(
-      `<marker id="${CROSSLINK_ARROW_BOTH_ID}" markerWidth="${s}" markerHeight="${s * 0.7}" refX="1" refY="${s * 0.35}" orient="auto"><polygon points="${s} 0, 0 ${s * 0.35}, ${s} ${s * 0.7}" fill="currentColor" /></marker>`
-    );
-  }
-  return { defs, elements };
-}
-function sideToPortDir(side) {
-  return side;
-}
-function edgeStyleToDash(style) {
-  switch (style) {
-    case "dashed":
-      return "8 4";
-    case "dotted":
-      return "4 3";
-    default:
-      return void 0;
-  }
-}
-function dominantSegmentInfo(points) {
-  let bestLen = 0, axis = "h", coord = 0;
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i], b = points[i + 1];
-    const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
-    const len = dx + dy;
-    if (len > bestLen) {
-      bestLen = len;
-      if (dy > dx) {
-        axis = "v";
-        coord = (a.x + b.x) / 2;
-      } else {
-        axis = "h";
-        coord = (a.y + b.y) / 2;
-      }
-    }
-  }
-  return { axis, coord };
-}
-function pointAtFraction(points, t) {
-  if (points.length === 0) return { x: 0, y: 0 };
-  if (points.length === 1) return points[0];
-  const lengths = [];
-  let total = 0;
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i], b = points[i + 1];
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    lengths.push(len);
-    total += len;
-  }
-  if (total === 0) return points[0];
-  const target = total * Math.min(Math.max(t, 0), 1);
-  let acc = 0;
-  for (let i = 0; i < lengths.length; i++) {
-    const l = lengths[i];
-    if (acc + l >= target) {
-      const frac = l > 0 ? (target - acc) / l : 0;
-      const a = points[i], b = points[i + 1];
-      return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
-    }
-    acc += l;
-  }
-  return points[points.length - 1];
-}
-function deCollideLabels(labelRects, fixedRects) {
-  const MAX_PASSES = 20;
-  const NUDGE = 2;
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
-    let moved = false;
-    for (const lr of labelRects) {
-      for (const fr of fixedRects) {
-        if (!rectsOverlap(lr, fr)) continue;
-        const ox = Math.min(lr.x + lr.width, fr.x + fr.width) - Math.max(lr.x, fr.x);
-        const oy = Math.min(lr.y + lr.height, fr.y + fr.height) - Math.max(lr.y, fr.y);
-        if (ox <= oy) {
-          const lCX = lr.x + lr.width / 2;
-          const fCX = fr.x + fr.width / 2;
-          lr.x = lCX <= fCX ? fr.x - lr.width - NUDGE : fr.x + fr.width + NUDGE;
-        } else {
-          const lCY = lr.y + lr.height / 2;
-          const fCY = fr.y + fr.height / 2;
-          lr.y = lCY <= fCY ? fr.y - lr.height - NUDGE : fr.y + fr.height + NUDGE;
-        }
-        moved = true;
-      }
-    }
-    for (let i = 0; i < labelRects.length; i++) {
-      for (let j = i + 1; j < labelRects.length; j++) {
-        const a = labelRects[i], b = labelRects[j];
-        if (!rectsOverlap(a, b)) continue;
-        const ox = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-        const oy = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-        if (ox <= oy) {
-          const aCX = a.x + a.width / 2;
-          const bCX = b.x + b.width / 2;
-          if (aCX <= bCX) {
-            a.x -= ox / 2;
-            b.x += ox / 2;
-          } else {
-            a.x += ox / 2;
-            b.x -= ox / 2;
-          }
-        } else {
-          const aCY = a.y + a.height / 2;
-          const bCY = b.y + b.height / 2;
-          if (aCY <= bCY) {
-            const overlap = a.y + a.height - b.y;
-            a.y -= (overlap + NUDGE) / 2;
-            b.y += (overlap + NUDGE) / 2;
-          } else {
-            const overlap = b.y + b.height - a.y;
-            b.y -= (overlap + NUDGE) / 2;
-            a.y += (overlap + NUDGE) / 2;
-          }
-        }
-        moved = true;
-      }
-    }
-    if (!moved) break;
-  }
-}
-function rectsOverlap(a, b) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
-function deflectCrossingStraightRoutes(routes, obstacles) {
-  const straightRoutes = routes.filter((r) => r.routing === "straight");
-  if (straightRoutes.length === 0) return;
-  const BEZIER_SAMPLES = 16;
-  const otherSegments = [];
-  for (const r of routes) {
-    if (r.routing === "bezier") {
-      const pts = r.points;
-      if (pts.length >= 4) {
-        const samples = sampleBezierToPolyline(pts[0], pts[1], pts[2], pts[3], BEZIER_SAMPLES);
-        for (let i = 0; i < samples.length - 1; i++) {
-          otherSegments.push([samples[i], samples[i + 1]]);
-        }
-      }
-    } else {
-      const pts = r.points;
-      for (let i = 0; i < pts.length - 1; i++) {
-        otherSegments.push([pts[i], pts[i + 1]]);
-      }
-    }
-  }
-  for (const sr of straightRoutes) {
-    const pts = sr.points;
-    if (pts.length !== 2) continue;
-    const from = pts[0], to = pts[1];
-    const dx = to.x - from.x, dy = to.y - from.y;
+    const last = points[points.length - 1], prev = points[points.length - 2];
+    const dx = last.x - prev.x, dy = last.y - prev.y;
     const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 30) continue;
-    const segsExcludingSelf = otherSegments.filter(
-      ([a, b]) => !(a === from && b === to)
-    );
-    const originalCrossings = segsExcludingSelf.filter(
-      ([a, b]) => straightSegmentsIntersect(from, to, a, b)
-    ).length;
-    if (originalCrossings === 0) continue;
-    const perpX = -dy / len, perpY = dx / len;
-    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-    let bestWp = null;
-    let bestCrossings = Infinity;
-    for (let offset = len * 0.08; offset <= len * 0.5; offset += len * 0.06) {
-      for (const sign of [1, -1]) {
-        const wp = { x: mid.x + perpX * offset * sign, y: mid.y + perpY * offset * sign };
-        let hitsNode = false;
-        for (const obs of obstacles) {
-          if (segIntersectsRectInterior(from, wp, obs) || segIntersectsRectInterior(wp, to, obs)) {
-            hitsNode = true;
-            break;
-          }
-        }
-        if (hitsNode) continue;
-        let crossings = 0;
-        for (const [a, b] of segsExcludingSelf) {
-          if (straightSegmentsIntersect(from, wp, a, b)) crossings++;
-          if (straightSegmentsIntersect(wp, to, a, b)) crossings++;
-        }
-        if (crossings < bestCrossings) {
-          bestCrossings = crossings;
-          bestWp = wp;
-          if (crossings === 0) break;
-        }
-      }
-      if (bestCrossings === 0) break;
-    }
-    if (bestWp && bestCrossings < originalCrossings) {
-      sr.points.splice(1, 0, bestWp);
-      sr.routePath = sr.points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-    } else {
-      const orthoRouter = createRouter("orthogonal");
-      const route = orthoRouter.route({
-        from,
-        to,
-        style: "orthogonal",
-        obstacles,
-        padding: 12,
-        ...sr.fromDir ? { fromDir: sr.fromDir } : {},
-        ...sr.toDir ? { toDir: sr.toDir } : {}
-      });
-      sr.points = [...route.points];
-      sr.routePath = void 0;
-      sr.routing = "orthogonal";
+    return { pt: last, tangentX: len > 1e-9 ? dx / len : 1, tangentY: len > 1e-9 ? dy / len : 0 };
+  }
+  const cornerArcLens = [];
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i - 1], b = points[i], c = points[i + 1];
+    const d1x = b.x - a.x, d1y = b.y - a.y;
+    const d2x = c.x - b.x, d2y = c.y - b.y;
+    const len1 = Math.sqrt(d1x * d1x + d1y * d1y);
+    const len2 = Math.sqrt(d2x * d2x + d2y * d2y);
+    if (len1 < 1e-9 || len2 < 1e-9) continue;
+    const dot = d1x / len1 * (d2x / len2) + d1y / len1 * (d2y / len2);
+    if (dot < 0.7) {
+      cornerArcLens.push(arcLen[i]);
     }
   }
-}
-function sampleBezierToPolyline(p0, p1, p2, p3, n) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const u = 1 - t;
-    pts.push({
-      x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
-      y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
-    });
-  }
-  return pts;
-}
-function straightSegmentsIntersect(p1, p2, p3, p4) {
-  const d1 = crossProduct(p3, p4, p1);
-  const d2 = crossProduct(p3, p4, p2);
-  const d3 = crossProduct(p1, p2, p3);
-  const d4 = crossProduct(p1, p2, p4);
-  return (d1 > 0 && d2 < 0 || d1 < 0 && d2 > 0) && (d3 > 0 && d4 < 0 || d3 < 0 && d4 > 0);
-}
-function crossProduct(a, b, c) {
-  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
-function segIntersectsRectInterior(p1, p2, r) {
-  const dx = p2.x - p1.x, dy = p2.y - p1.y;
-  let tmin = 0, tmax = 1;
-  const edges2 = [
-    { p: -dx, q: p1.x - r.x },
-    { p: dx, q: r.x + r.width - p1.x },
-    { p: -dy, q: p1.y - r.y },
-    { p: dy, q: r.y + r.height - p1.y }
-  ];
-  for (const { p, q } of edges2) {
-    if (Math.abs(p) < 1e-10) {
-      if (q <= 0) return false;
-    } else {
-      const t = q / p;
-      if (p < 0) tmin = Math.max(tmin, t);
-      else tmax = Math.min(tmax, t);
-      if (tmin >= tmax) return false;
+  function cornerAmplitudeFactor(s) {
+    let minDist = Infinity;
+    for (const cs of cornerArcLens) {
+      minDist = Math.min(minDist, Math.abs(s - cs));
     }
+    if (minDist >= wavelength) return 1;
+    return minDist / wavelength;
   }
-  return tmin < tmax;
+  for (let k = 0; k < sampleCount; k++) {
+    const s = k / (sampleCount - 1) * totalLen;
+    const { pt, tangentX, tangentY } = polylineAt(s);
+    const nx = -tangentY;
+    const ny = tangentX;
+    const phase = 2 * Math.PI * s / wavelength;
+    const cornerFactor = cornerAmplitudeFactor(s);
+    const displacement = amplitude * cornerFactor * Math.sin(phase);
+    samples.push({ x: pt.x + nx * displacement, y: pt.y + ny * displacement });
+    sampleArcLens.push(s);
+  }
+  const tension = 0.5;
+  let d = `M ${f(samples[0].x)} ${f(samples[0].y)}`;
+  for (let i = 1; i < samples.length; i++) {
+    const p0 = samples[Math.max(0, i - 2)];
+    const p1 = samples[i - 1];
+    const p2 = samples[i];
+    const p3 = samples[Math.min(samples.length - 1, i + 1)];
+    const cp1x = p1.x + (p2.x - p0.x) * tension / 3;
+    const cp1y = p1.y + (p2.y - p0.y) * tension / 3;
+    const cp2x = p2.x - (p3.x - p1.x) * tension / 3;
+    const cp2y = p2.y - (p3.y - p1.y) * tension / 3;
+    d += ` C ${f(cp1x)} ${f(cp1y)} ${f(cp2x)} ${f(cp2y)} ${f(p2.x)} ${f(p2.y)}`;
+  }
+  return d;
 }
-function separateBezierCurves(routes, gap, obstacles, allRoutes) {
-  if (routes.length < 2) return;
-  const PROXIMITY = 20;
-  const groups = [];
-  const fromGroups = clusterByEndpoint(routes, "from", PROXIMITY);
-  for (const cluster of fromGroups) {
-    if (cluster.length > 1) groups.push({ routes: cluster, end: "from" });
-  }
-  const toGroups = clusterByEndpoint(routes, "to", PROXIMITY);
-  for (const cluster of toGroups) {
-    if (cluster.length > 1) groups.push({ routes: cluster, end: "to" });
-  }
-  for (const group of groups) {
-    const n = group.routes.length;
-    for (let i = 0; i < n; i++) {
-      const pr = group.routes[i];
-      const pts = pr.points;
-      if (pts.length < 4) continue;
-      const from = pts[0], to = pts[pts.length - 1];
-      const dx = to.x - from.x, dy = to.y - from.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len < 1) continue;
-      const perpX = -dy / len, perpY = dx / len;
-      const offset = (i - (n - 1) / 2) * gap;
-      if (group.end === "from") {
-        pts[1] = { x: pts[1].x + perpX * offset, y: pts[1].y + perpY * offset };
-      } else {
-        pts[pts.length - 2] = {
-          x: pts[pts.length - 2].x + perpX * offset,
-          y: pts[pts.length - 2].y + perpY * offset
-        };
-      }
-      rebuildBezierPath(pr);
-    }
-  }
-  const SAMPLES = 40;
-  for (let i = 0; i < routes.length; i++) {
-    for (let j = i + 1; j < routes.length; j++) {
-      const ri = routes[i], rj = routes[j];
-      const ptsI = ri.points;
-      const ptsJ = rj.points;
-      if (ptsI.length < 4 || ptsJ.length < 4) continue;
-      const sampI = sampleBezierCurve(ptsI[0], ptsI[1], ptsI[2], ptsI[3], SAMPLES);
-      const sampJ = sampleBezierCurve(ptsJ[0], ptsJ[1], ptsJ[2], ptsJ[3], SAMPLES);
-      if (!polylinesIntersect(sampI, sampJ)) continue;
-      const perpOf = (pts) => {
-        const dx = pts[3].x - pts[0].x, dy = pts[3].y - pts[0].y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        return len < 1 ? null : { px: -dy / len, py: dx / len, len };
-      };
-      const pI = perpOf(ptsI), pJ = perpOf(ptsJ);
-      if (!pI || !pJ) continue;
-      const origI1 = { ...ptsI[1] }, origI2 = { ...ptsI[2] };
-      const origJ1 = { ...ptsJ[1] }, origJ2 = { ...ptsJ[2] };
-      let best = null;
-      const stepSize = Math.max(gap * 3, 15);
-      for (const moveRoute of ["I", "J"]) {
-        const p = moveRoute === "I" ? pI : pJ;
-        const pts = moveRoute === "I" ? ptsI : ptsJ;
-        const orig1 = moveRoute === "I" ? origI1 : origJ1;
-        const orig2 = moveRoute === "I" ? origI2 : origJ2;
-        const otherPts = moveRoute === "I" ? ptsJ : ptsI;
-        for (const sign of [1, -1]) {
-          for (let step = 1; step <= 8; step++) {
-            const off = sign * step * stepSize;
-            pts[1] = { x: orig1.x + p.px * off, y: orig1.y + p.py * off };
-            pts[2] = { x: orig2.x + p.px * off, y: orig2.y + p.py * off };
-            const sA = sampleBezierCurve(pts[0], pts[1], pts[2], pts[3], SAMPLES);
-            const sB = sampleBezierCurve(otherPts[0], otherPts[1], otherPts[2], otherPts[3], SAMPLES);
-            if (!polylinesIntersect(sA, sB)) {
-              if (!best || Math.abs(off) < Math.abs(best.off)) {
-                best = { moveRoute, off, px: p.px, py: p.py };
-              }
-              break;
-            }
-          }
-          pts[1] = { ...orig1 };
-          pts[2] = { ...orig2 };
-        }
-      }
-      if (best) {
-        const pts = best.moveRoute === "I" ? ptsI : ptsJ;
-        const orig1 = best.moveRoute === "I" ? origI1 : origJ1;
-        const orig2 = best.moveRoute === "I" ? origI2 : origJ2;
-        pts[1] = { x: orig1.x + best.px * best.off, y: orig1.y + best.py * best.off };
-        pts[2] = { x: orig2.x + best.px * best.off, y: orig2.y + best.py * best.off };
-        rebuildBezierPath(ri);
-        rebuildBezierPath(rj);
-      } else {
-        swapInterleavedPortsAndReroute(ri, rj, obstacles);
-      }
-    }
-  }
-}
-function swapInterleavedPortsAndReroute(ri, rj, obstacles) {
-  const fromI = ri.points[0], toI = ri.points[ri.points.length - 1];
-  const fromJ = rj.points[0], toJ = rj.points[rj.points.length - 1];
-  const TOLERANCE = 15;
-  const pairs = [];
-  if (Math.abs(fromI.y - toJ.y) < TOLERANCE) pairs.push({ endI: "from", ptI: fromI, endJ: "to", ptJ: toJ, axis: "x" });
-  if (Math.abs(fromI.x - toJ.x) < TOLERANCE) pairs.push({ endI: "from", ptI: fromI, endJ: "to", ptJ: toJ, axis: "y" });
-  if (Math.abs(toI.y - fromJ.y) < TOLERANCE) pairs.push({ endI: "to", ptI: toI, endJ: "from", ptJ: fromJ, axis: "x" });
-  if (Math.abs(toI.x - fromJ.x) < TOLERANCE) pairs.push({ endI: "to", ptI: toI, endJ: "from", ptJ: fromJ, axis: "y" });
-  for (const pair of pairs) {
-    const otherI = pair.endI === "from" ? toI : fromI;
-    const otherJ = pair.endJ === "from" ? toJ : fromJ;
-    const coord = pair.axis;
-    const iOnShared = pair.ptI[coord];
-    const jOnShared = pair.ptJ[coord];
-    const iOther = otherI[coord];
-    const jOther = otherJ[coord];
-    const iLeftOnShared = iOnShared < jOnShared;
-    const iLeftOnOther = iOther < jOther;
-    if (iLeftOnShared === iLeftOnOther) continue;
-    const newPtI = { ...pair.ptJ };
-    const newPtJ = { ...pair.ptI };
-    if (pair.axis === "x") {
-      const avgY = (pair.ptI.y + pair.ptJ.y) / 2;
-      newPtI.y = avgY;
-      newPtJ.y = avgY;
-    } else {
-      const avgX = (pair.ptI.x + pair.ptJ.x) / 2;
-      newPtI.x = avgX;
-      newPtJ.x = avgX;
-    }
-    const newFromI = pair.endI === "from" ? newPtI : fromI;
-    const newToI = pair.endI === "to" ? newPtI : toI;
-    const newFromJ = pair.endJ === "from" ? newPtJ : fromJ;
-    const newToJ = pair.endJ === "to" ? newPtJ : toJ;
-    const orthoRouter = createRouter("orthogonal");
-    const routeI = orthoRouter.route({ from: newFromI, to: newToI, style: "orthogonal", obstacles, padding: 12 });
-    const routeJ = orthoRouter.route({ from: newFromJ, to: newToJ, style: "orthogonal", obstacles, padding: 12 });
-    const polyI = routeI.points;
-    const polyJ = routeJ.points;
-    let crosses = false;
-    for (let a = 0; a < polyI.length - 1 && !crosses; a++)
-      for (let b = 0; b < polyJ.length - 1 && !crosses; b++)
-        if (straightSegmentsIntersect(polyI[a], polyI[a + 1], polyJ[b], polyJ[b + 1]))
-          crosses = true;
-    if (!crosses) {
-      ri.points = [...routeI.points];
-      ri.routePath = void 0;
-      ri.routing = "orthogonal";
-      rj.points = [...routeJ.points];
-      rj.routePath = void 0;
-      rj.routing = "orthogonal";
-      return;
-    }
-  }
-  convertToOrthogonal(ri, obstacles);
-  convertToOrthogonal(rj, obstacles);
-}
-function convertToOrthogonal(target, obstacles) {
-  const from = target.points[0], to = target.points[target.points.length - 1];
-  const orthoRouter = createRouter("orthogonal");
-  const route = orthoRouter.route({
-    from,
-    to,
-    style: "orthogonal",
-    obstacles,
-    padding: 12
-  });
-  target.points = [...route.points];
-  target.routePath = void 0;
-  target.routing = "orthogonal";
-}
-function rebuildBezierPath(pr) {
-  const pts = pr.points;
-  pr.routePath = `M ${pts[0].x} ${pts[0].y} C ${pts[1].x} ${pts[1].y} ${pts[2].x} ${pts[2].y} ${pts[3].x} ${pts[3].y}`;
-}
-function sampleBezierCurve(p0, p1, p2, p3, n) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const u = 1 - t;
-    pts.push({
-      x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
-      y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
-    });
-  }
-  return pts;
-}
-function polylinesIntersect(a, b) {
-  for (let i = 0; i < a.length - 1; i++) {
-    for (let j = 0; j < b.length - 1; j++) {
-      if (segmentsIntersect(a[i], a[i + 1], b[j], b[j + 1])) return true;
-    }
-  }
-  return false;
-}
-function segmentsIntersect(p1, p2, p3, p4) {
-  const d1 = cross(p3, p4, p1);
-  const d2 = cross(p3, p4, p2);
-  const d3 = cross(p1, p2, p3);
-  const d4 = cross(p1, p2, p4);
-  if ((d1 > 0 && d2 < 0 || d1 < 0 && d2 > 0) && (d3 > 0 && d4 < 0 || d3 < 0 && d4 > 0)) {
-    return true;
-  }
-  return false;
-}
-function cross(a, b, c) {
-  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
-function clusterByEndpoint(routes, end, proximity) {
-  const clusters = [];
-  const assigned = /* @__PURE__ */ new Set();
-  for (let i = 0; i < routes.length; i++) {
-    const ri = routes[i];
-    if (assigned.has(ri)) continue;
-    const pi = end === "from" ? ri.points[0] : ri.points[ri.points.length - 1];
-    const cluster = [ri];
-    assigned.add(ri);
-    for (let j = i + 1; j < routes.length; j++) {
-      const rj = routes[j];
-      if (assigned.has(rj)) continue;
-      const pj = end === "from" ? rj.points[0] : rj.points[rj.points.length - 1];
-      const dx = pi.x - pj.x, dy = pi.y - pj.y;
-      if (Math.sqrt(dx * dx + dy * dy) < proximity) {
-        cluster.push(rj);
-        assigned.add(rj);
-      }
-    }
-    clusters.push(cluster);
-  }
-  return clusters;
-}
-function nudgeOffBorders(routes, borders) {
-  const TOLERANCE = 3;
-  const NUDGE = 8;
-  const hBorderYs = [];
-  const vBorderXs = [];
-  for (const b of borders) {
-    if (b.width > b.height) {
-      hBorderYs.push(b.y + b.height / 2);
-    } else {
-      vBorderXs.push(b.x + b.width / 2);
-    }
-  }
-  for (const route of routes) {
-    const pts = route.points;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
-      if (dy < 1 && dx > 1) {
-        for (const borderY of hBorderYs) {
-          if (Math.abs(a.y - borderY) < TOLERANCE) {
-            const routeMinY = Math.min(...pts.map((p) => p.y));
-            const routeMaxY = Math.max(...pts.map((p) => p.y));
-            const routeMidY = (routeMinY + routeMaxY) / 2;
-            const nudgeDir = a.y < routeMidY ? -NUDGE : NUDGE;
-            pts[i] = { x: a.x, y: a.y + nudgeDir };
-            pts[i + 1] = { x: b.x, y: b.y + nudgeDir };
-            if (i > 0 && Math.abs(pts[i - 1].x - a.x) < 1) {
-              pts[i - 1] = { ...pts[i - 1], y: pts[i - 1].y };
-            }
-            break;
-          }
-        }
-      } else if (dx < 1 && dy > 1) {
-        for (const borderX of vBorderXs) {
-          if (Math.abs(a.x - borderX) < TOLERANCE) {
-            const routeMinX = Math.min(...pts.map((p) => p.x));
-            const routeMaxX = Math.max(...pts.map((p) => p.x));
-            const routeMidX = (routeMinX + routeMaxX) / 2;
-            const nudgeDir = a.x < routeMidX ? -NUDGE : NUDGE;
-            pts[i] = { x: a.x + nudgeDir, y: a.y };
-            pts[i + 1] = { x: b.x + nudgeDir, y: b.y };
-            break;
-          }
-        }
-      }
-    }
-  }
-}
-function separateOverlappingChannels(routes, gap) {
-  const segments = [];
-  for (let r = 0; r < routes.length; r++) {
-    const pts = routes[r].points;
-    for (let s = 0; s < pts.length - 1; s++) {
-      const a = pts[s], b = pts[s + 1];
-      const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
-      if (dx < 1 && dy > 1) {
-        segments.push({ routeIdx: r, segIdx: s, isVertical: true, coord: a.x, min: Math.min(a.y, b.y), max: Math.max(a.y, b.y) });
-      } else if (dy < 1 && dx > 1) {
-        segments.push({ routeIdx: r, segIdx: s, isVertical: false, coord: a.y, min: Math.min(a.x, b.x), max: Math.max(a.x, b.x) });
-      }
-    }
-  }
-  const COORD_TOLERANCE = 10;
-  const processed = /* @__PURE__ */ new Set();
-  for (let i = 0; i < segments.length; i++) {
-    if (processed.has(i)) continue;
-    const group = [i];
-    const si = segments[i];
-    for (let j = i + 1; j < segments.length; j++) {
-      if (processed.has(j)) continue;
-      const sj = segments[j];
-      if (si.isVertical !== sj.isVertical) continue;
-      if (Math.abs(si.coord - sj.coord) > COORD_TOLERANCE) continue;
-      if (si.max <= sj.min || sj.max <= si.min) continue;
-      group.push(j);
-    }
-    if (group.length < 2) continue;
-    const n = group.length;
-    for (let k = 0; k < n; k++) {
-      const offset = (k - (n - 1) / 2) * gap;
-      const seg = segments[group[k]];
-      processed.add(group[k]);
-      const pts = routes[seg.routeIdx].points;
-      if (seg.isVertical) {
-        pts[seg.segIdx] = { x: pts[seg.segIdx].x + offset, y: pts[seg.segIdx].y };
-        pts[seg.segIdx + 1] = { x: pts[seg.segIdx + 1].x + offset, y: pts[seg.segIdx + 1].y };
-      } else {
-        pts[seg.segIdx] = { x: pts[seg.segIdx].x, y: pts[seg.segIdx].y + offset };
-        pts[seg.segIdx + 1] = { x: pts[seg.segIdx + 1].x, y: pts[seg.segIdx + 1].y + offset };
-      }
-    }
-  }
+function f(n) {
+  return Math.round(n * 100) / 100 + "";
 }
 var W_CROSS = 1e4;
 var W_INTER = 3e3;
@@ -9852,13 +10298,13 @@ var W_LEN = 1;
 var W_ALIGN = 400;
 var SNAP_THRESHOLD = 14;
 var CONFLICT_RADIUS = 28;
-var CELL_SHRINK3 = 12;
+var CELL_SHRINK = 12;
 var CHANNEL_GAP = 12;
 var ROUTE_PADDING = 12;
 var WALL_TS = [0.1, 0.25, 0.5, 0.75, 0.9];
 var ARROW_ID = "triton-crosslink-arrow";
 var BI_ARROW_ID = "triton-crosslink-arrow-both";
-function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, occupiedRects, routingObstacles, cellRects) {
+function routeAndRenderCrossLinks3(links2, theme, anchors, intraPorts, occupiedRects, routingObstacles, cellRects) {
   const { palette, typography, edges: edgeTheme } = theme;
   const elements = [];
   const defs = [];
@@ -9872,10 +10318,6 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
     "#2563EB",
     "#7C3AED"
   ];
-  const traceColors = /* @__PURE__ */ new Map();
-  for (let i = 0; i < traces2.length; i++) {
-    traceColors.set(traces2[i].id, traces2[i].color ?? PALETTE[i % PALETTE.length]);
-  }
   let explicitColorIdx = 0;
   const allNodeBounds = Object.values(anchors).map((a) => a.bounds);
   const addrKey = (addr) => [...addr.cellPath, addr.nodeId].join(".");
@@ -9905,14 +10347,15 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
     if (!best) continue;
     committed.push(best.committed);
     let color;
-    if (link.traceId) {
-      color = traceColors.get(link.traceId) ?? palette.primary;
+    const explicitColor = typeof link.props?.color === "string" ? link.props.color : void 0;
+    if (explicitColor) {
+      color = explicitColor;
     } else {
       color = PALETTE[explicitColorIdx % PALETTE.length];
       explicitColorIdx++;
     }
-    const dash = edgeStyleToDash2(link.style);
-    const animation = link.animation === "none" ? void 0 : link.animation === "particle" ? "particle" : link.animation === "march" ? "march" : dash ? "march" : void 0;
+    const dash = edgeStyleToDash(link.style);
+    const animation = link.animation === "none" ? void 0 : isRenderedConnectorAnimation(link.animation) ? link.animation : void 0;
     let markerEnd;
     let markerStart;
     if (link.direction === "directed") {
@@ -9921,16 +10364,23 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
       markerEnd = ARROW_ID;
       markerStart = BI_ARROW_ID;
     }
+    const strokeWidth = link.style === "thick" ? (edgeTheme.strokeWidth + 0.5) * 2 : void 0;
+    const isWavy = link.style === "wavy";
+    const wavyAmp = link.props?.amplitude ?? 3;
+    const wavyLambda = link.props?.wavelength ?? 12;
     const origIdx = links2.indexOf(link);
     workingByOriginalIdx.set(origIdx >= 0 ? origIdx : workingByOriginalIdx.size, {
       points: [...best.rawPts],
       ...best.committed.isBezier ? { isBezier: true } : {},
       color,
       ...dash ? { dash } : {},
+      ...strokeWidth ? { strokeWidth } : {},
+      ...isWavy ? { isWavy: true, wavyAmplitude: wavyAmp, wavyWavelength: wavyLambda } : {},
       ...animation ? { animation } : {},
       ...markerEnd ? { markerEnd } : {},
       ...markerStart ? { markerStart } : {},
-      ...link.label ? { label: link.label } : {}
+      ...link.label ? { label: link.label } : {},
+      ...link.props?.labelPlacement === "path-midpoint" ? { labelPlacement: "path-midpoint" } : {}
     });
   }
   repairCrossings(committed, sortedLinks, anchors, allNodeBounds, cellRects, intraPorts ?? [], workingByOriginalIdx, links2, portHints, resolvable);
@@ -9940,7 +10390,7 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
     if (wr) workingRoutes.push(wr);
   }
   if (routingObstacles && routingObstacles.length > 0) {
-    nudgeOffBorders2(workingRoutes, routingObstacles);
+    nudgeOffBorders(workingRoutes, routingObstacles);
   }
   separateChannels(workingRoutes);
   const CORRIDOR_TOL = 20;
@@ -9975,14 +10425,17 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
   const pendingLabels = [];
   for (let i = 0; i < workingRoutes.length; i++) {
     const wr = workingRoutes[i];
-    const path = wr.isBezier ? `M ${wr.points[0].x} ${wr.points[0].y} C ${wr.points[1].x} ${wr.points[1].y} ${wr.points[2].x} ${wr.points[2].y} ${wr.points[3].x} ${wr.points[3].y}` : wr.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    let path = wr.isBezier ? `M ${wr.points[0].x} ${wr.points[0].y} C ${wr.points[1].x} ${wr.points[1].y} ${wr.points[2].x} ${wr.points[2].y} ${wr.points[3].x} ${wr.points[3].y}` : wr.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    if (wr.isWavy) {
+      path = wavifyPath([...wr.points], wr.wavyAmplitude ?? 3, wr.wavyWavelength ?? 12);
+    }
     if (wr.markerEnd === ARROW_ID) needsArrow = true;
     if (wr.markerStart === BI_ARROW_ID) needsBiArrow = true;
     elements.push({
       type: "path",
       d: path,
       stroke: wr.color,
-      strokeWidth: edgeTheme.strokeWidth + 0.5,
+      strokeWidth: wr.strokeWidth ?? edgeTheme.strokeWidth + 0.5,
       ...wr.dash ? { strokeDasharray: wr.dash } : {},
       ...wr.animation ? { animated: wr.animation } : {},
       ...wr.markerEnd ? { markerEnd: wr.markerEnd } : {},
@@ -9990,7 +10443,7 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
     });
     if (wr.label) {
       const pts = sampledPts(wr);
-      const labelPos = pointAtFrac(pts, labelFractions[i] ?? 0.5);
+      const labelPos = staggered.has(i) || wr.isBezier || wr.labelPlacement === "path-midpoint" ? pointAtFrac(pts, labelFractions[i] ?? 0.5) : labelAnchor(pts);
       pendingLabels.push({
         content: wr.label,
         x: labelPos.x,
@@ -10010,7 +10463,7 @@ function routeAndRenderCrossLinks3(links2, traces2, theme, anchors, intraPorts, 
     width: l.content.length * l.fontSize * CHAR_W + LABEL_PAD * 2,
     height: l.fontSize + LABEL_PAD * 2
   }));
-  deCollideLabels2(labelRects, fixedRects);
+  deCollideLabels(labelRects, fixedRects);
   for (let i = 0; i < pendingLabels.length; i++) {
     const l = pendingLabels[i];
     const r = labelRects[i];
@@ -10056,23 +10509,25 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
   };
   const srcCellId = link.from.cellPath.join(".");
   const dstCellId = link.to.cellPath.join(".");
+  const sameSourceCell = (key) => srcCellId.length > 0 && key.startsWith(srcCellId + ".");
+  const sameTargetCell = (key) => dstCellId.length > 0 && key.startsWith(dstCellId + ".");
   const linkObstacles = Object.entries(anchors).filter(
-    ([key]) => !key.startsWith(srcCellId + ".") && !key.startsWith(dstCellId + ".") && key !== srcKey && key !== dstKey
+    ([key]) => !sameSourceCell(key) && !sameTargetCell(key) && key !== srcKey && key !== dstKey
   ).map(([, a]) => a.bounds);
   if (cellRects) {
     for (const [cellId, r] of cellRects) {
       if (cellId === srcCellId || cellId === dstCellId) continue;
-      const sw = r.width - 2 * CELL_SHRINK3;
-      const sh = r.height - 2 * CELL_SHRINK3;
+      const sw = r.width - 2 * CELL_SHRINK;
+      const sh = r.height - 2 * CELL_SHRINK;
       if (sw > 0 && sh > 0) {
-        linkObstacles.push({ x: r.x + CELL_SHRINK3, y: r.y + CELL_SHRINK3, width: sw, height: sh });
+        linkObstacles.push({ x: r.x + CELL_SHRINK, y: r.y + CELL_SHRINK, width: sw, height: sh });
       }
     }
   }
   const routeStyle = link.routing ?? "orthogonal";
   const sides = ["N", "S", "E", "W"];
-  const srcWalls = portHint?.srcWall ? [portHint.srcWall] : link.exitWall ? [link.exitWall] : sides;
-  const dstWalls = portHint?.dstWall ? [portHint.dstWall] : link.entryWall ? [link.entryWall] : sides;
+  const srcWalls = link.exitWall ? [link.exitWall] : portHint?.srcWall ? [portHint.srcWall] : sides;
+  const dstWalls = link.entryWall ? [link.entryWall] : portHint?.dstWall ? [portHint.dstWall] : sides;
   const srcTs = portHint?.srcT !== void 0 ? [portHint.srcT] : WALL_TS;
   const dstTs = portHint?.dstT !== void 0 ? [portHint.dstT] : WALL_TS;
   let bestScore = Infinity;
@@ -10088,12 +10543,31 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
           sp = snapped.srcPort;
           dp = snapped.dstPort;
           const router = createRouter(routeStyle);
+          const routePadding = typeof link.props?.routePadding === "number" ? link.props.routePadding : ROUTE_PADDING;
+          const routeObstacles = [
+            ...linkObstacles,
+            ...forcedAwayEndpointObstacles(
+              link,
+              ss,
+              ds,
+              srcCenter,
+              dstCenter,
+              anchors,
+              cellRects,
+              srcKey,
+              dstKey,
+              srcCellId,
+              dstCellId,
+              sameSourceCell,
+              sameTargetCell
+            )
+          ];
           const route = router.route({
             from: sp,
             to: dp,
             style: routeStyle,
-            obstacles: linkObstacles,
-            padding: ROUTE_PADDING,
+            obstacles: routeObstacles,
+            padding: routePadding,
             fromDir: ss,
             toDir: ds
           });
@@ -10139,6 +10613,28 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
     }
   }
   return bestScore < Infinity ? { committed: bestCommitted, rawPts: bestRawPts } : null;
+}
+function forcedAwayEndpointObstacles(link, srcWall, dstWall, srcCenter, dstCenter, anchors, cellRects, srcKey, dstKey, srcCellId, dstCellId, sameSourceCell, sameTargetCell) {
+  const exitAway = link.exitWall !== void 0 && wallFacesAway(srcWall, srcCenter, dstCenter);
+  const entryAway = link.entryWall !== void 0 && wallFacesAway(dstWall, dstCenter, srcCenter);
+  const rects = [anchors[srcKey]?.bounds, anchors[dstKey]?.bounds].filter((r) => r !== void 0);
+  if (exitAway || entryAway) {
+    for (const [key, anchor] of Object.entries(anchors)) {
+      if (sameSourceCell(key) || sameTargetCell(key)) rects.push(anchor.bounds);
+    }
+    const srcCell = cellRects?.get(srcCellId);
+    const dstCell = cellRects?.get(dstCellId);
+    if (srcCell) rects.push(srcCell);
+    if (dstCell) rects.push(dstCell);
+  }
+  return rects;
+}
+function wallFacesAway(wall, fromCenter, toCenter) {
+  const nx = wall === "E" ? 1 : wall === "W" ? -1 : 0;
+  const ny = wall === "S" ? 1 : wall === "N" ? -1 : 0;
+  const vx = toCenter.x - fromCenter.x;
+  const vy = toCenter.y - fromCenter.y;
+  return vx * nx + vy * ny < 0;
 }
 function repairCrossings(committed, sortedLinks, anchors, allNodeBounds, cellRects, intraPorts, workingByOrigIdx, links2, portHints, resolvable) {
   for (let j = 1; j < committed.length; j++) {
@@ -10336,12 +10832,17 @@ function preAssignSharedPorts(links2, anchors) {
   }
   const result = /* @__PURE__ */ new Map();
   for (const [groupKey, members] of groups) {
-    if (members.length < 2) continue;
     const wall = groupKey.split(":").at(-1);
-    members.sort((a, b) => a.tangentKey - b.tangentKey);
-    const n = members.length;
+    const pinnedHere = members.filter((m) => {
+      const l = links2[m.linkIdx];
+      return m.isSource ? l.exitWall === wall : l.entryWall === wall;
+    });
+    const fanned = pinnedHere.length > 0 ? pinnedHere : members;
+    if (fanned.length < 2 && pinnedHere.length === 0) continue;
+    fanned.sort((a, b) => a.tangentKey - b.tangentKey);
+    const n = fanned.length;
     for (let k = 0; k < n; k++) {
-      const { linkIdx, isSource } = members[k];
+      const { linkIdx, isSource } = fanned[k];
       const t = (k + 1) / (n + 1);
       const ex = result.get(linkIdx) ?? {};
       result.set(
@@ -10453,12 +10954,34 @@ function dominantSegment(pts) {
   }
   return { axis, coord };
 }
-function edgeStyleToDash2(style) {
+function labelAnchor(pts) {
+  if (pts.length === 0) return { x: 0, y: 0 };
+  if (pts.length === 1) return pts[0];
+  let bestH = -1;
+  let hMid = null;
+  let bestAny = -1;
+  let anyMid = pts[0];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+    const len = Math.hypot(dx, dy);
+    if (len > bestAny) {
+      bestAny = len;
+      anyMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+    if (dx > dy && dx > bestH) {
+      bestH = dx;
+      hMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+  }
+  return hMid ?? anyMid;
+}
+function edgeStyleToDash(style) {
+  if (style === "dotted") return "4 3";
   if (style === "dashed") return "8 4";
-  if (style === "dotted") return "3 4";
   return void 0;
 }
-function nudgeOffBorders2(routes, borders) {
+function nudgeOffBorders(routes, borders) {
   const TOLERANCE = 3, NUDGE = 8;
   const hBorderYs = borders.filter((b) => b.width > b.height).map((b) => b.y + b.height / 2);
   const vBorderXs = borders.filter((b) => b.height >= b.width).map((b) => b.x + b.width / 2);
@@ -10539,13 +11062,13 @@ function separateChannels(routes) {
     }
   }
 }
-function deCollideLabels2(labelRects, fixedRects) {
+function deCollideLabels(labelRects, fixedRects) {
   const MAX_PASSES = 20, NUDGE = 2;
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     let moved = false;
     for (const lr of labelRects) {
       for (const fr of fixedRects) {
-        if (!rectsOverlap2(lr, fr)) continue;
+        if (!rectsOverlap(lr, fr)) continue;
         const ox = Math.min(lr.x + lr.width, fr.x + fr.width) - Math.max(lr.x, fr.x);
         const oy = Math.min(lr.y + lr.height, fr.y + fr.height) - Math.max(lr.y, fr.y);
         if (ox <= oy) {
@@ -10559,7 +11082,7 @@ function deCollideLabels2(labelRects, fixedRects) {
     for (let i = 0; i < labelRects.length; i++) {
       for (let j = i + 1; j < labelRects.length; j++) {
         const a = labelRects[i], b = labelRects[j];
-        if (!rectsOverlap2(a, b)) continue;
+        if (!rectsOverlap(a, b)) continue;
         const oy = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
         if (a.y + a.height / 2 <= b.y + b.height / 2) {
           a.y -= oy / 2 + NUDGE;
@@ -10574,10 +11097,626 @@ function deCollideLabels2(labelRects, fixedRects) {
     if (!moved) break;
   }
 }
-function rectsOverlap2(a, b) {
+function rectsOverlap(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
-var USE_ENGINE_V3 = true;
+function routeConnectors(input) {
+  const diagnostics = connectorDiagnostics(input.connectors, input.anchors);
+  const resolvable = input.connectors.filter(
+    (spec) => input.anchors[spec.fromKey] !== void 0 && input.anchors[spec.toKey] !== void 0
+  );
+  const links2 = resolvable.map(specToCrossLink);
+  const rendered = links2.length > 0 ? routeAndRenderCrossLinks3(
+    links2,
+    input.theme,
+    input.anchors,
+    input.occupiedPorts,
+    input.occupiedTextRects,
+    input.routingObstacles,
+    input.containerObstacles
+  ) : { defs: [], elements: [] };
+  const pathElements = rendered.elements.filter((e) => e.type !== "text");
+  const labelElements = rendered.elements.filter((e) => e.type === "text");
+  return {
+    pathElements,
+    labelElements,
+    elements: rendered.elements,
+    defs: rendered.defs,
+    diagnostics,
+    extents: connectorExtents(rendered.elements)
+  };
+}
+function crossLinksToConnectorSpecs(links2, defaults) {
+  return links2.map((link) => {
+    const fromKey = addressToKey(link.from);
+    const toKey = addressToKey(link.to);
+    const curveStyle = link.curveStyle ?? defaults?.curveStyle;
+    return {
+      fromKey,
+      toKey,
+      direction: link.direction,
+      style: link.style,
+      ...link.label !== void 0 ? { label: link.label } : {},
+      ...link.routing !== void 0 ? { routing: link.routing } : {},
+      ...curveStyle !== void 0 ? { curveStyle } : {},
+      ...link.exitWall !== void 0 ? { exitWall: link.exitWall } : {},
+      ...link.entryWall !== void 0 ? { entryWall: link.entryWall } : {},
+      ...link.animation !== void 0 ? { animation: link.animation } : {},
+      ...link.props !== void 0 ? { props: link.props } : {},
+      ...link.from.cellPath.length > 0 ? { fromContainerKey: link.from.cellPath.join(".") } : {},
+      ...link.to.cellPath.length > 0 ? { toContainerKey: link.to.cellPath.join(".") } : {}
+    };
+  });
+}
+function connectorDiagnostics(connectors, anchors) {
+  const diagnostics = [];
+  for (let i = 0; i < connectors.length; i++) {
+    const spec = connectors[i];
+    if (!anchors[spec.fromKey]) {
+      diagnostics.push({ connectorIndex: i, message: `Cannot resolve source: "${spec.fromKey}" not found in anchor registry` });
+    }
+    if (!anchors[spec.toKey]) {
+      diagnostics.push({ connectorIndex: i, message: `Cannot resolve target: "${spec.toKey}" not found in anchor registry` });
+    }
+  }
+  return diagnostics;
+}
+function specToCrossLink(spec) {
+  return {
+    from: keyToAddress(spec.fromKey, spec.fromContainerKey),
+    to: keyToAddress(spec.toKey, spec.toContainerKey),
+    direction: spec.direction,
+    style: spec.style,
+    ...spec.label !== void 0 ? { label: spec.label } : {},
+    ...spec.routing !== void 0 ? { routing: spec.routing } : {},
+    ...spec.curveStyle !== void 0 ? { curveStyle: spec.curveStyle } : {},
+    ...spec.exitWall !== void 0 ? { exitWall: spec.exitWall } : {},
+    ...spec.entryWall !== void 0 ? { entryWall: spec.entryWall } : {},
+    ...spec.animation !== void 0 ? { animation: spec.animation } : {},
+    ...spec.props !== void 0 ? { props: spec.props } : {}
+  };
+}
+function keyToAddress(key, containerKey) {
+  if (containerKey && key.startsWith(`${containerKey}.`)) {
+    return {
+      cellPath: containerKey.split("."),
+      nodeId: key.slice(containerKey.length + 1)
+    };
+  }
+  return { cellPath: [], nodeId: key };
+}
+function addressToKey(addr) {
+  return [...addr.cellPath, addr.nodeId].join(".");
+}
+function connectorExtents(elements) {
+  if (elements.length === 0) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const el of elements) {
+    if (el.type === "path") {
+      const nums = [];
+      for (const m of el.d.matchAll(/-?\d+(?:\.\d+)?/g)) {
+        const n = parseFloat(m[0]);
+        if (!Number.isNaN(n)) nums.push(n);
+      }
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        minX = Math.min(minX, nums[i]);
+        minY = Math.min(minY, nums[i + 1]);
+        maxX = Math.max(maxX, nums[i]);
+        maxY = Math.max(maxY, nums[i + 1]);
+      }
+    } else if (el.type === "text") {
+      const approxW = el.content.length * (el.fontSize ?? 12) * 0.65;
+      const left = el.anchor === "middle" ? el.position.x - approxW / 2 : el.anchor === "end" ? el.position.x - approxW : el.position.x;
+      const top = el.position.y - (el.fontSize ?? 12);
+      minX = Math.min(minX, left);
+      minY = Math.min(minY, top);
+      maxX = Math.max(maxX, left + approxW);
+      maxY = Math.max(maxY, el.position.y + (el.fontSize ?? 12));
+    }
+  }
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  return { minX, minY, maxX, maxY };
+}
+var ARROW_ID2 = "struct-arrow";
+function arrowDef(color) {
+  return `<marker id="${ARROW_ID2}" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L12 6 L0 12 z" fill="${color}" /></marker>`;
+}
+function lines(input) {
+  return input.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+function tokenizeDirective(line) {
+  const tokens = [];
+  let i = 0;
+  while (i < line.length) {
+    while (i < line.length && /\s/.test(line[i])) i++;
+    if (i >= line.length) break;
+    if (line[i] === '"') {
+      i++;
+      let value = "";
+      while (i < line.length) {
+        const ch = line[i];
+        if (ch === '"') {
+          i++;
+          break;
+        }
+        if (ch === "\\") {
+          const next = line[i + 1];
+          if (next === '"' || next === "\\") {
+            value += next;
+            i += 2;
+            continue;
+          }
+        }
+        value += ch;
+        i++;
+      }
+      if (line[i - 1] !== '"') throw new Error(`Unterminated quoted string: ${line}`);
+      tokens.push(value);
+      continue;
+    }
+    const start = i;
+    while (i < line.length && !/\s/.test(line[i])) i++;
+    tokens.push(line.slice(start, i));
+  }
+  return tokens;
+}
+function parse(input) {
+  let title;
+  let cells2 = [];
+  let axis = "horizontal";
+  let indexShow = false;
+  let indexSide = "before";
+  let indexOrder = "normal";
+  const ptrs = [];
+  let highlights;
+  let win;
+  for (const line of lines(input)) {
+    const t = tokenizeDirective(line);
+    if (t.length === 0) continue;
+    if (t[0] === "array") {
+      if (t.length > 1) cells2 = parseCells(t.slice(1));
+      continue;
+    }
+    if (t[0] === "title") {
+      title = t.slice(1).join(" ");
+      continue;
+    }
+    if (t[0] === "cells") {
+      cells2 = parseCells(t.slice(1));
+      continue;
+    }
+    if (t[0] === "axis") {
+      if (t[1] === "vertical" || t[1] === "horizontal") axis = t[1];
+      continue;
+    }
+    if (t[0] === "index") {
+      indexShow = true;
+      for (const mod of t.slice(1)) {
+        if (mod === "bottom") indexSide = "after";
+        if (mod === "top") indexSide = "before";
+        if (mod === "reverse") indexOrder = "reverse";
+      }
+      continue;
+    }
+    if (t[0] === "highlight") {
+      highlights = t.slice(1).map(Number).filter((n) => !isNaN(n) && Number.isInteger(n));
+      continue;
+    }
+    if (t[0] === "window" && t[1]) {
+      const m = t[1].match(/^(\d+)-(\d+)$/);
+      if (m) win = { start: Number(m[1]), end: Number(m[2]) };
+      continue;
+    }
+    if (t[0] === "ptr" && t.length >= 4 && t[2] === "->") {
+      ptrs.push({ id: t[1], target: parsePointerTarget(t[3]), ...t[4] !== void 0 ? { label: t[4] } : {} });
+    }
+  }
+  return {
+    ...title !== void 0 ? { title } : {},
+    axis,
+    index: { show: indexShow, side: indexSide, order: indexOrder },
+    cells: cells2,
+    ptrs,
+    ...highlights !== void 0 && highlights.length > 0 ? { highlights } : {},
+    ...win !== void 0 ? { window: win } : {}
+  };
+}
+function parseCells(tokens) {
+  const cells2 = tokens.map((token) => token === "..." ? { kind: "gap" } : { kind: "value", value: token });
+  const gapPositions = cells2.map((cell, i) => cell.kind === "gap" ? i : -1).filter((i) => i >= 0);
+  if (gapPositions.length > 1) throw new Error("Array cells may contain at most one ... gap");
+  if (gapPositions.length === 1) {
+    const gap = gapPositions[0];
+    if (gap === 0 || gap === cells2.length - 1) throw new Error("Array ... gap must be between concrete cells");
+  }
+  return cells2;
+}
+function parsePointerTarget(raw) {
+  if (/^\d+$/.test(raw)) return { raw, value: Number(raw) };
+  if (/^c\d+$/.test(raw) || raw === "cfirst" || raw === "clast" || raw === "cgap") return { raw, anchor: raw };
+  return { raw, anchor: raw };
+}
+function metadataFor(doc) {
+  const physicalToLogical = new Array(doc.cells.length).fill(null);
+  const indexToPhysical = /* @__PURE__ */ new Map();
+  const nonGapPhysicals = [];
+  let gapPhysical;
+  doc.cells.forEach((cell, physical) => {
+    if (cell.kind === "gap") {
+      gapPhysical = physical;
+    } else {
+      nonGapPhysicals.push(physical);
+    }
+  });
+  const logicalCount = nonGapPhysicals.length;
+  nonGapPhysicals.forEach((physical, rank) => {
+    const logical = doc.index.order === "reverse" ? logicalCount - 1 - rank : rank;
+    physicalToLogical[physical] = logical;
+    indexToPhysical.set(logical, physical);
+  });
+  return {
+    physicalToLogical,
+    indexToPhysical,
+    nonGapPhysicals,
+    ...gapPhysical !== void 0 ? { gapPhysical } : {}
+  };
+}
+function resolveArrayElementAnchorId(doc, elementIndex) {
+  const meta = metadataFor(normalizeArrayDoc(doc));
+  const logicalCount = meta.nonGapPhysicals.length;
+  if (elementIndex < 0) {
+    const fromEnd = Math.abs(elementIndex);
+    if (fromEnd < 1 || fromEnd > logicalCount) return void 0;
+    if (fromEnd === 1) return meta.nonGapPhysicals.length > 0 ? "clast" : void 0;
+    return `c${logicalCount - fromEnd}`;
+  }
+  if (doc.cells[elementIndex]?.kind === "gap") return "cgap";
+  return meta.indexToPhysical.has(elementIndex) ? `c${elementIndex}` : void 0;
+}
+function layoutArray(inputDoc, theme) {
+  const doc = normalizeArrayDoc(inputDoc);
+  const { palette, typography, spacing } = theme;
+  const p = pen(theme);
+  const margin = spacing.diagramMargin;
+  const font = typography.baseFontSize;
+  const smallFont = typography.smallFontSize;
+  const cellH = 40;
+  const cellW = Math.max(40, ...doc.cells.map((c) => measureText(c.kind === "gap" ? "\u2026" : c.value, font).width + 24));
+  const titleH = doc.title ? typography.titleFontSize + 14 : 0;
+  const indexBand = doc.index.show ? smallFont + 12 : 0;
+  const arrowLen = 30;
+  const labelGap = 6;
+  const indexPad = 6;
+  const horizontal = doc.axis === "horizontal";
+  const meta = metadataFor(doc);
+  const resolvedPtrs = doc.ptrs.map((ptr) => {
+    const physical = resolvePointerPhysical(ptr.target, doc, meta);
+    return physical === void 0 ? null : { ptr, physical };
+  }).filter((ptr) => ptr !== null);
+  const labelFont = font;
+  const labelLaneGap = labelFont + 8;
+  const pointerSide = doc.index.side === "before" ? "after" : "before";
+  const horizontalLanes = horizontal ? assignHorizontalPointerLanes(resolvedPtrs, doc, meta, cellW, labelFont) : [];
+  const pointerLaneCount = Math.max(0, ...horizontalLanes.map((l) => l + 1));
+  const pointerBand = resolvedPtrs.length === 0 ? 0 : horizontal ? arrowLen + labelGap + labelFont + Math.max(0, pointerLaneCount - 1) * labelLaneGap + 4 : arrowLen + labelGap + maxPointerLabelWidth(resolvedPtrs, labelFont) + 8;
+  const topBand = horizontal ? (doc.index.show && doc.index.side === "before" ? indexBand : 0) + (pointerSide === "before" ? pointerBand : 0) : 0;
+  const leftBand = !horizontal ? (doc.index.show && doc.index.side === "before" ? smallFont * 2 + indexPad : 0) + (pointerSide === "before" ? pointerBand : 0) : 0;
+  const origin = {
+    x: leftBand,
+    y: titleH + topBand
+  };
+  const slots = buildSlots(doc.cells.length, origin, cellW, cellH, doc.axis);
+  const elements = [];
+  if (doc.title) {
+    elements.push(p.text(doc.title, origin.x, typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
+  }
+  doc.cells.forEach((cell, physical) => {
+    const slot = slots[physical];
+    if (cell.kind === "gap") {
+      elements.push(p.rect(slot, palette.surface, palette.border, 1.5, { rx: 3, opacity: 0.45 }));
+      elements.push(p.text("\u2026", slot.x + cellW / 2, slot.y + cellH / 2 + 5, font, palette.textMuted, { anchor: "middle", weight: "bold" }));
+      return;
+    }
+    const logicalMaybe = meta.physicalToLogical[physical];
+    const logical = logicalMaybe ?? null;
+    const isHighlit = logical !== null && ((doc.highlights?.includes(logical) ?? false) || doc.window !== void 0 && logical >= doc.window.start && logical <= doc.window.end);
+    if (isHighlit) {
+      elements.push(p.rect(slot, palette.primary, palette.primary, 2, { rx: 3, fillOpacity: 0.22 }));
+    } else {
+      elements.push(p.rect(slot, palette.surface, palette.border, 1.5, { rx: 3 }));
+    }
+    elements.push(p.text(cell.value, slot.x + cellW / 2, slot.y + cellH / 2 + 5, font, isHighlit ? palette.primary : palette.text, { anchor: "middle", weight: "bold" }));
+    if (doc.index.show && logical !== null) {
+      elements.push(renderIndexText(p, theme, String(logical), slot, cellW, cellH, doc.axis, doc.index.side, indexPad));
+    }
+  });
+  if (horizontal) {
+    renderHorizontalPointers(elements, p, theme, resolvedPtrs, slots, pointerSide, horizontalLanes, arrowLen, labelGap, labelLaneGap);
+  } else {
+    renderVerticalPointers(elements, p, theme, resolvedPtrs, slots, doc.index.side, arrowLen, labelGap);
+  }
+  const anchors = {};
+  meta.indexToPhysical.forEach((physical, logical) => {
+    anchors[`c${logical}`] = { bounds: slots[physical] };
+  });
+  if (meta.nonGapPhysicals.length > 0) {
+    anchors.cfirst = { bounds: slots[meta.nonGapPhysicals[0]] };
+    anchors.clast = { bounds: slots[meta.nonGapPhysicals[meta.nonGapPhysicals.length - 1]] };
+  }
+  if (meta.gapPhysical !== void 0) {
+    anchors.cgap = { bounds: slots[meta.gapPhysical] };
+  }
+  const contentBounds = boundsForElements(elements);
+  const dx = margin - contentBounds.x;
+  const dy = margin - contentBounds.y;
+  const shiftedElements = translateElements(elements, dx, dy);
+  const shiftedAnchors = translateAnchors(anchors, dx, dy);
+  const scene = {
+    viewBox: {
+      x: 0,
+      y: 0,
+      width: rhu(contentBounds.width + margin * 2),
+      height: rhu(contentBounds.height + margin * 2)
+    },
+    background: palette.background,
+    elements: shiftedElements,
+    defs: [arrowDef(palette.primary)]
+  };
+  return { scene, anchors: shiftedAnchors };
+}
+function normalizeArrayDoc(doc) {
+  const cells2 = (doc.cells ?? []).map(
+    (cell) => typeof cell === "string" ? cell === "..." ? { kind: "gap" } : { kind: "value", value: cell } : cell
+  );
+  const index = typeof doc.index === "boolean" ? { show: doc.index, side: "before", order: "normal" } : {
+    show: Boolean(doc.index?.show),
+    side: doc.index?.side === "after" ? "after" : "before",
+    order: doc.index?.order === "reverse" ? "reverse" : "normal"
+  };
+  return {
+    ...doc.title !== void 0 ? { title: doc.title } : {},
+    axis: doc.axis === "vertical" ? "vertical" : "horizontal",
+    index,
+    cells: cells2,
+    ptrs: (doc.ptrs ?? []).map((ptr) => {
+      if ("idx" in ptr) return { id: ptr.name ?? ptr.id, target: { raw: String(ptr.idx), value: Number(ptr.idx) } };
+      return ptr;
+    }),
+    ...Array.isArray(doc.highlights) && doc.highlights.length > 0 ? { highlights: doc.highlights } : {},
+    ...doc.window !== void 0 ? { window: doc.window } : {}
+  };
+}
+function buildSlots(count, origin, cellW, cellH, axis) {
+  return Array.from({ length: count }, (_, i) => ({
+    x: origin.x + (axis === "horizontal" ? i * cellW : 0),
+    y: origin.y + (axis === "horizontal" ? 0 : i * cellH),
+    width: cellW,
+    height: cellH
+  }));
+}
+function resolvePointerPhysical(target, doc, meta) {
+  if (target.value !== void 0) {
+    const physical = meta.indexToPhysical.get(target.value);
+    if (physical !== void 0) return physical;
+    if (doc.cells[target.value]?.kind === "gap") return meta.gapPhysical;
+    return void 0;
+  }
+  if (!target.anchor) return void 0;
+  if (target.anchor === "cfirst") return meta.nonGapPhysicals[0];
+  if (target.anchor === "clast") return meta.nonGapPhysicals[meta.nonGapPhysicals.length - 1];
+  if (target.anchor === "cgap") return meta.gapPhysical;
+  const cMatch = target.anchor.match(/^c(\d+)$/);
+  if (cMatch) return meta.indexToPhysical.get(Number(cMatch[1]));
+  return void 0;
+}
+function renderIndexText(p, theme, value, slot, cellW, cellH, axis, side, indexPad) {
+  const { palette, typography } = theme;
+  if (axis === "horizontal") {
+    const x2 = slot.x + cellW / 2;
+    const y = side === "before" ? slot.y - 6 : slot.y + cellH + typography.smallFontSize + 4;
+    return p.text(value, x2, y, typography.smallFontSize, palette.textMuted, { anchor: "middle" });
+  }
+  const centerY = slot.y + cellH / 2;
+  const x = side === "before" ? slot.x - indexPad : slot.x + cellW + indexPad;
+  const anchor = side === "before" ? "end" : "start";
+  return p.text(value, x, centerY + 4, typography.smallFontSize, palette.textMuted, { anchor });
+}
+function assignHorizontalPointerLanes(ptrs, doc, meta, cellW, font) {
+  const intervals = ptrs.map((ptr, ptrIndex) => {
+    const cx = slotCenterX(ptr.physical, cellW);
+    const text = pointerLabel(ptr.ptr);
+    const width = measureText(text, font).width + 8;
+    return { ptrIndex, start: cx - width / 2, end: cx + width / 2 };
+  });
+  void doc;
+  void meta;
+  return colorIntervals(intervals);
+}
+function colorIntervals(intervals) {
+  const lanes = new Array(intervals.length).fill(0);
+  const laneEnds = [];
+  const sorted = [...intervals].sort((a, b) => a.start - b.start || a.end - b.end);
+  for (const interval of sorted) {
+    let lane = 0;
+    while (laneEnds[lane] !== void 0 && interval.start < laneEnds[lane]) lane++;
+    lanes[interval.ptrIndex] = lane;
+    laneEnds[lane] = interval.end;
+  }
+  return lanes;
+}
+function slotCenterX(physical, cellW) {
+  return physical * cellW + cellW / 2;
+}
+function renderHorizontalPointers(elements, p, theme, ptrs, slots, side, lanes, arrowLen, labelGap, laneGap) {
+  const s = side === "after" ? 1 : -1;
+  const { palette, typography } = theme;
+  const targetCounts = countByPointerPhysical(ptrs);
+  const seen = /* @__PURE__ */ new Map();
+  ptrs.forEach((ptr, i) => {
+    const slot = slots[ptr.physical];
+    const count = targetCounts.get(ptr.physical) ?? 1;
+    const ordinal = seen.get(ptr.physical) ?? 0;
+    seen.set(ptr.physical, ordinal + 1);
+    const attachX = slot.x + slot.width / 2 + centeredLaneOffset(ordinal, count, slot.width);
+    const edgeY = s > 0 ? slot.y + slot.height : slot.y;
+    const lane = lanes[i] ?? 0;
+    const tipY = edgeY;
+    const tailY = edgeY + s * (arrowLen + lane * laneGap);
+    const labelY = tailY + s * (labelGap + (s > 0 ? typography.baseFontSize : 0));
+    elements.push(p.path(`M ${rhu(attachX)} ${rhu(tailY)} L ${rhu(attachX)} ${rhu(tipY)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
+    elements.push(p.text(pointerLabel(ptr.ptr), attachX, labelY, typography.baseFontSize, palette.primary, { anchor: "middle", weight: "bold" }));
+  });
+}
+function renderVerticalPointers(elements, p, theme, ptrs, slots, indexSide, arrowLen, labelGap) {
+  const s = indexSide === "before" ? 1 : -1;
+  const { palette, typography } = theme;
+  const columnGap = labelGap + 6;
+  const groups = /* @__PURE__ */ new Map();
+  for (const ptr of ptrs) {
+    const key = `${ptr.physical}:${s}`;
+    const widths = groups.get(key) ?? [];
+    widths.push(measureText(pointerLabel(ptr.ptr), typography.baseFontSize).width);
+    groups.set(key, widths);
+  }
+  const seen = /* @__PURE__ */ new Map();
+  ptrs.forEach((ptr) => {
+    const slot = slots[ptr.physical];
+    const key = `${ptr.physical}:${s}`;
+    const widths = groups.get(key) ?? [];
+    const lane = seen.get(key) ?? 0;
+    seen.set(key, lane + 1);
+    const attachY = slot.y + slot.height / 2 + centeredLaneOffset(lane, widths.length, slot.height);
+    const edgeX = s > 0 ? slot.x + slot.width : slot.x;
+    const outward = precedingLaneWidth(widths, lane, columnGap);
+    const tailX = edgeX + s * (arrowLen + outward);
+    const labelX = tailX + s * labelGap;
+    const anchor = s > 0 ? "start" : "end";
+    elements.push(p.path(`M ${rhu(tailX)} ${rhu(attachY)} L ${rhu(edgeX)} ${rhu(attachY)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
+    elements.push(p.text(pointerLabel(ptr.ptr), labelX, attachY + 4, typography.baseFontSize, palette.primary, { anchor, weight: "bold" }));
+  });
+}
+function maxPointerLabelWidth(ptrs, font) {
+  return Math.max(0, ...ptrs.map((ptr) => measureText(pointerLabel(ptr.ptr), font).width));
+}
+function countByPointerPhysical(ptrs) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const ptr of ptrs) counts.set(ptr.physical, (counts.get(ptr.physical) ?? 0) + 1);
+  return counts;
+}
+function centeredLaneOffset(lane, count, span) {
+  if (count <= 1) return 0;
+  const gap = Math.min(12, span / Math.max(2, count + 1));
+  return (lane - (count - 1) / 2) * gap;
+}
+function precedingLaneWidth(widths, lane, gap) {
+  let offset = 0;
+  for (let i = 0; i < lane; i++) offset += (widths[i] ?? 0) + gap;
+  return offset;
+}
+function boundsForElements(elements) {
+  const bounds = elements.map(boundsForElement).filter((b) => b !== void 0);
+  if (bounds.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  const minX = Math.min(...bounds.map((b) => b.x));
+  const minY = Math.min(...bounds.map((b) => b.y));
+  const maxX = Math.max(...bounds.map((b) => b.x + b.width));
+  const maxY = Math.max(...bounds.map((b) => b.y + b.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+function boundsForElement(element) {
+  switch (element.type) {
+    case "rect":
+      return element.bounds;
+    case "circle":
+      return {
+        x: element.center.x - element.radius,
+        y: element.center.y - element.radius,
+        width: element.radius * 2,
+        height: element.radius * 2
+      };
+    case "path":
+      return boundsForPath(element.d, element.strokeWidth);
+    case "text":
+      return boundsForText(element);
+    case "group":
+      return boundsForElements(element.children);
+  }
+}
+function boundsForText(text) {
+  const measured = measureText(text.content, text.fontSize);
+  const x = text.anchor === "middle" ? text.position.x - measured.width / 2 : text.anchor === "end" ? text.position.x - measured.width : text.position.x;
+  return {
+    x,
+    y: text.position.y - text.fontSize,
+    width: measured.width,
+    height: text.fontSize * 1.25
+  };
+}
+function boundsForPath(d, strokeWidth) {
+  const nums = [...d.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+  if (nums.length < 2) return { x: 0, y: 0, width: 0, height: 0 };
+  const xs = nums.filter((_, i) => i % 2 === 0);
+  const ys = nums.filter((_, i) => i % 2 === 1);
+  const pad = strokeWidth / 2;
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+  const maxX = Math.max(...xs) + pad;
+  const maxY = Math.max(...ys) + pad;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+function translateElements(elements, dx, dy) {
+  return elements.map((element) => translateElement(element, dx, dy));
+}
+function translateElement(element, dx, dy) {
+  switch (element.type) {
+    case "rect":
+      return { ...element, bounds: translateRect(element.bounds, dx, dy) };
+    case "circle":
+      return { ...element, center: { x: rhu(element.center.x + dx), y: rhu(element.center.y + dy) } };
+    case "path":
+      return { ...element, d: translatePathD(element.d, dx, dy) };
+    case "text":
+      return { ...element, position: { x: rhu(element.position.x + dx), y: rhu(element.position.y + dy) } };
+    case "group":
+      return { ...element, children: translateElements(element.children, dx, dy) };
+    case "icon":
+      return { ...element, x: rhu(element.x + dx), y: rhu(element.y + dy) };
+  }
+}
+function translateAnchors(anchors, dx, dy) {
+  return Object.fromEntries(
+    Object.entries(anchors).map(([key, anchor]) => [key, { bounds: translateRect(anchor.bounds, dx, dy) }])
+  );
+}
+function translateRect(rect, dx, dy) {
+  return { x: rhu(rect.x + dx), y: rhu(rect.y + dy), width: rect.width, height: rect.height };
+}
+function translatePathD(d, dx, dy) {
+  let i = 0;
+  return d.replace(/-?\d+(?:\.\d+)?/g, (value) => {
+    const delta = i++ % 2 === 0 ? dx : dy;
+    return String(rhu(Number(value) + delta));
+  });
+}
+function pointerLabel(ptr) {
+  return ptr.label ?? ptr.id;
+}
+var array = {
+  parseMermaid(input) {
+    return { version: "1.0", metadata: {}, ...parse(input) };
+  },
+  parseYaml(input) {
+    const parsed = JSON.parse(input);
+    return { version: parsed.version ?? "1.0", metadata: parsed.metadata ?? {}, ...normalizeArrayDoc(parsed) };
+  },
+  layout(ir, theme) {
+    return layoutArray(ir, theme);
+  }
+};
 function layoutPoster(ir, theme) {
   const { spacing, palette, typography } = theme;
   const { grid, cells: cells2 } = ir;
@@ -10594,6 +11733,7 @@ function layoutPoster(ir, theme) {
     const cellTheme = cell.theme ? getThemePreset(cell.theme) : theme;
     return { cell, cellTheme, result: layoutCellContent(cell.content, cellTheme) };
   });
+  const cellResultById = new Map(cellResults.map(({ cell, result }) => [cell.id ?? "", { cell, result }]));
   const numRows = grid.rows ?? Math.max(...positioned.map((c) => (c.row ?? 0) + (c.rowSpan ?? 1)));
   const colWidths = new Array(grid.columns).fill(MIN_CELL_W);
   for (const { cell, result } of cellResults) {
@@ -10615,7 +11755,8 @@ function layoutPoster(ir, theme) {
       const contentW = colW - inset * 2;
       const scale = Math.min(contentW / Math.max(result.scene.viewBox.width, 1), 1);
       const effectiveScale = Math.max(scale, MIN_EMBED_SCALE);
-      const neededH = result.scene.viewBox.height * effectiveScale + cellTitleH + inset * 2;
+      const captionH = cell.caption ? reservedCaptionHeight(cellTheme) : 0;
+      const neededH = result.scene.viewBox.height * effectiveScale + cellTitleH + captionH + inset * 2;
       rowHeights[row] = Math.max(rowHeights[row], neededH);
     }
   }
@@ -10664,8 +11805,23 @@ function layoutPoster(ir, theme) {
       textOccupied.push(t.occupied);
     }
     const inset = unit / 2;
-    const contentRect = { x: cellX + inset, y: cellY + reservedTop + inset, width: cellW - inset * 2, height: cellH - reservedTop - inset * 2 };
+    const captionH = cell.caption ? reservedCaptionHeight(cellTheme) : 0;
+    const contentRect = {
+      x: cellX + inset,
+      y: cellY + reservedTop + inset,
+      width: cellW - inset * 2,
+      height: cellH - reservedTop - captionH - inset * 2
+    };
     cellContent.push(embedScene(result.scene, contentRect));
+    if (cell.caption) {
+      const captionY = cellY + cellH - inset / 2;
+      cellContent.push({ type: "text", content: cell.caption, position: { x: cellX + cellW / 2, y: captionY }, fontSize: cellTheme.typography.smallFontSize, fontFamily: cellTheme.typography.fontFamily, fill: cellTheme.palette.textMuted, anchor: "middle" });
+    }
+    if (cell.notes && cell.notes.length > 0) {
+      for (const note of cell.notes) {
+        cellContent.push(...buildNoteOverlay(note, contentRect, cellTheme));
+      }
+    }
     const scaleX = contentRect.width / Math.max(result.scene.viewBox.width, 1);
     const scaleY = contentRect.height / Math.max(result.scene.viewBox.height, 1);
     const scale = Math.min(scaleX, scaleY, 1);
@@ -10694,6 +11850,14 @@ function layoutPoster(ir, theme) {
     for (const op of result.occupiedPorts ?? []) {
       allOccupiedPorts.push({ ...op, nodeKey: `${cellId}.${op.nodeKey}` });
     }
+    for (const cr of result.chromeRects ?? []) {
+      textOccupied.push({
+        x: cr.x * scale + offsetX,
+        y: cr.y * scale + offsetY,
+        width: cr.width * scale,
+        height: cr.height * scale
+      });
+    }
   }
   const totalW = padding * 2 + sumWithGaps(colWidths, 0, grid.columns, gap) - gap;
   const totalH = padding * 2 + headerH + sumWithGaps(rowHeights, 0, numRows, gap) - gap;
@@ -10709,31 +11873,25 @@ function layoutPoster(ir, theme) {
       }
     }
   }
-  const links2 = ir.links ?? [];
-  const traces2 = ir.traces ?? [];
+  const links2 = normalizeElementIndexLinks(ir.links ?? [], cellResultById);
   let finalW = totalW;
   let finalH = totalH;
   if (links2.length > 0) {
-    let linkDefs;
-    let linkElements;
-    if (USE_ENGINE_V3) {
-      const result = routeAndRenderCrossLinks3(links2, traces2, theme, mergedAnchors, allOccupiedPorts, textOccupied, cellBorders, cellRects);
-      linkDefs = result.defs;
-      linkElements = result.elements;
-    } else {
-      const { resolved, diagnostics } = resolveCrossLinks(links2, mergedAnchors, cellRects);
-      for (const diag of diagnostics) {
-        console.warn(`[poster:crosslink] Link ${diag.linkIndex}: ${diag.message}`);
-      }
-      if (resolved.length > 0) {
-        const result = renderCrossLinks(resolved, traces2, theme, mergedAnchors, textOccupied, cellBorders, cellRects);
-        linkDefs = result.defs;
-        linkElements = result.elements;
-      } else {
-        linkDefs = [];
-        linkElements = [];
-      }
-    }
+    const connectorSpecs = crossLinksToConnectorSpecs(links2.map((link) => {
+      const explicitCurve = link.curveStyle ?? (typeof link.props?.curveStyle === "string" ? link.props.curveStyle : void 0);
+      return explicitCurve ? link : { ...link, curveStyle: "cardinal" };
+    }));
+    const connectorResult = routeConnectors({
+      anchors: mergedAnchors,
+      connectors: connectorSpecs,
+      theme,
+      occupiedPorts: allOccupiedPorts,
+      occupiedTextRects: textOccupied,
+      routingObstacles: cellBorders,
+      containerObstacles: cellRects
+    });
+    const linkDefs = connectorResult.defs;
+    const linkElements = connectorResult.elements;
     for (const def of linkDefs) {
       if (!seenDefs.has(def)) {
         seenDefs.add(def);
@@ -10742,7 +11900,7 @@ function layoutPoster(ir, theme) {
     }
     const linkPaths = linkElements.filter((e) => e.type !== "text");
     const linkLabels = linkElements.filter((e) => e.type === "text");
-    const ext = crossLinkExtents(linkElements);
+    const ext = connectorResult.extents;
     if (ext.maxX > finalW) finalW = ext.maxX + padding;
     if (ext.maxY > finalH) finalH = ext.maxY + padding;
     const elements2 = [
@@ -10773,28 +11931,30 @@ function layoutPoster(ir, theme) {
     anchors: mergedAnchors
   };
 }
-function crossLinkExtents(elements) {
-  let maxX = 0;
-  let maxY = 0;
-  for (const el of elements) {
-    if (el.type === "path") {
-      const nums = [];
-      for (const m of el.d.matchAll(/[-\d.]+/g)) {
-        const n = parseFloat(m[0]);
-        if (!isNaN(n)) nums.push(n);
-      }
-      for (let i = 0; i + 1 < nums.length; i += 2) {
-        maxX = Math.max(maxX, nums[i]);
-        maxY = Math.max(maxY, nums[i + 1]);
-      }
-    } else if (el.type === "text") {
-      const approxW = el.content.length * (el.fontSize ?? 12) * 0.65;
-      const right = el.anchor === "middle" ? el.position.x + approxW / 2 : el.position.x + approxW;
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, el.position.y + (el.fontSize ?? 12));
-    }
+function normalizeElementIndexLinks(links2, cellResultById) {
+  return links2.map((link) => ({
+    ...link,
+    from: normalizeElementIndexAddress(link.from, cellResultById),
+    to: normalizeElementIndexAddress(link.to, cellResultById)
+  }));
+}
+function normalizeElementIndexAddress(address, cellResultById) {
+  if (address.elementIndex === void 0) return address;
+  const cellId = address.cellPath.join(".");
+  const cellResult = cellResultById.get(cellId);
+  const content = cellResult?.cell.content;
+  const arrayNodeId = content?.kind === "diagram" && content.diagramKind === "array" ? resolveArrayElementAnchorId(content.doc, address.elementIndex) : fallbackElementAnchorId(cellResult?.result.anchors ?? {}, address.elementIndex);
+  return {
+    ...address,
+    nodeId: arrayNodeId ?? `__missing_element_${address.elementIndex}`
+  };
+}
+function fallbackElementAnchorId(anchors, elementIndex) {
+  if (elementIndex < 0) {
+    if (elementIndex === -1 && anchors.clast) return "clast";
+    return void 0;
   }
-  return { maxX, maxY };
+  return anchors[`c${elementIndex}`] ? `c${elementIndex}` : void 0;
 }
 function layoutCellContent(content, theme) {
   const { palette, typography, spacing } = theme;
@@ -10879,6 +12039,47 @@ function titleBoxHeight(theme) {
   const fs = theme.typography.baseFontSize;
   const padY = theme.panel.titleChrome === "none" ? 0 : theme.spacing.unit * 0.4;
   return fs + padY * 2;
+}
+function reservedCaptionHeight(theme) {
+  return theme.typography.smallFontSize + theme.spacing.unit;
+}
+function buildNoteOverlay(note, rect, theme) {
+  const { palette, typography, spacing } = theme;
+  const fs = typography.smallFontSize;
+  const pad = spacing.unit * 0.5;
+  const textW = note.text.length * fs * 0.62 + pad * 2;
+  const boxH = fs + pad * 2;
+  const pos = note.position ?? "top-right";
+  let bx, by;
+  switch (pos) {
+    case "top-left":
+      bx = rect.x + spacing.unit * 0.5;
+      by = rect.y + spacing.unit * 0.5;
+      break;
+    case "top-right":
+      bx = rect.x + rect.width - textW - spacing.unit * 0.5;
+      by = rect.y + spacing.unit * 0.5;
+      break;
+    case "bottom-left":
+      bx = rect.x + spacing.unit * 0.5;
+      by = rect.y + rect.height - boxH - spacing.unit * 0.5;
+      break;
+    case "bottom-right":
+      bx = rect.x + rect.width - textW - spacing.unit * 0.5;
+      by = rect.y + rect.height - boxH - spacing.unit * 0.5;
+      break;
+    case "center":
+      bx = rect.x + (rect.width - textW) / 2;
+      by = rect.y + (rect.height - boxH) / 2;
+      break;
+    default:
+      bx = rect.x + rect.width - textW - spacing.unit * 0.5;
+      by = rect.y + spacing.unit * 0.5;
+  }
+  return [
+    { type: "rect", bounds: { x: bx, y: by, width: textW, height: boxH }, fill: palette.surface, stroke: palette.primary, strokeWidth: 1, rx: boxH / 2, fillOpacity: 0.88 },
+    { type: "text", content: note.text, position: { x: bx + textW / 2, y: by + pad + fs * 0.8 }, fontSize: fs, fontFamily: typography.fontFamily, fontWeight: "bold", fill: palette.primary, anchor: "middle" }
+  ];
 }
 function buildCellTitle(title, cellX, cellY, cellW, theme) {
   const { palette, typography, panel, spacing } = theme;
@@ -10975,7 +12176,6 @@ function cellAddressFromPosition(row, col) {
 }
 var cells = [];
 var links = [];
-var traces = [];
 var cellCounter = 0;
 function slugify3(text) {
   if (!text) return "";
@@ -10989,14 +12189,9 @@ function addCell(explicitId, title, kind, rawContent, span, theme) {
 function addLink(from, arrow, to, label, props) {
   links.push({ from, ...arrow, to, label: label || void 0, ...props ? props : {} });
 }
-function addTrace(name, type, hops, color) {
-  const id = slugify3(name) || `trace-${traces.length + 1}`;
-  traces.push({ id, name, type: type || void 0, hops, color: color || void 0 });
-}
 function reset3() {
   cells.length = 0;
   links.length = 0;
-  traces.length = 0;
   cellCounter = 0;
 }
 function peg$subclass3(child, parent) {
@@ -11147,42 +12342,54 @@ function peg$parse3(input, options) {
   var peg$c16 = "text";
   var peg$c17 = "link";
   var peg$c18 = "@";
-  var peg$c19 = "straight";
-  var peg$c20 = "orthogonal";
-  var peg$c21 = "bezier";
-  var peg$c22 = "polyline";
-  var peg$c23 = "{";
-  var peg$c24 = ",";
-  var peg$c25 = "}";
-  var peg$c26 = ":";
-  var peg$c27 = ".";
-  var peg$c28 = "trace";
-  var peg$c29 = "color";
-  var peg$c30 = "satisfies";
-  var peg$c31 = "triggers";
-  var peg$c32 = "calls";
-  var peg$c33 = "reads";
-  var peg$c34 = "writes";
-  var peg$c35 = "extends";
-  var peg$c36 = "custom";
-  var peg$c37 = "-->";
-  var peg$c38 = "<-->";
-  var peg$c39 = "<-.->";
-  var peg$c40 = "<..>";
-  var peg$c41 = "-.->";
-  var peg$c42 = "..>";
-  var peg$c43 = "-.-";
-  var peg$c44 = "...";
-  var peg$c45 = '"';
-  var peg$c46 = "%%";
-  var peg$c47 = "\r\n";
+  var peg$c19 = "anim:";
+  var peg$c20 = ":";
+  var peg$c21 = "march";
+  var peg$c22 = "particle";
+  var peg$c23 = "draw";
+  var peg$c24 = "pulse";
+  var peg$c25 = "glow";
+  var peg$c26 = "comet";
+  var peg$c27 = "stream";
+  var peg$c28 = "colorcycle";
+  var peg$c29 = "none";
+  var peg$c30 = "straight";
+  var peg$c31 = "orthogonal";
+  var peg$c32 = "bezier";
+  var peg$c33 = "polyline";
+  var peg$c34 = "{";
+  var peg$c35 = ",";
+  var peg$c36 = "}";
+  var peg$c37 = ".";
+  var peg$c38 = "<-~->";
+  var peg$c39 = "<-_->";
+  var peg$c40 = "<-.->";
+  var peg$c41 = "<==>";
+  var peg$c42 = "<-->";
+  var peg$c43 = "-~->";
+  var peg$c44 = "-_->";
+  var peg$c45 = "-..->";
+  var peg$c46 = "-.->";
+  var peg$c47 = "===>";
+  var peg$c48 = "==>";
+  var peg$c49 = "--->";
+  var peg$c50 = "-->";
+  var peg$c51 = "-~-";
+  var peg$c52 = "-_-";
+  var peg$c53 = "-.-";
+  var peg$c54 = "===";
+  var peg$c55 = '"';
+  var peg$c56 = "%%";
+  var peg$c57 = "\r\n";
   var peg$r0 = /^[^\n]/;
-  var peg$r1 = /^[0-9]/;
-  var peg$r2 = /^[a-zA-Z_]/;
-  var peg$r3 = /^[a-zA-Z0-9_\-]/;
-  var peg$r4 = /^[^"]/;
-  var peg$r5 = /^[ \t]/;
-  var peg$r6 = /^[\n\r]/;
+  var peg$r1 = /^[ENSW]/;
+  var peg$r2 = /^[0-9]/;
+  var peg$r3 = /^[a-zA-Z_]/;
+  var peg$r4 = /^[a-zA-Z0-9_\-]/;
+  var peg$r5 = /^[^"]/;
+  var peg$r6 = /^[+\-]/;
+  var peg$r7 = /^[ \t]/;
+  var peg$r8 = /^[\n\r]/;
   var peg$e0 = peg$literalExpectation("---", false);
   var peg$e1 = peg$classExpectation(["\n"], true, false);
   var peg$e2 = peg$literalExpectation("poster", false);
@@ -11203,42 +12410,54 @@ function peg$parse3(input, options) {
   var peg$e17 = peg$literalExpectation("text", false);
   var peg$e18 = peg$literalExpectation("link", false);
   var peg$e19 = peg$literalExpectation("@", false);
-  var peg$e20 = peg$literalExpectation("straight", false);
-  var peg$e21 = peg$literalExpectation("orthogonal", false);
-  var peg$e22 = peg$literalExpectation("bezier", false);
-  var peg$e23 = peg$literalExpectation("polyline", false);
-  var peg$e24 = peg$literalExpectation("{", false);
-  var peg$e25 = peg$literalExpectation(",", false);
-  var peg$e26 = peg$literalExpectation("}", false);
-  var peg$e27 = peg$literalExpectation(":", false);
-  var peg$e28 = peg$classExpectation([["0", "9"]], false, false);
-  var peg$e29 = peg$literalExpectation(".", false);
-  var peg$e30 = peg$literalExpectation("trace", false);
-  var peg$e31 = peg$literalExpectation("color", false);
-  var peg$e32 = peg$literalExpectation("satisfies", false);
-  var peg$e33 = peg$literalExpectation("triggers", false);
-  var peg$e34 = peg$literalExpectation("calls", false);
-  var peg$e35 = peg$literalExpectation("reads", false);
-  var peg$e36 = peg$literalExpectation("writes", false);
-  var peg$e37 = peg$literalExpectation("extends", false);
-  var peg$e38 = peg$literalExpectation("custom", false);
-  var peg$e39 = peg$literalExpectation("-->", false);
-  var peg$e40 = peg$literalExpectation("<-->", false);
-  var peg$e41 = peg$literalExpectation("<-.->", false);
-  var peg$e42 = peg$literalExpectation("<..>", false);
-  var peg$e43 = peg$literalExpectation("-.->", false);
-  var peg$e44 = peg$literalExpectation("..>", false);
-  var peg$e45 = peg$literalExpectation("-.-", false);
-  var peg$e46 = peg$literalExpectation("...", false);
-  var peg$e47 = peg$classExpectation([["a", "z"], ["A", "Z"], "_"], false, false);
-  var peg$e48 = peg$classExpectation([["a", "z"], ["A", "Z"], ["0", "9"], "_", "-"], false, false);
-  var peg$e49 = peg$anyExpectation();
-  var peg$e50 = peg$literalExpectation('"', false);
-  var peg$e51 = peg$classExpectation(['"'], true, false);
-  var peg$e52 = peg$literalExpectation("%%", false);
-  var peg$e53 = peg$classExpectation([" ", "	"], false, false);
-  var peg$e54 = peg$literalExpectation("\r\n", false);
-  var peg$e55 = peg$classExpectation(["\n", "\r"], false, false);
+  var peg$e20 = peg$literalExpectation("anim:", false);
+  var peg$e21 = peg$literalExpectation(":", false);
+  var peg$e22 = peg$literalExpectation("march", false);
+  var peg$e23 = peg$literalExpectation("particle", false);
+  var peg$e24 = peg$literalExpectation("draw", false);
+  var peg$e25 = peg$literalExpectation("pulse", false);
+  var peg$e26 = peg$literalExpectation("glow", false);
+  var peg$e27 = peg$literalExpectation("comet", false);
+  var peg$e28 = peg$literalExpectation("stream", false);
+  var peg$e29 = peg$literalExpectation("colorcycle", false);
+  var peg$e30 = peg$literalExpectation("none", false);
+  var peg$e31 = peg$literalExpectation("straight", false);
+  var peg$e32 = peg$literalExpectation("orthogonal", false);
+  var peg$e33 = peg$literalExpectation("bezier", false);
+  var peg$e34 = peg$literalExpectation("polyline", false);
+  var peg$e35 = peg$classExpectation(["E", "N", "S", "W"], false, false);
+  var peg$e36 = peg$literalExpectation("{", false);
+  var peg$e37 = peg$literalExpectation(",", false);
+  var peg$e38 = peg$literalExpectation("}", false);
+  var peg$e39 = peg$classExpectation([["0", "9"]], false, false);
+  var peg$e40 = peg$literalExpectation(".", false);
+  var peg$e41 = peg$literalExpectation("<-~->", false);
+  var peg$e42 = peg$literalExpectation("<-_->", false);
+  var peg$e43 = peg$literalExpectation("<-.->", false);
+  var peg$e44 = peg$literalExpectation("<==>", false);
+  var peg$e45 = peg$literalExpectation("<-->", false);
+  var peg$e46 = peg$literalExpectation("-~->", false);
+  var peg$e47 = peg$literalExpectation("-_->", false);
+  var peg$e48 = peg$literalExpectation("-..->", false);
+  var peg$e49 = peg$literalExpectation("-.->", false);
+  var peg$e50 = peg$literalExpectation("===>", false);
+  var peg$e51 = peg$literalExpectation("==>", false);
+  var peg$e52 = peg$literalExpectation("--->", false);
+  var peg$e53 = peg$literalExpectation("-->", false);
+  var peg$e54 = peg$literalExpectation("-~-", false);
+  var peg$e55 = peg$literalExpectation("-_-", false);
+  var peg$e56 = peg$literalExpectation("-.-", false);
+  var peg$e57 = peg$literalExpectation("===", false);
+  var peg$e58 = peg$classExpectation([["a", "z"], ["A", "Z"], "_"], false, false);
+  var peg$e59 = peg$classExpectation([["a", "z"], ["A", "Z"], ["0", "9"], "_", "-"], false, false);
+  var peg$e60 = peg$anyExpectation();
+  var peg$e61 = peg$literalExpectation('"', false);
+  var peg$e62 = peg$classExpectation(['"'], true, false);
+  var peg$e63 = peg$classExpectation(["+", "-"], false, false);
+  var peg$e64 = peg$literalExpectation("%%", false);
+  var peg$e65 = peg$classExpectation([" ", "	"], false, false);
+  var peg$e66 = peg$literalExpectation("\r\n", false);
+  var peg$e67 = peg$classExpectation(["\n", "\r"], false, false);
   var peg$f0 = function(frontmatter, header, directives, body) {
     const columns = (directives.find((d) => d.key === "columns") || {}).value || 2;
     return {
@@ -11246,8 +12465,7 @@ function peg$parse3(input, options) {
       metadata: { ...frontmatter || {}, title: header.title || void 0 },
       grid: { columns: parseInt(columns, 10) },
       cells,
-      ...links.length > 0 ? { links } : {},
-      ...traces.length > 0 ? { traces } : {}
+      ...links.length > 0 ? { links } : {}
     };
   };
   var peg$f1 = function(line) {
@@ -11270,34 +12488,36 @@ function peg$parse3(input, options) {
   var peg$f5 = function(items) {
     return items.filter(Boolean);
   };
-  var peg$f6 = function(ids, span, kind, t) {
+  var peg$f6 = function(ids, span, kind) {
+    return kind;
+  };
+  var peg$f7 = function(ids, span, explicitKind, t) {
     return t;
   };
-  var peg$f7 = function(ids, span, kind, theme, content) {
-    addCell(ids.id, ids.title, kind, content, span || void 0, theme || void 0);
+  var peg$f8 = function(ids, span, explicitKind, theme, content) {
+    addCell(ids.id, ids.title, explicitKind || null, content, span || void 0, theme || void 0);
     return { type: "cell" };
   };
-  var peg$f8 = function(id, title) {
+  var peg$f9 = function(id, title) {
     return { id, title };
   };
-  var peg$f9 = function(id) {
+  var peg$f10 = function(id) {
     return { id, title: null };
   };
-  var peg$f10 = function(title) {
+  var peg$f11 = function(title) {
     return { id: null, title };
   };
-  var peg$f11 = function() {
+  var peg$f12 = function() {
     return { id: null, title: null };
   };
-  var peg$f12 = function(cols, rows) {
+  var peg$f13 = function(cols, rows) {
     return { colSpan: cols, rowSpan: rows };
   };
-  var peg$f13 = function(cols) {
+  var peg$f14 = function(cols) {
     return { colSpan: cols, rowSpan: 1 };
   };
-  var peg$f14 = function(from, arrow, to, label, ann, block2) {
+  var peg$f15 = function(from, arrow, to, label, anns, block2) {
     const result = {};
-    if (ann) result.routing = ann[2];
     if (block2) {
       const b = block2[1];
       if (b.route) {
@@ -11308,24 +12528,59 @@ function peg$parse3(input, options) {
         result.animation = b.anim;
         delete b.anim;
       }
+      if (b.curveStyle) {
+        result.curveStyle = b.curveStyle;
+        delete b.curveStyle;
+      }
+      if (b.curve) {
+        result.curveStyle = b.curve;
+        delete b.curve;
+      }
       if (Object.keys(b).length > 0) result.props = b;
+    }
+    for (const ann of anns) {
+      Object.assign(result, ann[2]);
     }
     addLink(from, arrow, to, label ? label[1] : null, Object.keys(result).length > 0 ? result : null);
     return { type: "link" };
   };
-  var peg$f15 = function() {
+  var peg$f16 = function(value) {
+    return { animation: value };
+  };
+  var peg$f17 = function(route, walls) {
+    return { routing: route, ...walls ? walls[1] : {} };
+  };
+  var peg$f18 = function(walls) {
+    return walls;
+  };
+  var peg$f19 = function(route, walls) {
+    return { routing: route, ...walls ? walls[1] : {} };
+  };
+  var peg$f20 = function(walls) {
+    return walls;
+  };
+  var peg$f21 = function() {
     return "straight";
   };
-  var peg$f16 = function() {
+  var peg$f22 = function() {
     return "orthogonal";
   };
-  var peg$f17 = function() {
+  var peg$f23 = function() {
     return "bezier";
   };
-  var peg$f18 = function() {
+  var peg$f24 = function() {
     return "polyline";
   };
-  var peg$f19 = function(first, rest) {
+  var peg$f25 = function(exit, entry) {
+    return { exitWall: exit, entryWall: entry };
+  };
+  var peg$f26 = function(exit) {
+    return { exitWall: exit };
+  };
+  var peg$f27 = function(w) {
+    return w;
+  };
+  var peg$f28 = function(first, rest) {
     const result = {};
     result[first.key] = first.value;
     for (const r of rest) {
@@ -11333,62 +12588,88 @@ function peg$parse3(input, options) {
     }
     return result;
   };
-  var peg$f20 = function(key, value) {
+  var peg$f29 = function(key, value) {
     return { key, value };
   };
-  var peg$f21 = function(num) {
+  var peg$f30 = function(num) {
     return parseFloat(num);
   };
-  var peg$f22 = function(name, type, color, hops) {
-    addTrace(name, type ? type[3] : null, hops, color ? color[3] : null);
-    return { type: "trace" };
-  };
-  var peg$f23 = function(first, rest) {
-    return [first, ...rest.map((r) => r[3])];
-  };
-  var peg$f24 = function() {
-    return { direction: "bidirectional", style: "solid" };
-  };
-  var peg$f25 = function() {
-    return { direction: "bidirectional", style: "dashed" };
-  };
-  var peg$f26 = function() {
-    return { direction: "bidirectional", style: "dotted" };
-  };
-  var peg$f27 = function() {
-    return { direction: "directed", style: "solid" };
-  };
-  var peg$f28 = function() {
-    return { direction: "directed", style: "dashed" };
-  };
-  var peg$f29 = function() {
-    return { direction: "directed", style: "dotted" };
-  };
-  var peg$f30 = function() {
-    return { direction: "undirected", style: "solid" };
-  };
   var peg$f31 = function() {
-    return { direction: "undirected", style: "dashed" };
+    return { direction: "bidirectional", style: "wavy" };
   };
   var peg$f32 = function() {
-    return { direction: "undirected", style: "dotted" };
+    return { direction: "bidirectional", style: "dashed" };
   };
-  var peg$f33 = function(cell, node) {
-    return { cellPath: [cell], nodeId: node };
+  var peg$f33 = function() {
+    return { direction: "bidirectional", style: "dotted" };
   };
-  var peg$f34 = function(line) {
-    return line;
+  var peg$f34 = function() {
+    return { direction: "bidirectional", style: "thick" };
   };
-  var peg$f35 = function(lines2) {
-    return lines2.join("\n");
+  var peg$f35 = function() {
+    return { direction: "bidirectional", style: "solid" };
   };
-  var peg$f36 = function(text2) {
-    return text2;
+  var peg$f36 = function() {
+    return { direction: "directed", style: "wavy" };
   };
-  var peg$f37 = function(digits) {
-    return parseInt(digits, 10);
+  var peg$f37 = function() {
+    return { direction: "directed", style: "dashed" };
   };
   var peg$f38 = function() {
+    return { direction: "directed", style: "dotted" };
+  };
+  var peg$f39 = function() {
+    return { direction: "directed", style: "dotted" };
+  };
+  var peg$f40 = function() {
+    return { direction: "directed", style: "thick" };
+  };
+  var peg$f41 = function() {
+    return { direction: "directed", style: "thick" };
+  };
+  var peg$f42 = function() {
+    return { direction: "directed", style: "solid" };
+  };
+  var peg$f43 = function() {
+    return { direction: "directed", style: "solid" };
+  };
+  var peg$f44 = function() {
+    return { direction: "undirected", style: "wavy" };
+  };
+  var peg$f45 = function() {
+    return { direction: "undirected", style: "dashed" };
+  };
+  var peg$f46 = function() {
+    return { direction: "undirected", style: "dotted" };
+  };
+  var peg$f47 = function() {
+    return { direction: "undirected", style: "thick" };
+  };
+  var peg$f48 = function() {
+    return { direction: "undirected", style: "solid" };
+  };
+  var peg$f49 = function(cell, index) {
+    return { cellPath: [cell], nodeId: "", elementIndex: index };
+  };
+  var peg$f50 = function(cell, node) {
+    return { cellPath: [cell], nodeId: node };
+  };
+  var peg$f51 = function(line) {
+    return line;
+  };
+  var peg$f52 = function(lines2) {
+    return lines2.join("\n");
+  };
+  var peg$f53 = function(text2) {
+    return text2;
+  };
+  var peg$f54 = function(digits) {
+    return parseInt(digits, 10);
+  };
+  var peg$f55 = function(sign, digits) {
+    return parseInt((sign || "") + digits, 10);
+  };
+  var peg$f56 = function() {
     return null;
   };
   var peg$currPos = options.peg$currPos | 0;
@@ -11882,10 +13163,7 @@ function peg$parse3(input, options) {
     if (s2 === peg$FAILED) {
       s2 = peg$parseLinkDecl();
       if (s2 === peg$FAILED) {
-        s2 = peg$parseTraceDecl();
-        if (s2 === peg$FAILED) {
-          s2 = peg$parseBlankLine();
-        }
+        s2 = peg$parseBlankLine();
       }
     }
     while (s2 !== peg$FAILED) {
@@ -11894,10 +13172,7 @@ function peg$parse3(input, options) {
       if (s2 === peg$FAILED) {
         s2 = peg$parseLinkDecl();
         if (s2 === peg$FAILED) {
-          s2 = peg$parseTraceDecl();
-          if (s2 === peg$FAILED) {
-            s2 = peg$parseBlankLine();
-          }
+          s2 = peg$parseBlankLine();
         }
       }
     }
@@ -11907,7 +13182,7 @@ function peg$parse3(input, options) {
     return s0;
   }
   function peg$parseCellBlock() {
-    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16;
+    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
     s0 = peg$currPos;
     s1 = peg$parse_();
     if (input.substr(peg$currPos, 4) === peg$c5) {
@@ -11926,83 +13201,89 @@ function peg$parse3(input, options) {
         if (s4 === peg$FAILED) {
           s4 = null;
         }
-        s5 = peg$parse_();
+        s5 = peg$currPos;
+        s6 = peg$parse_();
         if (input.substr(peg$currPos, 2) === peg$c6) {
-          s6 = peg$c6;
+          s7 = peg$c6;
           peg$currPos += 2;
         } else {
-          s6 = peg$FAILED;
+          s7 = peg$FAILED;
           if (peg$silentFails === 0) {
             peg$fail(peg$e7);
           }
         }
-        if (s6 !== peg$FAILED) {
-          s7 = peg$parse_();
-          s8 = peg$parseCellKind();
-          if (s8 !== peg$FAILED) {
-            s9 = peg$currPos;
-            s10 = peg$parse_();
-            if (input.substr(peg$currPos, 6) === peg$c7) {
-              s11 = peg$c7;
-              peg$currPos += 6;
+        if (s7 !== peg$FAILED) {
+          s8 = peg$parse_();
+          s9 = peg$parseCellKind();
+          if (s9 !== peg$FAILED) {
+            peg$savedPos = s5;
+            s5 = peg$f6(s3, s4, s9);
+          } else {
+            peg$currPos = s5;
+            s5 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s5;
+          s5 = peg$FAILED;
+        }
+        if (s5 === peg$FAILED) {
+          s5 = null;
+        }
+        s6 = peg$currPos;
+        s7 = peg$parse_();
+        if (input.substr(peg$currPos, 6) === peg$c7) {
+          s8 = peg$c7;
+          peg$currPos += 6;
+        } else {
+          s8 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e8);
+          }
+        }
+        if (s8 !== peg$FAILED) {
+          s9 = peg$parse__();
+          if (s9 !== peg$FAILED) {
+            s10 = peg$parseIdentifier();
+            if (s10 !== peg$FAILED) {
+              peg$savedPos = s6;
+              s6 = peg$f7(s3, s4, s5, s10);
             } else {
-              s11 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e8);
-              }
+              peg$currPos = s6;
+              s6 = peg$FAILED;
             }
-            if (s11 !== peg$FAILED) {
-              s12 = peg$parse__();
-              if (s12 !== peg$FAILED) {
-                s13 = peg$parseIdentifier();
-                if (s13 !== peg$FAILED) {
-                  peg$savedPos = s9;
-                  s9 = peg$f6(s3, s4, s8, s13);
-                } else {
-                  peg$currPos = s9;
-                  s9 = peg$FAILED;
-                }
-              } else {
-                peg$currPos = s9;
-                s9 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s9;
-              s9 = peg$FAILED;
+          } else {
+            peg$currPos = s6;
+            s6 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s6;
+          s6 = peg$FAILED;
+        }
+        if (s6 === peg$FAILED) {
+          s6 = null;
+        }
+        s7 = peg$parse_();
+        s8 = peg$parseNL();
+        if (s8 !== peg$FAILED) {
+          s9 = peg$parseCellContent();
+          s10 = peg$parse_();
+          if (input.substr(peg$currPos, 3) === peg$c8) {
+            s11 = peg$c8;
+            peg$currPos += 3;
+          } else {
+            s11 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e9);
             }
-            if (s9 === peg$FAILED) {
-              s9 = null;
+          }
+          if (s11 !== peg$FAILED) {
+            s12 = peg$parse_();
+            s13 = peg$parseNL();
+            if (s13 === peg$FAILED) {
+              s13 = null;
             }
-            s10 = peg$parse_();
-            s11 = peg$parseNL();
-            if (s11 !== peg$FAILED) {
-              s12 = peg$parseCellContent();
-              s13 = peg$parse_();
-              if (input.substr(peg$currPos, 3) === peg$c8) {
-                s14 = peg$c8;
-                peg$currPos += 3;
-              } else {
-                s14 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e9);
-                }
-              }
-              if (s14 !== peg$FAILED) {
-                s15 = peg$parse_();
-                s16 = peg$parseNL();
-                if (s16 === peg$FAILED) {
-                  s16 = null;
-                }
-                peg$savedPos = s0;
-                s0 = peg$f7(s3, s4, s8, s9, s12);
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
+            peg$savedPos = s0;
+            s0 = peg$f8(s3, s4, s5, s6, s9);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -12022,7 +13303,7 @@ function peg$parse3(input, options) {
     return s0;
   }
   function peg$parseCellIdTitle() {
-    var s0, s1, s2, s3, s4, s5, s6, s7, s8;
+    var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
     s1 = peg$parse__();
     if (s1 !== peg$FAILED) {
@@ -12033,7 +13314,7 @@ function peg$parse3(input, options) {
           s4 = peg$parseQuotedString();
           if (s4 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f8(s2, s4);
+            s0 = peg$f9(s2, s4);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -12056,45 +13337,8 @@ function peg$parse3(input, options) {
       if (s1 !== peg$FAILED) {
         s2 = peg$parseIdentifier();
         if (s2 !== peg$FAILED) {
-          s3 = peg$currPos;
-          peg$silentFails++;
-          s4 = peg$currPos;
-          s5 = peg$parse_();
-          s6 = peg$parseCellSpan();
-          if (s6 === peg$FAILED) {
-            s6 = null;
-          }
-          s7 = peg$parse_();
-          if (input.substr(peg$currPos, 2) === peg$c6) {
-            s8 = peg$c6;
-            peg$currPos += 2;
-          } else {
-            s8 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e7);
-            }
-          }
-          if (s8 !== peg$FAILED) {
-            s5 = [s5, s6, s7, s8];
-            s4 = s5;
-          } else {
-            peg$currPos = s4;
-            s4 = peg$FAILED;
-          }
-          peg$silentFails--;
-          if (s4 !== peg$FAILED) {
-            peg$currPos = s3;
-            s3 = void 0;
-          } else {
-            s3 = peg$FAILED;
-          }
-          if (s3 !== peg$FAILED) {
-            peg$savedPos = s0;
-            s0 = peg$f9(s2);
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
+          peg$savedPos = s0;
+          s0 = peg$f10(s2);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -12110,7 +13354,7 @@ function peg$parse3(input, options) {
           s2 = peg$parseQuotedString();
           if (s2 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f10(s2);
+            s0 = peg$f11(s2);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -12121,42 +13365,9 @@ function peg$parse3(input, options) {
         }
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
-          s1 = peg$currPos;
-          peg$silentFails++;
-          s2 = peg$currPos;
-          s3 = peg$parse_();
-          s4 = peg$parseCellSpan();
-          if (s4 === peg$FAILED) {
-            s4 = null;
-          }
-          s5 = peg$parse_();
-          if (input.substr(peg$currPos, 2) === peg$c6) {
-            s6 = peg$c6;
-            peg$currPos += 2;
-          } else {
-            s6 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e7);
-            }
-          }
-          if (s6 !== peg$FAILED) {
-            s3 = [s3, s4, s5, s6];
-            s2 = s3;
-          } else {
-            peg$currPos = s2;
-            s2 = peg$FAILED;
-          }
-          peg$silentFails--;
-          if (s2 !== peg$FAILED) {
-            peg$currPos = s1;
-            s1 = void 0;
-          } else {
-            s1 = peg$FAILED;
-          }
-          if (s1 !== peg$FAILED) {
-            peg$savedPos = s0;
-            s1 = peg$f11();
-          }
+          s1 = "";
+          peg$savedPos = s0;
+          s1 = peg$f12();
           s0 = s1;
         }
       }
@@ -12206,7 +13417,7 @@ function peg$parse3(input, options) {
             }
             if (s10 !== peg$FAILED) {
               peg$savedPos = s0;
-              s0 = peg$f12(s4, s8);
+              s0 = peg$f13(s4, s8);
             } else {
               peg$currPos = s0;
               s0 = peg$FAILED;
@@ -12255,7 +13466,7 @@ function peg$parse3(input, options) {
           }
           if (s6 !== peg$FAILED) {
             peg$savedPos = s0;
-            s0 = peg$f13(s4);
+            s0 = peg$f14(s4);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -12332,7 +13543,7 @@ function peg$parse3(input, options) {
     return s0;
   }
   function peg$parseLinkDecl() {
-    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13;
+    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14;
     s0 = peg$currPos;
     s1 = peg$parse_();
     if (input.substr(peg$currPos, 4) === peg$c17) {
@@ -12370,32 +13581,57 @@ function peg$parse3(input, options) {
                   if (s9 === peg$FAILED) {
                     s9 = null;
                   }
-                  s10 = peg$currPos;
-                  s11 = peg$parse_();
+                  s10 = [];
+                  s11 = peg$currPos;
+                  s12 = peg$parse_();
                   if (input.charCodeAt(peg$currPos) === 64) {
-                    s12 = peg$c18;
+                    s13 = peg$c18;
                     peg$currPos++;
                   } else {
-                    s12 = peg$FAILED;
+                    s13 = peg$FAILED;
                     if (peg$silentFails === 0) {
                       peg$fail(peg$e19);
                     }
                   }
-                  if (s12 !== peg$FAILED) {
-                    s13 = peg$parseRouteAnnotation();
-                    if (s13 !== peg$FAILED) {
-                      s11 = [s11, s12, s13];
-                      s10 = s11;
+                  if (s13 !== peg$FAILED) {
+                    s14 = peg$parseAnnotation();
+                    if (s14 !== peg$FAILED) {
+                      s12 = [s12, s13, s14];
+                      s11 = s12;
                     } else {
-                      peg$currPos = s10;
-                      s10 = peg$FAILED;
+                      peg$currPos = s11;
+                      s11 = peg$FAILED;
                     }
                   } else {
-                    peg$currPos = s10;
-                    s10 = peg$FAILED;
+                    peg$currPos = s11;
+                    s11 = peg$FAILED;
                   }
-                  if (s10 === peg$FAILED) {
-                    s10 = null;
+                  while (s11 !== peg$FAILED) {
+                    s10.push(s11);
+                    s11 = peg$currPos;
+                    s12 = peg$parse_();
+                    if (input.charCodeAt(peg$currPos) === 64) {
+                      s13 = peg$c18;
+                      peg$currPos++;
+                    } else {
+                      s13 = peg$FAILED;
+                      if (peg$silentFails === 0) {
+                        peg$fail(peg$e19);
+                      }
+                    }
+                    if (s13 !== peg$FAILED) {
+                      s14 = peg$parseAnnotation();
+                      if (s14 !== peg$FAILED) {
+                        s12 = [s12, s13, s14];
+                        s11 = s12;
+                      } else {
+                        peg$currPos = s11;
+                        s11 = peg$FAILED;
+                      }
+                    } else {
+                      peg$currPos = s11;
+                      s11 = peg$FAILED;
+                    }
                   }
                   s11 = peg$currPos;
                   s12 = peg$parse_();
@@ -12414,7 +13650,7 @@ function peg$parse3(input, options) {
                   s13 = peg$parseNL();
                   if (s13 !== peg$FAILED) {
                     peg$savedPos = s0;
-                    s0 = peg$f14(s4, s6, s8, s9, s10, s11);
+                    s0 = peg$f15(s4, s6, s8, s9, s10, s11);
                   } else {
                     peg$currPos = s0;
                     s0 = peg$FAILED;
@@ -12449,12 +13685,12 @@ function peg$parse3(input, options) {
     }
     return s0;
   }
-  function peg$parseRouteAnnotation() {
-    var s0, s1;
+  function peg$parseAnnotation() {
+    var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 8) === peg$c19) {
+    if (input.substr(peg$currPos, 5) === peg$c19) {
       s1 = peg$c19;
-      peg$currPos += 8;
+      peg$currPos += 5;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
@@ -12462,56 +13698,289 @@ function peg$parse3(input, options) {
       }
     }
     if (s1 !== peg$FAILED) {
-      peg$savedPos = s0;
-      s1 = peg$f15();
+      s2 = peg$parseAnimValue();
+      if (s2 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s0 = peg$f16(s2);
+      } else {
+        peg$currPos = s0;
+        s0 = peg$FAILED;
+      }
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
     }
-    s0 = s1;
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
-      if (input.substr(peg$currPos, 10) === peg$c20) {
-        s1 = peg$c20;
-        peg$currPos += 10;
+      s1 = peg$parseRouteWord();
+      if (s1 !== peg$FAILED) {
+        s2 = peg$currPos;
+        if (input.charCodeAt(peg$currPos) === 58) {
+          s3 = peg$c20;
+          peg$currPos++;
+        } else {
+          s3 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e21);
+          }
+        }
+        if (s3 !== peg$FAILED) {
+          s4 = peg$parseWallPair();
+          if (s4 !== peg$FAILED) {
+            s3 = [s3, s4];
+            s2 = s3;
+          } else {
+            peg$currPos = s2;
+            s2 = peg$FAILED;
+          }
+        } else {
+          peg$currPos = s2;
+          s2 = peg$FAILED;
+        }
+        if (s2 === peg$FAILED) {
+          s2 = null;
+        }
+        peg$savedPos = s0;
+        s0 = peg$f17(s1, s2);
       } else {
-        s1 = peg$FAILED;
+        peg$currPos = s0;
+        s0 = peg$FAILED;
+      }
+      if (s0 === peg$FAILED) {
+        s0 = peg$currPos;
+        s1 = peg$parseWallPair();
+        if (s1 !== peg$FAILED) {
+          peg$savedPos = s0;
+          s1 = peg$f18(s1);
+        }
+        s0 = s1;
+      }
+    }
+    return s0;
+  }
+  function peg$parseAnimValue() {
+    var s0;
+    if (input.substr(peg$currPos, 5) === peg$c21) {
+      s0 = peg$c21;
+      peg$currPos += 5;
+    } else {
+      s0 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e22);
+      }
+    }
+    if (s0 === peg$FAILED) {
+      if (input.substr(peg$currPos, 8) === peg$c22) {
+        s0 = peg$c22;
+        peg$currPos += 8;
+      } else {
+        s0 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e23);
+        }
+      }
+      if (s0 === peg$FAILED) {
+        if (input.substr(peg$currPos, 4) === peg$c23) {
+          s0 = peg$c23;
+          peg$currPos += 4;
+        } else {
+          s0 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e24);
+          }
+        }
+        if (s0 === peg$FAILED) {
+          if (input.substr(peg$currPos, 5) === peg$c24) {
+            s0 = peg$c24;
+            peg$currPos += 5;
+          } else {
+            s0 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e25);
+            }
+          }
+          if (s0 === peg$FAILED) {
+            if (input.substr(peg$currPos, 4) === peg$c25) {
+              s0 = peg$c25;
+              peg$currPos += 4;
+            } else {
+              s0 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e26);
+              }
+            }
+            if (s0 === peg$FAILED) {
+              if (input.substr(peg$currPos, 5) === peg$c26) {
+                s0 = peg$c26;
+                peg$currPos += 5;
+              } else {
+                s0 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e27);
+                }
+              }
+              if (s0 === peg$FAILED) {
+                if (input.substr(peg$currPos, 6) === peg$c27) {
+                  s0 = peg$c27;
+                  peg$currPos += 6;
+                } else {
+                  s0 = peg$FAILED;
+                  if (peg$silentFails === 0) {
+                    peg$fail(peg$e28);
+                  }
+                }
+                if (s0 === peg$FAILED) {
+                  if (input.substr(peg$currPos, 4) === peg$c13) {
+                    s0 = peg$c13;
+                    peg$currPos += 4;
+                  } else {
+                    s0 = peg$FAILED;
+                    if (peg$silentFails === 0) {
+                      peg$fail(peg$e14);
+                    }
+                  }
+                  if (s0 === peg$FAILED) {
+                    if (input.substr(peg$currPos, 10) === peg$c28) {
+                      s0 = peg$c28;
+                      peg$currPos += 10;
+                    } else {
+                      s0 = peg$FAILED;
+                      if (peg$silentFails === 0) {
+                        peg$fail(peg$e29);
+                      }
+                    }
+                    if (s0 === peg$FAILED) {
+                      if (input.substr(peg$currPos, 4) === peg$c29) {
+                        s0 = peg$c29;
+                        peg$currPos += 4;
+                      } else {
+                        s0 = peg$FAILED;
+                        if (peg$silentFails === 0) {
+                          peg$fail(peg$e30);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return s0;
+  }
+  function peg$parseRouteAnnotation() {
+    var s0, s1, s2, s3, s4;
+    s0 = peg$currPos;
+    s1 = peg$parseRouteWord();
+    if (s1 !== peg$FAILED) {
+      s2 = peg$currPos;
+      if (input.charCodeAt(peg$currPos) === 58) {
+        s3 = peg$c20;
+        peg$currPos++;
+      } else {
+        s3 = peg$FAILED;
         if (peg$silentFails === 0) {
           peg$fail(peg$e21);
         }
       }
+      if (s3 !== peg$FAILED) {
+        s4 = peg$parseWallPair();
+        if (s4 !== peg$FAILED) {
+          s3 = [s3, s4];
+          s2 = s3;
+        } else {
+          peg$currPos = s2;
+          s2 = peg$FAILED;
+        }
+      } else {
+        peg$currPos = s2;
+        s2 = peg$FAILED;
+      }
+      if (s2 === peg$FAILED) {
+        s2 = null;
+      }
+      peg$savedPos = s0;
+      s0 = peg$f19(s1, s2);
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      s1 = peg$parseWallPair();
       if (s1 !== peg$FAILED) {
         peg$savedPos = s0;
-        s1 = peg$f16();
+        s1 = peg$f20(s1);
+      }
+      s0 = s1;
+    }
+    return s0;
+  }
+  function peg$parseRouteWord() {
+    var s0, s1;
+    s0 = peg$currPos;
+    if (input.substr(peg$currPos, 8) === peg$c30) {
+      s1 = peg$c30;
+      peg$currPos += 8;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e31);
+      }
+    }
+    if (s1 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s1 = peg$f21();
+    }
+    s0 = s1;
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      if (input.substr(peg$currPos, 10) === peg$c31) {
+        s1 = peg$c31;
+        peg$currPos += 10;
+      } else {
+        s1 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e32);
+        }
+      }
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f22();
       }
       s0 = s1;
       if (s0 === peg$FAILED) {
         s0 = peg$currPos;
-        if (input.substr(peg$currPos, 6) === peg$c21) {
-          s1 = peg$c21;
+        if (input.substr(peg$currPos, 6) === peg$c32) {
+          s1 = peg$c32;
           peg$currPos += 6;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e22);
+            peg$fail(peg$e33);
           }
         }
         if (s1 !== peg$FAILED) {
           peg$savedPos = s0;
-          s1 = peg$f17();
+          s1 = peg$f23();
         }
         s0 = s1;
         if (s0 === peg$FAILED) {
           s0 = peg$currPos;
-          if (input.substr(peg$currPos, 8) === peg$c22) {
-            s1 = peg$c22;
+          if (input.substr(peg$currPos, 8) === peg$c33) {
+            s1 = peg$c33;
             peg$currPos += 8;
           } else {
             s1 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e23);
+              peg$fail(peg$e34);
             }
           }
           if (s1 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f18();
+            s1 = peg$f24();
           }
           s0 = s1;
         }
@@ -12519,16 +13988,63 @@ function peg$parse3(input, options) {
     }
     return s0;
   }
-  function peg$parsePropBlock() {
-    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+  function peg$parseWallPair() {
+    var s0, s1, s2;
     s0 = peg$currPos;
-    if (input.charCodeAt(peg$currPos) === 123) {
-      s1 = peg$c23;
+    s1 = peg$parseWall();
+    if (s1 !== peg$FAILED) {
+      s2 = peg$parseWall();
+      if (s2 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s0 = peg$f25(s1, s2);
+      } else {
+        peg$currPos = s0;
+        s0 = peg$FAILED;
+      }
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      s1 = peg$parseWall();
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f26(s1);
+      }
+      s0 = s1;
+    }
+    return s0;
+  }
+  function peg$parseWall() {
+    var s0, s1;
+    s0 = peg$currPos;
+    s1 = input.charAt(peg$currPos);
+    if (peg$r1.test(s1)) {
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e24);
+        peg$fail(peg$e35);
+      }
+    }
+    if (s1 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s1 = peg$f27(s1);
+    }
+    s0 = s1;
+    return s0;
+  }
+  function peg$parsePropBlock() {
+    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9;
+    s0 = peg$currPos;
+    if (input.charCodeAt(peg$currPos) === 123) {
+      s1 = peg$c34;
+      peg$currPos++;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e36);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -12539,12 +14055,12 @@ function peg$parse3(input, options) {
         s5 = peg$currPos;
         s6 = peg$parse_();
         if (input.charCodeAt(peg$currPos) === 44) {
-          s7 = peg$c24;
+          s7 = peg$c35;
           peg$currPos++;
         } else {
           s7 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e25);
+            peg$fail(peg$e37);
           }
         }
         if (s7 !== peg$FAILED) {
@@ -12566,12 +14082,12 @@ function peg$parse3(input, options) {
           s5 = peg$currPos;
           s6 = peg$parse_();
           if (input.charCodeAt(peg$currPos) === 44) {
-            s7 = peg$c24;
+            s7 = peg$c35;
             peg$currPos++;
           } else {
             s7 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e25);
+              peg$fail(peg$e37);
             }
           }
           if (s7 !== peg$FAILED) {
@@ -12591,17 +14107,17 @@ function peg$parse3(input, options) {
         }
         s5 = peg$parse_();
         if (input.charCodeAt(peg$currPos) === 125) {
-          s6 = peg$c25;
+          s6 = peg$c36;
           peg$currPos++;
         } else {
           s6 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e26);
+            peg$fail(peg$e38);
           }
         }
         if (s6 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f19(s3, s4);
+          s0 = peg$f28(s3, s4);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -12623,12 +14139,12 @@ function peg$parse3(input, options) {
     if (s1 !== peg$FAILED) {
       s2 = peg$parse_();
       if (input.charCodeAt(peg$currPos) === 58) {
-        s3 = peg$c26;
+        s3 = peg$c20;
         peg$currPos++;
       } else {
         s3 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e27);
+          peg$fail(peg$e21);
         }
       }
       if (s3 !== peg$FAILED) {
@@ -12636,7 +14152,7 @@ function peg$parse3(input, options) {
         s5 = peg$parsePropValue();
         if (s5 !== peg$FAILED) {
           peg$savedPos = s0;
-          s0 = peg$f20(s1, s5);
+          s0 = peg$f29(s1, s5);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -12658,24 +14174,24 @@ function peg$parse3(input, options) {
     s2 = peg$currPos;
     s3 = [];
     s4 = input.charAt(peg$currPos);
-    if (peg$r1.test(s4)) {
+    if (peg$r2.test(s4)) {
       peg$currPos++;
     } else {
       s4 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e28);
+        peg$fail(peg$e39);
       }
     }
     if (s4 !== peg$FAILED) {
       while (s4 !== peg$FAILED) {
         s3.push(s4);
         s4 = input.charAt(peg$currPos);
-        if (peg$r1.test(s4)) {
+        if (peg$r2.test(s4)) {
           peg$currPos++;
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e28);
+            peg$fail(peg$e39);
           }
         }
       }
@@ -12685,35 +14201,35 @@ function peg$parse3(input, options) {
     if (s3 !== peg$FAILED) {
       s4 = peg$currPos;
       if (input.charCodeAt(peg$currPos) === 46) {
-        s5 = peg$c27;
+        s5 = peg$c37;
         peg$currPos++;
       } else {
         s5 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e29);
+          peg$fail(peg$e40);
         }
       }
       if (s5 !== peg$FAILED) {
         s6 = [];
         s7 = input.charAt(peg$currPos);
-        if (peg$r1.test(s7)) {
+        if (peg$r2.test(s7)) {
           peg$currPos++;
         } else {
           s7 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e28);
+            peg$fail(peg$e39);
           }
         }
         if (s7 !== peg$FAILED) {
           while (s7 !== peg$FAILED) {
             s6.push(s7);
             s7 = input.charAt(peg$currPos);
-            if (peg$r1.test(s7)) {
+            if (peg$r2.test(s7)) {
               peg$currPos++;
             } else {
               s7 = peg$FAILED;
               if (peg$silentFails === 0) {
-                peg$fail(peg$e28);
+                peg$fail(peg$e39);
               }
             }
           }
@@ -12747,7 +14263,7 @@ function peg$parse3(input, options) {
     }
     if (s1 !== peg$FAILED) {
       peg$savedPos = s0;
-      s1 = peg$f21(s1);
+      s1 = peg$f30(s1);
     }
     s0 = s1;
     if (s0 === peg$FAILED) {
@@ -12758,97 +14274,343 @@ function peg$parse3(input, options) {
     }
     return s0;
   }
-  function peg$parseTraceDecl() {
-    var s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+  function peg$parseArrow() {
+    var s0, s1;
     s0 = peg$currPos;
-    s1 = peg$parse_();
-    if (input.substr(peg$currPos, 5) === peg$c28) {
-      s2 = peg$c28;
+    if (input.substr(peg$currPos, 5) === peg$c38) {
+      s1 = peg$c38;
       peg$currPos += 5;
     } else {
-      s2 = peg$FAILED;
+      s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e30);
+        peg$fail(peg$e41);
       }
     }
-    if (s2 !== peg$FAILED) {
-      s3 = peg$parse__();
-      if (s3 !== peg$FAILED) {
-        s4 = peg$parseQuotedString();
-        if (s4 !== peg$FAILED) {
-          s5 = peg$currPos;
-          s6 = peg$parse_();
-          if (input.charCodeAt(peg$currPos) === 58) {
-            s7 = peg$c26;
+    if (s1 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s1 = peg$f31();
+    }
+    s0 = s1;
+    if (s0 === peg$FAILED) {
+      s0 = peg$currPos;
+      if (input.substr(peg$currPos, 5) === peg$c39) {
+        s1 = peg$c39;
+        peg$currPos += 5;
+      } else {
+        s1 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e42);
+        }
+      }
+      if (s1 !== peg$FAILED) {
+        peg$savedPos = s0;
+        s1 = peg$f32();
+      }
+      s0 = s1;
+      if (s0 === peg$FAILED) {
+        s0 = peg$currPos;
+        if (input.substr(peg$currPos, 5) === peg$c40) {
+          s1 = peg$c40;
+          peg$currPos += 5;
+        } else {
+          s1 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e43);
+          }
+        }
+        if (s1 !== peg$FAILED) {
+          peg$savedPos = s0;
+          s1 = peg$f33();
+        }
+        s0 = s1;
+        if (s0 === peg$FAILED) {
+          s0 = peg$currPos;
+          if (input.substr(peg$currPos, 4) === peg$c41) {
+            s1 = peg$c41;
+            peg$currPos += 4;
+          } else {
+            s1 = peg$FAILED;
+            if (peg$silentFails === 0) {
+              peg$fail(peg$e44);
+            }
+          }
+          if (s1 !== peg$FAILED) {
+            peg$savedPos = s0;
+            s1 = peg$f34();
+          }
+          s0 = s1;
+          if (s0 === peg$FAILED) {
+            s0 = peg$currPos;
+            if (input.substr(peg$currPos, 4) === peg$c42) {
+              s1 = peg$c42;
+              peg$currPos += 4;
+            } else {
+              s1 = peg$FAILED;
+              if (peg$silentFails === 0) {
+                peg$fail(peg$e45);
+              }
+            }
+            if (s1 !== peg$FAILED) {
+              peg$savedPos = s0;
+              s1 = peg$f35();
+            }
+            s0 = s1;
+            if (s0 === peg$FAILED) {
+              s0 = peg$currPos;
+              if (input.substr(peg$currPos, 4) === peg$c43) {
+                s1 = peg$c43;
+                peg$currPos += 4;
+              } else {
+                s1 = peg$FAILED;
+                if (peg$silentFails === 0) {
+                  peg$fail(peg$e46);
+                }
+              }
+              if (s1 !== peg$FAILED) {
+                peg$savedPos = s0;
+                s1 = peg$f36();
+              }
+              s0 = s1;
+              if (s0 === peg$FAILED) {
+                s0 = peg$currPos;
+                if (input.substr(peg$currPos, 4) === peg$c44) {
+                  s1 = peg$c44;
+                  peg$currPos += 4;
+                } else {
+                  s1 = peg$FAILED;
+                  if (peg$silentFails === 0) {
+                    peg$fail(peg$e47);
+                  }
+                }
+                if (s1 !== peg$FAILED) {
+                  peg$savedPos = s0;
+                  s1 = peg$f37();
+                }
+                s0 = s1;
+                if (s0 === peg$FAILED) {
+                  s0 = peg$currPos;
+                  if (input.substr(peg$currPos, 5) === peg$c45) {
+                    s1 = peg$c45;
+                    peg$currPos += 5;
+                  } else {
+                    s1 = peg$FAILED;
+                    if (peg$silentFails === 0) {
+                      peg$fail(peg$e48);
+                    }
+                  }
+                  if (s1 !== peg$FAILED) {
+                    peg$savedPos = s0;
+                    s1 = peg$f38();
+                  }
+                  s0 = s1;
+                  if (s0 === peg$FAILED) {
+                    s0 = peg$currPos;
+                    if (input.substr(peg$currPos, 4) === peg$c46) {
+                      s1 = peg$c46;
+                      peg$currPos += 4;
+                    } else {
+                      s1 = peg$FAILED;
+                      if (peg$silentFails === 0) {
+                        peg$fail(peg$e49);
+                      }
+                    }
+                    if (s1 !== peg$FAILED) {
+                      peg$savedPos = s0;
+                      s1 = peg$f39();
+                    }
+                    s0 = s1;
+                    if (s0 === peg$FAILED) {
+                      s0 = peg$currPos;
+                      if (input.substr(peg$currPos, 4) === peg$c47) {
+                        s1 = peg$c47;
+                        peg$currPos += 4;
+                      } else {
+                        s1 = peg$FAILED;
+                        if (peg$silentFails === 0) {
+                          peg$fail(peg$e50);
+                        }
+                      }
+                      if (s1 !== peg$FAILED) {
+                        peg$savedPos = s0;
+                        s1 = peg$f40();
+                      }
+                      s0 = s1;
+                      if (s0 === peg$FAILED) {
+                        s0 = peg$currPos;
+                        if (input.substr(peg$currPos, 3) === peg$c48) {
+                          s1 = peg$c48;
+                          peg$currPos += 3;
+                        } else {
+                          s1 = peg$FAILED;
+                          if (peg$silentFails === 0) {
+                            peg$fail(peg$e51);
+                          }
+                        }
+                        if (s1 !== peg$FAILED) {
+                          peg$savedPos = s0;
+                          s1 = peg$f41();
+                        }
+                        s0 = s1;
+                        if (s0 === peg$FAILED) {
+                          s0 = peg$currPos;
+                          if (input.substr(peg$currPos, 4) === peg$c49) {
+                            s1 = peg$c49;
+                            peg$currPos += 4;
+                          } else {
+                            s1 = peg$FAILED;
+                            if (peg$silentFails === 0) {
+                              peg$fail(peg$e52);
+                            }
+                          }
+                          if (s1 !== peg$FAILED) {
+                            peg$savedPos = s0;
+                            s1 = peg$f42();
+                          }
+                          s0 = s1;
+                          if (s0 === peg$FAILED) {
+                            s0 = peg$currPos;
+                            if (input.substr(peg$currPos, 3) === peg$c50) {
+                              s1 = peg$c50;
+                              peg$currPos += 3;
+                            } else {
+                              s1 = peg$FAILED;
+                              if (peg$silentFails === 0) {
+                                peg$fail(peg$e53);
+                              }
+                            }
+                            if (s1 !== peg$FAILED) {
+                              peg$savedPos = s0;
+                              s1 = peg$f43();
+                            }
+                            s0 = s1;
+                            if (s0 === peg$FAILED) {
+                              s0 = peg$currPos;
+                              if (input.substr(peg$currPos, 3) === peg$c51) {
+                                s1 = peg$c51;
+                                peg$currPos += 3;
+                              } else {
+                                s1 = peg$FAILED;
+                                if (peg$silentFails === 0) {
+                                  peg$fail(peg$e54);
+                                }
+                              }
+                              if (s1 !== peg$FAILED) {
+                                peg$savedPos = s0;
+                                s1 = peg$f44();
+                              }
+                              s0 = s1;
+                              if (s0 === peg$FAILED) {
+                                s0 = peg$currPos;
+                                if (input.substr(peg$currPos, 3) === peg$c52) {
+                                  s1 = peg$c52;
+                                  peg$currPos += 3;
+                                } else {
+                                  s1 = peg$FAILED;
+                                  if (peg$silentFails === 0) {
+                                    peg$fail(peg$e55);
+                                  }
+                                }
+                                if (s1 !== peg$FAILED) {
+                                  peg$savedPos = s0;
+                                  s1 = peg$f45();
+                                }
+                                s0 = s1;
+                                if (s0 === peg$FAILED) {
+                                  s0 = peg$currPos;
+                                  if (input.substr(peg$currPos, 3) === peg$c53) {
+                                    s1 = peg$c53;
+                                    peg$currPos += 3;
+                                  } else {
+                                    s1 = peg$FAILED;
+                                    if (peg$silentFails === 0) {
+                                      peg$fail(peg$e56);
+                                    }
+                                  }
+                                  if (s1 !== peg$FAILED) {
+                                    peg$savedPos = s0;
+                                    s1 = peg$f46();
+                                  }
+                                  s0 = s1;
+                                  if (s0 === peg$FAILED) {
+                                    s0 = peg$currPos;
+                                    if (input.substr(peg$currPos, 3) === peg$c54) {
+                                      s1 = peg$c54;
+                                      peg$currPos += 3;
+                                    } else {
+                                      s1 = peg$FAILED;
+                                      if (peg$silentFails === 0) {
+                                        peg$fail(peg$e57);
+                                      }
+                                    }
+                                    if (s1 !== peg$FAILED) {
+                                      peg$savedPos = s0;
+                                      s1 = peg$f47();
+                                    }
+                                    s0 = s1;
+                                    if (s0 === peg$FAILED) {
+                                      s0 = peg$currPos;
+                                      if (input.substr(peg$currPos, 3) === peg$c0) {
+                                        s1 = peg$c0;
+                                        peg$currPos += 3;
+                                      } else {
+                                        s1 = peg$FAILED;
+                                        if (peg$silentFails === 0) {
+                                          peg$fail(peg$e0);
+                                        }
+                                      }
+                                      if (s1 !== peg$FAILED) {
+                                        peg$savedPos = s0;
+                                        s1 = peg$f48();
+                                      }
+                                      s0 = s1;
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return s0;
+  }
+  function peg$parseNodeRef() {
+    var s0, s1, s2, s3, s4;
+    s0 = peg$currPos;
+    s1 = peg$parseIdentifier();
+    if (s1 !== peg$FAILED) {
+      if (input.charCodeAt(peg$currPos) === 91) {
+        s2 = peg$c9;
+        peg$currPos++;
+      } else {
+        s2 = peg$FAILED;
+        if (peg$silentFails === 0) {
+          peg$fail(peg$e10);
+        }
+      }
+      if (s2 !== peg$FAILED) {
+        s3 = peg$parseSignedInteger();
+        if (s3 !== peg$FAILED) {
+          if (input.charCodeAt(peg$currPos) === 93) {
+            s4 = peg$c11;
             peg$currPos++;
           } else {
-            s7 = peg$FAILED;
+            s4 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e27);
+              peg$fail(peg$e12);
             }
           }
-          if (s7 !== peg$FAILED) {
-            s8 = peg$parse_();
-            s9 = peg$parseTraceType();
-            if (s9 !== peg$FAILED) {
-              s6 = [s6, s7, s8, s9];
-              s5 = s6;
-            } else {
-              peg$currPos = s5;
-              s5 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s5;
-            s5 = peg$FAILED;
-          }
-          if (s5 === peg$FAILED) {
-            s5 = null;
-          }
-          s6 = peg$currPos;
-          s7 = peg$parse_();
-          if (input.substr(peg$currPos, 5) === peg$c29) {
-            s8 = peg$c29;
-            peg$currPos += 5;
-          } else {
-            s8 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e31);
-            }
-          }
-          if (s8 !== peg$FAILED) {
-            s9 = peg$parse_();
-            s10 = peg$parseQuotedString();
-            if (s10 !== peg$FAILED) {
-              s7 = [s7, s8, s9, s10];
-              s6 = s7;
-            } else {
-              peg$currPos = s6;
-              s6 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s6;
-            s6 = peg$FAILED;
-          }
-          if (s6 === peg$FAILED) {
-            s6 = null;
-          }
-          s7 = peg$parse__();
-          if (s7 !== peg$FAILED) {
-            s8 = peg$parseHopList();
-            if (s8 !== peg$FAILED) {
-              s9 = peg$parse_();
-              s10 = peg$parseNL();
-              if (s10 !== peg$FAILED) {
-                peg$savedPos = s0;
-                s0 = peg$f22(s4, s5, s6, s8);
-              } else {
-                peg$currPos = s0;
-                s0 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
+          if (s4 !== peg$FAILED) {
+            peg$savedPos = s0;
+            s0 = peg$f49(s1, s3);
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -12865,348 +14627,28 @@ function peg$parse3(input, options) {
       peg$currPos = s0;
       s0 = peg$FAILED;
     }
-    return s0;
-  }
-  function peg$parseTraceType() {
-    var s0;
-    if (input.substr(peg$currPos, 9) === peg$c30) {
-      s0 = peg$c30;
-      peg$currPos += 9;
-    } else {
-      s0 = peg$FAILED;
-      if (peg$silentFails === 0) {
-        peg$fail(peg$e32);
-      }
-    }
-    if (s0 === peg$FAILED) {
-      if (input.substr(peg$currPos, 8) === peg$c31) {
-        s0 = peg$c31;
-        peg$currPos += 8;
-      } else {
-        s0 = peg$FAILED;
-        if (peg$silentFails === 0) {
-          peg$fail(peg$e33);
-        }
-      }
-      if (s0 === peg$FAILED) {
-        if (input.substr(peg$currPos, 5) === peg$c32) {
-          s0 = peg$c32;
-          peg$currPos += 5;
-        } else {
-          s0 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e34);
-          }
-        }
-        if (s0 === peg$FAILED) {
-          if (input.substr(peg$currPos, 5) === peg$c33) {
-            s0 = peg$c33;
-            peg$currPos += 5;
-          } else {
-            s0 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e35);
-            }
-          }
-          if (s0 === peg$FAILED) {
-            if (input.substr(peg$currPos, 6) === peg$c34) {
-              s0 = peg$c34;
-              peg$currPos += 6;
-            } else {
-              s0 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e36);
-              }
-            }
-            if (s0 === peg$FAILED) {
-              if (input.substr(peg$currPos, 7) === peg$c35) {
-                s0 = peg$c35;
-                peg$currPos += 7;
-              } else {
-                s0 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e37);
-                }
-              }
-              if (s0 === peg$FAILED) {
-                if (input.substr(peg$currPos, 6) === peg$c36) {
-                  s0 = peg$c36;
-                  peg$currPos += 6;
-                } else {
-                  s0 = peg$FAILED;
-                  if (peg$silentFails === 0) {
-                    peg$fail(peg$e38);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    return s0;
-  }
-  function peg$parseHopList() {
-    var s0, s1, s2, s3, s4, s5, s6, s7;
-    s0 = peg$currPos;
-    s1 = peg$parseNodeRef();
-    if (s1 !== peg$FAILED) {
-      s2 = [];
-      s3 = peg$currPos;
-      s4 = peg$parse__();
-      if (s4 !== peg$FAILED) {
-        if (input.substr(peg$currPos, 3) === peg$c37) {
-          s5 = peg$c37;
-          peg$currPos += 3;
-        } else {
-          s5 = peg$FAILED;
-          if (peg$silentFails === 0) {
-            peg$fail(peg$e39);
-          }
-        }
-        if (s5 !== peg$FAILED) {
-          s6 = peg$parse__();
-          if (s6 !== peg$FAILED) {
-            s7 = peg$parseNodeRef();
-            if (s7 !== peg$FAILED) {
-              s4 = [s4, s5, s6, s7];
-              s3 = s4;
-            } else {
-              peg$currPos = s3;
-              s3 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s3;
-            s3 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s3;
-          s3 = peg$FAILED;
-        }
-      } else {
-        peg$currPos = s3;
-        s3 = peg$FAILED;
-      }
-      while (s3 !== peg$FAILED) {
-        s2.push(s3);
-        s3 = peg$currPos;
-        s4 = peg$parse__();
-        if (s4 !== peg$FAILED) {
-          if (input.substr(peg$currPos, 3) === peg$c37) {
-            s5 = peg$c37;
-            peg$currPos += 3;
-          } else {
-            s5 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e39);
-            }
-          }
-          if (s5 !== peg$FAILED) {
-            s6 = peg$parse__();
-            if (s6 !== peg$FAILED) {
-              s7 = peg$parseNodeRef();
-              if (s7 !== peg$FAILED) {
-                s4 = [s4, s5, s6, s7];
-                s3 = s4;
-              } else {
-                peg$currPos = s3;
-                s3 = peg$FAILED;
-              }
-            } else {
-              peg$currPos = s3;
-              s3 = peg$FAILED;
-            }
-          } else {
-            peg$currPos = s3;
-            s3 = peg$FAILED;
-          }
-        } else {
-          peg$currPos = s3;
-          s3 = peg$FAILED;
-        }
-      }
-      peg$savedPos = s0;
-      s0 = peg$f23(s1, s2);
-    } else {
-      peg$currPos = s0;
-      s0 = peg$FAILED;
-    }
-    return s0;
-  }
-  function peg$parseArrow() {
-    var s0, s1;
-    s0 = peg$currPos;
-    if (input.substr(peg$currPos, 4) === peg$c38) {
-      s1 = peg$c38;
-      peg$currPos += 4;
-    } else {
-      s1 = peg$FAILED;
-      if (peg$silentFails === 0) {
-        peg$fail(peg$e40);
-      }
-    }
-    if (s1 !== peg$FAILED) {
-      peg$savedPos = s0;
-      s1 = peg$f24();
-    }
-    s0 = s1;
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
-      if (input.substr(peg$currPos, 5) === peg$c39) {
-        s1 = peg$c39;
-        peg$currPos += 5;
-      } else {
-        s1 = peg$FAILED;
-        if (peg$silentFails === 0) {
-          peg$fail(peg$e41);
-        }
-      }
+      s1 = peg$parseIdentifier();
       if (s1 !== peg$FAILED) {
-        peg$savedPos = s0;
-        s1 = peg$f25();
-      }
-      s0 = s1;
-      if (s0 === peg$FAILED) {
-        s0 = peg$currPos;
-        if (input.substr(peg$currPos, 4) === peg$c40) {
-          s1 = peg$c40;
-          peg$currPos += 4;
+        if (input.charCodeAt(peg$currPos) === 46) {
+          s2 = peg$c37;
+          peg$currPos++;
         } else {
-          s1 = peg$FAILED;
+          s2 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e42);
+            peg$fail(peg$e40);
           }
         }
-        if (s1 !== peg$FAILED) {
-          peg$savedPos = s0;
-          s1 = peg$f26();
-        }
-        s0 = s1;
-        if (s0 === peg$FAILED) {
-          s0 = peg$currPos;
-          if (input.substr(peg$currPos, 3) === peg$c37) {
-            s1 = peg$c37;
-            peg$currPos += 3;
-          } else {
-            s1 = peg$FAILED;
-            if (peg$silentFails === 0) {
-              peg$fail(peg$e39);
-            }
-          }
-          if (s1 !== peg$FAILED) {
+        if (s2 !== peg$FAILED) {
+          s3 = peg$parseIdentifier();
+          if (s3 !== peg$FAILED) {
             peg$savedPos = s0;
-            s1 = peg$f27();
+            s0 = peg$f50(s1, s3);
+          } else {
+            peg$currPos = s0;
+            s0 = peg$FAILED;
           }
-          s0 = s1;
-          if (s0 === peg$FAILED) {
-            s0 = peg$currPos;
-            if (input.substr(peg$currPos, 4) === peg$c41) {
-              s1 = peg$c41;
-              peg$currPos += 4;
-            } else {
-              s1 = peg$FAILED;
-              if (peg$silentFails === 0) {
-                peg$fail(peg$e43);
-              }
-            }
-            if (s1 !== peg$FAILED) {
-              peg$savedPos = s0;
-              s1 = peg$f28();
-            }
-            s0 = s1;
-            if (s0 === peg$FAILED) {
-              s0 = peg$currPos;
-              if (input.substr(peg$currPos, 3) === peg$c42) {
-                s1 = peg$c42;
-                peg$currPos += 3;
-              } else {
-                s1 = peg$FAILED;
-                if (peg$silentFails === 0) {
-                  peg$fail(peg$e44);
-                }
-              }
-              if (s1 !== peg$FAILED) {
-                peg$savedPos = s0;
-                s1 = peg$f29();
-              }
-              s0 = s1;
-              if (s0 === peg$FAILED) {
-                s0 = peg$currPos;
-                if (input.substr(peg$currPos, 3) === peg$c0) {
-                  s1 = peg$c0;
-                  peg$currPos += 3;
-                } else {
-                  s1 = peg$FAILED;
-                  if (peg$silentFails === 0) {
-                    peg$fail(peg$e0);
-                  }
-                }
-                if (s1 !== peg$FAILED) {
-                  peg$savedPos = s0;
-                  s1 = peg$f30();
-                }
-                s0 = s1;
-                if (s0 === peg$FAILED) {
-                  s0 = peg$currPos;
-                  if (input.substr(peg$currPos, 3) === peg$c43) {
-                    s1 = peg$c43;
-                    peg$currPos += 3;
-                  } else {
-                    s1 = peg$FAILED;
-                    if (peg$silentFails === 0) {
-                      peg$fail(peg$e45);
-                    }
-                  }
-                  if (s1 !== peg$FAILED) {
-                    peg$savedPos = s0;
-                    s1 = peg$f31();
-                  }
-                  s0 = s1;
-                  if (s0 === peg$FAILED) {
-                    s0 = peg$currPos;
-                    if (input.substr(peg$currPos, 3) === peg$c44) {
-                      s1 = peg$c44;
-                      peg$currPos += 3;
-                    } else {
-                      s1 = peg$FAILED;
-                      if (peg$silentFails === 0) {
-                        peg$fail(peg$e46);
-                      }
-                    }
-                    if (s1 !== peg$FAILED) {
-                      peg$savedPos = s0;
-                      s1 = peg$f32();
-                    }
-                    s0 = s1;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    return s0;
-  }
-  function peg$parseNodeRef() {
-    var s0, s1, s2, s3;
-    s0 = peg$currPos;
-    s1 = peg$parseIdentifier();
-    if (s1 !== peg$FAILED) {
-      if (input.charCodeAt(peg$currPos) === 46) {
-        s2 = peg$c27;
-        peg$currPos++;
-      } else {
-        s2 = peg$FAILED;
-        if (peg$silentFails === 0) {
-          peg$fail(peg$e29);
-        }
-      }
-      if (s2 !== peg$FAILED) {
-        s3 = peg$parseIdentifier();
-        if (s3 !== peg$FAILED) {
-          peg$savedPos = s0;
-          s0 = peg$f33(s1, s3);
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -13215,9 +14657,6 @@ function peg$parse3(input, options) {
         peg$currPos = s0;
         s0 = peg$FAILED;
       }
-    } else {
-      peg$currPos = s0;
-      s0 = peg$FAILED;
     }
     return s0;
   }
@@ -13226,34 +14665,34 @@ function peg$parse3(input, options) {
     s0 = peg$currPos;
     s1 = peg$currPos;
     s2 = input.charAt(peg$currPos);
-    if (peg$r2.test(s2)) {
+    if (peg$r3.test(s2)) {
       peg$currPos++;
     } else {
       s2 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e47);
+        peg$fail(peg$e58);
       }
     }
     if (s2 !== peg$FAILED) {
       s3 = [];
       s4 = input.charAt(peg$currPos);
-      if (peg$r3.test(s4)) {
+      if (peg$r4.test(s4)) {
         peg$currPos++;
       } else {
         s4 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e48);
+          peg$fail(peg$e59);
         }
       }
       while (s4 !== peg$FAILED) {
         s3.push(s4);
         s4 = input.charAt(peg$currPos);
-        if (peg$r3.test(s4)) {
+        if (peg$r4.test(s4)) {
           peg$currPos++;
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e48);
+            peg$fail(peg$e59);
           }
         }
       }
@@ -13300,7 +14739,7 @@ function peg$parse3(input, options) {
         } else {
           s9 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e49);
+            peg$fail(peg$e60);
           }
         }
         peg$silentFails--;
@@ -13357,7 +14796,7 @@ function peg$parse3(input, options) {
       s5 = peg$parseNL();
       if (s5 !== peg$FAILED) {
         peg$savedPos = s2;
-        s2 = peg$f34(s4);
+        s2 = peg$f51(s4);
       } else {
         peg$currPos = s2;
         s2 = peg$FAILED;
@@ -13394,7 +14833,7 @@ function peg$parse3(input, options) {
           } else {
             s9 = peg$FAILED;
             if (peg$silentFails === 0) {
-              peg$fail(peg$e49);
+              peg$fail(peg$e60);
             }
           }
           peg$silentFails--;
@@ -13451,7 +14890,7 @@ function peg$parse3(input, options) {
         s5 = peg$parseNL();
         if (s5 !== peg$FAILED) {
           peg$savedPos = s2;
-          s2 = peg$f34(s4);
+          s2 = peg$f51(s4);
         } else {
           peg$currPos = s2;
           s2 = peg$FAILED;
@@ -13462,7 +14901,7 @@ function peg$parse3(input, options) {
       }
     }
     peg$savedPos = s0;
-    s1 = peg$f35(s1);
+    s1 = peg$f52(s1);
     s0 = s1;
     return s0;
   }
@@ -13470,51 +14909,51 @@ function peg$parse3(input, options) {
     var s0, s1, s2, s3, s4;
     s0 = peg$currPos;
     if (input.charCodeAt(peg$currPos) === 34) {
-      s1 = peg$c45;
+      s1 = peg$c55;
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e50);
+        peg$fail(peg$e61);
       }
     }
     if (s1 !== peg$FAILED) {
       s2 = peg$currPos;
       s3 = [];
       s4 = input.charAt(peg$currPos);
-      if (peg$r4.test(s4)) {
+      if (peg$r5.test(s4)) {
         peg$currPos++;
       } else {
         s4 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e51);
+          peg$fail(peg$e62);
         }
       }
       while (s4 !== peg$FAILED) {
         s3.push(s4);
         s4 = input.charAt(peg$currPos);
-        if (peg$r4.test(s4)) {
+        if (peg$r5.test(s4)) {
           peg$currPos++;
         } else {
           s4 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e51);
+            peg$fail(peg$e62);
           }
         }
       }
       s2 = input.substring(s2, peg$currPos);
       if (input.charCodeAt(peg$currPos) === 34) {
-        s3 = peg$c45;
+        s3 = peg$c55;
         peg$currPos++;
       } else {
         s3 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e50);
+          peg$fail(peg$e61);
         }
       }
       if (s3 !== peg$FAILED) {
         peg$savedPos = s0;
-        s0 = peg$f36(s2);
+        s0 = peg$f53(s2);
       } else {
         peg$currPos = s0;
         s0 = peg$FAILED;
@@ -13531,24 +14970,24 @@ function peg$parse3(input, options) {
     s1 = peg$currPos;
     s2 = [];
     s3 = input.charAt(peg$currPos);
-    if (peg$r1.test(s3)) {
+    if (peg$r2.test(s3)) {
       peg$currPos++;
     } else {
       s3 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e28);
+        peg$fail(peg$e39);
       }
     }
     if (s3 !== peg$FAILED) {
       while (s3 !== peg$FAILED) {
         s2.push(s3);
         s3 = input.charAt(peg$currPos);
-        if (peg$r1.test(s3)) {
+        if (peg$r2.test(s3)) {
           peg$currPos++;
         } else {
           s3 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e28);
+            peg$fail(peg$e39);
           }
         }
       }
@@ -13562,9 +15001,65 @@ function peg$parse3(input, options) {
     }
     if (s1 !== peg$FAILED) {
       peg$savedPos = s0;
-      s1 = peg$f37(s1);
+      s1 = peg$f54(s1);
     }
     s0 = s1;
+    return s0;
+  }
+  function peg$parseSignedInteger() {
+    var s0, s1, s2, s3, s4;
+    s0 = peg$currPos;
+    s1 = input.charAt(peg$currPos);
+    if (peg$r6.test(s1)) {
+      peg$currPos++;
+    } else {
+      s1 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e63);
+      }
+    }
+    if (s1 === peg$FAILED) {
+      s1 = null;
+    }
+    s2 = peg$currPos;
+    s3 = [];
+    s4 = input.charAt(peg$currPos);
+    if (peg$r2.test(s4)) {
+      peg$currPos++;
+    } else {
+      s4 = peg$FAILED;
+      if (peg$silentFails === 0) {
+        peg$fail(peg$e39);
+      }
+    }
+    if (s4 !== peg$FAILED) {
+      while (s4 !== peg$FAILED) {
+        s3.push(s4);
+        s4 = input.charAt(peg$currPos);
+        if (peg$r2.test(s4)) {
+          peg$currPos++;
+        } else {
+          s4 = peg$FAILED;
+          if (peg$silentFails === 0) {
+            peg$fail(peg$e39);
+          }
+        }
+      }
+    } else {
+      s3 = peg$FAILED;
+    }
+    if (s3 !== peg$FAILED) {
+      s2 = input.substring(s2, peg$currPos);
+    } else {
+      s2 = s3;
+    }
+    if (s2 !== peg$FAILED) {
+      peg$savedPos = s0;
+      s0 = peg$f55(s1, s2);
+    } else {
+      peg$currPos = s0;
+      s0 = peg$FAILED;
+    }
     return s0;
   }
   function peg$parseBlankLine() {
@@ -13578,7 +15073,7 @@ function peg$parse3(input, options) {
     s3 = peg$parseNL();
     if (s3 !== peg$FAILED) {
       peg$savedPos = s0;
-      s0 = peg$f38();
+      s0 = peg$f56();
     } else {
       peg$currPos = s0;
       s0 = peg$FAILED;
@@ -13588,13 +15083,13 @@ function peg$parse3(input, options) {
   function peg$parseComment() {
     var s0, s1, s2, s3;
     s0 = peg$currPos;
-    if (input.substr(peg$currPos, 2) === peg$c46) {
-      s1 = peg$c46;
+    if (input.substr(peg$currPos, 2) === peg$c56) {
+      s1 = peg$c56;
       peg$currPos += 2;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e52);
+        peg$fail(peg$e64);
       }
     }
     if (s1 !== peg$FAILED) {
@@ -13632,23 +15127,23 @@ function peg$parse3(input, options) {
     var s0, s1;
     s0 = [];
     s1 = input.charAt(peg$currPos);
-    if (peg$r5.test(s1)) {
+    if (peg$r7.test(s1)) {
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e53);
+        peg$fail(peg$e65);
       }
     }
     while (s1 !== peg$FAILED) {
       s0.push(s1);
       s1 = input.charAt(peg$currPos);
-      if (peg$r5.test(s1)) {
+      if (peg$r7.test(s1)) {
         peg$currPos++;
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e53);
+          peg$fail(peg$e65);
         }
       }
     }
@@ -13658,24 +15153,24 @@ function peg$parse3(input, options) {
     var s0, s1;
     s0 = [];
     s1 = input.charAt(peg$currPos);
-    if (peg$r5.test(s1)) {
+    if (peg$r7.test(s1)) {
       peg$currPos++;
     } else {
       s1 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e53);
+        peg$fail(peg$e65);
       }
     }
     if (s1 !== peg$FAILED) {
       while (s1 !== peg$FAILED) {
         s0.push(s1);
         s1 = input.charAt(peg$currPos);
-        if (peg$r5.test(s1)) {
+        if (peg$r7.test(s1)) {
           peg$currPos++;
         } else {
           s1 = peg$FAILED;
           if (peg$silentFails === 0) {
-            peg$fail(peg$e53);
+            peg$fail(peg$e65);
           }
         }
       }
@@ -13686,23 +15181,23 @@ function peg$parse3(input, options) {
   }
   function peg$parseNL() {
     var s0;
-    if (input.substr(peg$currPos, 2) === peg$c47) {
-      s0 = peg$c47;
+    if (input.substr(peg$currPos, 2) === peg$c57) {
+      s0 = peg$c57;
       peg$currPos += 2;
     } else {
       s0 = peg$FAILED;
       if (peg$silentFails === 0) {
-        peg$fail(peg$e54);
+        peg$fail(peg$e66);
       }
     }
     if (s0 === peg$FAILED) {
       s0 = input.charAt(peg$currPos);
-      if (peg$r6.test(s0)) {
+      if (peg$r8.test(s0)) {
         peg$currPos++;
       } else {
         s0 = peg$FAILED;
         if (peg$silentFails === 0) {
-          peg$fail(peg$e55);
+          peg$fail(peg$e67);
         }
       }
     }
@@ -13739,41 +15234,27 @@ var poster = {
   parseMermaid(input) {
     const raw = peg$parse3(input);
     const cells2 = raw.cells.map((c) => {
-      const content = parseCell(c);
-      return { id: c.id, title: c.title, content, colSpan: c.span?.colSpan, rowSpan: c.span?.rowSpan, theme: c.theme };
+      const { rawContent, caption, notes } = extractCellAnnotations(c.rawContent);
+      const content = parseCell({ ...c, rawContent });
+      return {
+        id: c.id,
+        title: c.title,
+        content,
+        colSpan: c.span?.colSpan,
+        rowSpan: c.span?.rowSpan,
+        theme: c.theme,
+        ...caption ? { caption } : {},
+        ...notes.length > 0 ? { notes } : {}
+      };
     });
-    const traces2 = raw.traces ?? [];
     const explicitLinks = raw.links ?? [];
-    const traceLinks = [];
-    for (const trace of traces2) {
-      for (let i = 0; i < trace.hops.length - 1; i++) {
-        const from = trace.hops[i];
-        const to = trace.hops[i + 1];
-        if (from.cellPath.join(".") === to.cellPath.join(".")) continue;
-        traceLinks.push({
-          from,
-          to,
-          direction: "directed",
-          style: "solid",
-          traceId: trace.id
-        });
-      }
-    }
-    const explicitKeys = new Set(
-      explicitLinks.map((l) => `${[...l.from.cellPath, l.from.nodeId].join(".")}\u2192${[...l.to.cellPath, l.to.nodeId].join(".")}`)
-    );
-    const dedupedTraceLinks = traceLinks.filter((l) => {
-      const key = `${[...l.from.cellPath, l.from.nodeId].join(".")}\u2192${[...l.to.cellPath, l.to.nodeId].join(".")}`;
-      return !explicitKeys.has(key);
-    });
-    const allLinks = [...explicitLinks, ...dedupedTraceLinks];
+    const allLinks = [...explicitLinks];
     return {
       version: raw.version ?? "1.0",
       metadata: { ...raw.metadata },
       grid: raw.grid,
       cells: cells2,
-      ...allLinks.length > 0 ? { links: allLinks } : {},
-      ...traces2.length > 0 ? { traces: traces2 } : {}
+      ...allLinks.length > 0 ? { links: allLinks } : {}
     };
   },
   parseYaml(input) {
@@ -13785,20 +15266,86 @@ var poster = {
 };
 function parseCell(raw) {
   const kind = raw.kind;
-  if (kind === "stat") {
+  const inferredKind = inferCellKind(raw.rawContent);
+  const resolvedKind = kind || inferredKind;
+  if (resolvedKind === "stat") {
     const [value, label] = raw.rawContent.split("|").map((s) => s.trim());
     return { kind: "stat", value: value ?? "", label };
   }
-  if (kind === "text") {
+  if (resolvedKind === "text") {
     return { kind: "text", text: raw.rawContent.trim() };
   }
-  const diagramKind = kind === "flow" ? "flowchart" : kind;
+  const diagramKind = resolvedKind === "flow" ? "flowchart" : resolvedKind;
   const module = getModule(diagramKind);
   if (!module) {
     return { kind: "text", text: raw.rawContent.trim() };
   }
   const content = raw.rawContent.endsWith("\n") ? raw.rawContent : raw.rawContent + "\n";
   return { kind: "diagram", diagramKind, doc: module.parseMermaid(content) };
+}
+function inferCellKind(rawContent) {
+  const trimmed = rawContent.trim();
+  if (!trimmed) return "text";
+  const firstLine = trimmed.split(/\r?\n/)[0].trim();
+  if (!firstLine) return "text";
+  const keyword = firstLine.toLowerCase();
+  if (keyword.startsWith("array")) return "array";
+  if (keyword.startsWith("stack")) return "stack";
+  if (keyword.startsWith("queue")) return "queue";
+  if (keyword.startsWith("unionfind")) return "unionfind";
+  if (keyword.startsWith("hashmap")) return "hashmap";
+  if (keyword.startsWith("matrix")) return "matrix";
+  if (keyword.startsWith("heap")) return "heap";
+  if (keyword.startsWith("trie")) return "trie";
+  if (keyword.startsWith("nodegraph")) return "nodegraph";
+  if (keyword.startsWith("plan")) return "plan";
+  if (keyword.startsWith("btree")) return "btree";
+  if (keyword.startsWith("tree")) return "tree";
+  if (keyword.startsWith("page")) return "page";
+  if (keyword.startsWith("memory")) return "memory";
+  if (keyword.startsWith("linkedlist")) return "linkedlist";
+  if (keyword.startsWith("avl")) return "avl";
+  if (keyword.startsWith("flowchart") || keyword.startsWith("flow ")) return "flowchart";
+  if (keyword.startsWith("timeline")) return "timeline";
+  if (keyword.startsWith("sequence")) return "sequence";
+  if (keyword.startsWith("gantt")) return "gantt";
+  if (keyword.startsWith("state")) return "state";
+  if (keyword.startsWith("class")) return "class";
+  if (keyword.startsWith("er")) return "er";
+  if (keyword.startsWith("journey")) return "journey";
+  if (keyword.startsWith("gitgraph")) return "gitgraph";
+  if (keyword.startsWith("mindmap")) return "mindmap";
+  if (keyword.startsWith("sankey")) return "sankey";
+  if (keyword.startsWith("pie")) return "pie";
+  if (keyword.startsWith("requirement")) return "requirement";
+  if (keyword.startsWith("kanban")) return "kanban";
+  if (keyword.startsWith("quadrant")) return "quadrant";
+  if (keyword.startsWith("xychart")) return "xychart";
+  if (keyword.startsWith("radar")) return "radar";
+  if (trimmed.includes("|")) return "stat";
+  return "text";
+}
+var CAPTION_RE = /^[ \t]*caption[ \t]+"([^"]*)"[ \t]*$/;
+var NOTE_RE = /^[ \t]*note[ \t]+"([^"]*)"(?:[ \t]+at[ \t]+(top-left|top-right|bottom-left|bottom-right|center))?[ \t]*$/;
+function extractCellAnnotations(rawContent) {
+  const inputLines = rawContent.split("\n");
+  const outLines = [];
+  let caption;
+  const notes = [];
+  for (const line of inputLines) {
+    const cm = line.match(CAPTION_RE);
+    if (cm) {
+      caption = cm[1];
+      continue;
+    }
+    const nm = line.match(NOTE_RE);
+    if (nm) {
+      notes.push({ text: nm[1], ...nm[2] ? { position: nm[2] } : {} });
+      continue;
+    }
+    outLines.push(line);
+  }
+  return { rawContent: outLines.join("\n"), caption, notes };
 }
 function fmtNum(n) {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
@@ -19834,7 +21381,7 @@ function layoutJourney(ir, theme) {
     elements.push(p.text(String(s), plotLeft - 10, y + typography.smallFontSize * 0.35, typography.smallFontSize, palette.textMuted, { anchor: "end" }));
   }
   ir.sections.forEach((sec, si) => {
-    const idxs = flat2.map((f, i) => ({ f, i })).filter(({ f }) => f.section === si).map(({ i }) => i);
+    const idxs = flat2.map((f2, i) => ({ f: f2, i })).filter(({ f: f2 }) => f2.section === si).map(({ i }) => i);
     if (idxs.length === 0) return;
     const x0 = taskX(idxs[0]) - step / 2;
     const x1 = taskX(idxs[idxs.length - 1]) + step / 2;
@@ -19842,21 +21389,21 @@ function layoutJourney(ir, theme) {
     elements.push(p.rect({ x: rhu(x0), y: margin + titleH, width: rhu(x1 - x0 - 6), height: sectionBandH }, hue, hue, 0, { rx: 6 }));
     elements.push(p.text(sec.label, rhuInt((x0 + x1) / 2 - 3), margin + titleH + sectionBandH / 2 + typography.baseFontSize * 0.35, typography.baseFontSize, "#FFFFFF", { weight: "bold", anchor: "middle" }));
   });
-  const nodePts = flat2.map((f, i) => ({ x: rhu(taskX(i)), y: scoreY(f.score) }));
+  const nodePts = flat2.map((f2, i) => ({ x: rhu(taskX(i)), y: scoreY(f2.score) }));
   if (nodePts.length > 1) {
     elements.push(p.path(`M ${nodePts.map((pt) => `${pt.x} ${pt.y}`).join(" L ")}`, palette.textMuted, 2, { opacity: 0.6 }));
   }
-  flat2.forEach((f, i) => {
-    const x = rhu(taskX(i)), y = scoreY(f.score);
-    const color = scoreColor(f.score);
+  flat2.forEach((f2, i) => {
+    const x = rhu(taskX(i)), y = scoreY(f2.score);
+    const color = scoreColor(f2.score);
     elements.push(p.circle({ x, y }, 16, color, palette.background, 2));
-    elements.push(p.text(String(f.score), x, y + typography.baseFontSize * 0.35, typography.baseFontSize, "#FFFFFF", { weight: "bold", anchor: "middle" }));
-    elements.push(p.text(f.label, x, plotBottom + typography.smallFontSize + 10, typography.smallFontSize, palette.text, { anchor: "middle", weight: "bold" }));
-    f.actors.forEach((a, ai) => {
+    elements.push(p.text(String(f2.score), x, y + typography.baseFontSize * 0.35, typography.baseFontSize, "#FFFFFF", { weight: "bold", anchor: "middle" }));
+    elements.push(p.text(f2.label, x, plotBottom + typography.smallFontSize + 10, typography.smallFontSize, palette.text, { anchor: "middle", weight: "bold" }));
+    f2.actors.forEach((a, ai) => {
       elements.push(p.text(a, x, plotBottom + typography.smallFontSize + 10 + (ai + 1) * (typography.smallFontSize + 4), typography.smallFontSize, palette.textMuted, { anchor: "middle" }));
     });
   });
-  const maxActors = Math.max(1, ...flat2.map((f) => f.actors.length));
+  const maxActors = Math.max(1, ...flat2.map((f2) => f2.actors.length));
   const totalW = rhuInt(plotRight + margin);
   const totalH = rhuInt(plotBottom + typography.smallFontSize + 10 + (maxActors + 1) * (typography.smallFontSize + 4) + margin);
   const scene = applyOverlays({
@@ -21553,7 +23100,7 @@ var kanban = {
     return layoutKanban(ir, theme);
   }
 };
-var ARROW_ID2 = "seq-arrow";
+var ARROW_ID3 = "seq-arrow";
 var OPEN_ID = "seq-open";
 function layoutSequence(ir, theme) {
   const { palette, typography, spacing } = theme;
@@ -21603,7 +23150,7 @@ function layoutSequence(ir, theme) {
       const self = m.from === m.to;
       const label = ir.autonumber ? `${++msgNo}. ${m.text}` : m.text;
       const dash = m.line === "dashed" ? "5 4" : void 0;
-      const markerEnd = m.head === "arrow" ? ARROW_ID2 : m.head === "open" || m.head === "async" ? OPEN_ID : void 0;
+      const markerEnd = m.head === "arrow" ? ARROW_ID3 : m.head === "open" || m.head === "async" ? OPEN_ID : void 0;
       if (m.activateTarget) pushAct(m.to);
       if (self) {
         const r = 26;
@@ -21636,14 +23183,14 @@ function layoutSequence(ir, theme) {
       fragStack.push({ type: ev.type, label: ev.label, top: y - 24, left: minX, right: maxX, elses: [] });
       y += 14;
     } else if (ev.kind === "frag-else") {
-      const f = fragStack[fragStack.length - 1];
-      if (f) f.elses.push({ y: y - 18, label: ev.label });
+      const f2 = fragStack[fragStack.length - 1];
+      if (f2) f2.elses.push({ y: y - 18, label: ev.label });
       y += 10;
     } else if (ev.kind === "frag-end") {
-      const f = fragStack.pop();
-      if (f) {
-        f.right = maxX;
-        fragBoxes.push({ ...f, top: f.top, left: minX - colW / 2 - 16, right: maxX + colW / 2 + 16 });
+      const f2 = fragStack.pop();
+      if (f2) {
+        f2.right = maxX;
+        fragBoxes.push({ ...f2, top: f2.top, left: minX - colW / 2 - 16, right: maxX + colW / 2 + 16 });
       }
       y += 6;
     }
@@ -21654,14 +23201,14 @@ function layoutSequence(ir, theme) {
   }
   const bodyBottom = y + 6;
   const fragEls = [];
-  for (const f of fragBoxes) {
-    const top = f.top, left = f.left, right = f.right;
+  for (const f2 of fragBoxes) {
+    const top = f2.top, left = f2.left, right = f2.right;
     fragEls.push(p.rect({ x: rhu(left), y: rhu(top), width: rhu(right - left), height: rhu(bodyBottom - top) }, "none", palette.border, 1.2, { rx: 4 }));
-    const tabW = measureText(f.type.toUpperCase(), typography.smallFontSize).width + 16;
+    const tabW = measureText(f2.type.toUpperCase(), typography.smallFontSize).width + 16;
     fragEls.push(p.rect({ x: rhu(left), y: rhu(top), width: rhu(tabW), height: 18 }, palette.border, palette.border, 0));
-    fragEls.push(p.text(f.type.toUpperCase(), rhu(left + 8), rhu(top + 13), typography.smallFontSize, palette.background, { weight: "bold" }));
-    if (f.label) fragEls.push(p.text(`[${f.label}]`, rhu(left + tabW + 8), rhu(top + 13), typography.smallFontSize, palette.text, { weight: "bold" }));
-    for (const e of f.elses) {
+    fragEls.push(p.text(f2.type.toUpperCase(), rhu(left + 8), rhu(top + 13), typography.smallFontSize, palette.background, { weight: "bold" }));
+    if (f2.label) fragEls.push(p.text(`[${f2.label}]`, rhu(left + tabW + 8), rhu(top + 13), typography.smallFontSize, palette.text, { weight: "bold" }));
+    for (const e of f2.elses) {
       fragEls.push(p.path(`M ${rhu(left)} ${rhu(e.y)} L ${rhu(right)} ${rhu(e.y)}`, palette.border, 1, { dash: "4 3" }));
       if (e.label) fragEls.push(p.text(`[${e.label}]`, rhu(left + 8), rhu(e.y + 13), typography.smallFontSize, palette.text));
     }
@@ -21680,7 +23227,7 @@ function layoutSequence(ir, theme) {
   const totalW = rhuInt(maxX + colW / 2 + margin);
   const totalH = rhuInt(bodyBottom + margin);
   const defs = [
-    `<marker id="${ARROW_ID2}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.text}" /></marker>`,
+    `<marker id="${ARROW_ID3}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.text}" /></marker>`,
     `<marker id="${OPEN_ID}" markerWidth="11" markerHeight="9" refX="9" refY="4.5" orient="auto"><polyline points="0 0, 10 4.5, 0 9" fill="none" stroke="${palette.text}" stroke-width="1.3" /></marker>`
   ];
   const scene = applyOverlays({
@@ -23419,62 +24966,6 @@ var sequence = {
     return layoutSequence(ir, theme);
   }
 };
-function assignLayers2(nodes, edges2) {
-  const layer = /* @__PURE__ */ new Map();
-  for (const n of nodes) layer.set(n.id, 0);
-  const present = (id) => layer.has(id);
-  for (let pass = 0; pass < nodes.length; pass++) {
-    let changed = false;
-    for (const e of edges2) {
-      if (!present(e.from) || !present(e.to)) continue;
-      const want = layer.get(e.from) + 1;
-      if (layer.get(e.to) < want) {
-        layer.set(e.to, want);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return layer;
-}
-function layeredLayout(nodes, edges2, options = {}) {
-  const direction = options.direction ?? "TB";
-  const layerGap = options.layerGap ?? 70;
-  const nodeGap = options.nodeGap ?? 40;
-  const margin = options.margin ?? 32;
-  const horizontal = direction === "LR";
-  if (nodes.length === 0) return { boxes: /* @__PURE__ */ new Map(), width: margin * 2, height: margin * 2 };
-  const layer = assignLayers2(nodes, edges2);
-  const maxLayer = Math.max(...nodes.map((n) => layer.get(n.id)));
-  const byLayer = Array.from({ length: maxLayer + 1 }, () => []);
-  for (const n of nodes) byLayer[layer.get(n.id)].push(n);
-  const cross3 = (n) => horizontal ? n.height : n.width;
-  const along = (n) => horizontal ? n.width : n.height;
-  const layerExtent = byLayer.map((layerNodes) => Math.max(0, ...layerNodes.map(along)));
-  const layerCross = byLayer.map((layerNodes) => layerNodes.reduce((sum, n, i) => sum + cross3(n) + (i > 0 ? nodeGap : 0), 0));
-  const maxCross = Math.max(...layerCross);
-  const boxes = /* @__PURE__ */ new Map();
-  let alongCursor = margin;
-  byLayer.forEach((layerNodes, li) => {
-    const rowExtent = layerExtent[li];
-    let crossCursor = margin + (maxCross - layerCross[li]) / 2;
-    for (const n of layerNodes) {
-      const alongPos = alongCursor + (rowExtent - along(n)) / 2;
-      const x = horizontal ? alongPos : crossCursor;
-      const y = horizontal ? crossCursor : alongPos;
-      boxes.set(n.id, { id: n.id, x, y, width: n.width, height: n.height });
-      crossCursor += cross3(n) + nodeGap;
-    }
-    alongCursor += rowExtent + layerGap;
-  });
-  const alongTotal = alongCursor - layerGap + margin;
-  const crossTotal = margin + maxCross + margin;
-  return {
-    boxes,
-    width: horizontal ? alongTotal : crossTotal,
-    height: horizontal ? crossTotal : alongTotal
-  };
-}
 function borderPoint(box, tx, ty) {
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
@@ -23494,6 +24985,825 @@ function connectSlots(from, to) {
     end: borderPoint(to, fc.x, fc.y)
   };
 }
+function makeDummy(edgeIdx, segIdx) {
+  return { id: `__dummy_${edgeIdx}_${segIdx}`, width: 0, height: 0, isDummy: true, originalEdgeIndex: edgeIdx, segmentIndex: segIdx };
+}
+function assignLayers2(nodes, edges2) {
+  const layer = /* @__PURE__ */ new Map();
+  for (const n of nodes) layer.set(n.id, 0);
+  const present = (id) => layer.has(id);
+  for (let pass = 0; pass < nodes.length; pass++) {
+    let changed = false;
+    for (const e of edges2) {
+      if (!present(e.from) || !present(e.to)) continue;
+      const want = layer.get(e.from) + 1;
+      if (layer.get(e.to) < want) {
+        layer.set(e.to, want);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return layer;
+}
+function detectBackEdges(nodes, edges2) {
+  const adj = /* @__PURE__ */ new Map();
+  for (const n of nodes) adj.set(n.id, []);
+  edges2.forEach((e, i) => {
+    const list = adj.get(e.from);
+    if (list) list.push({ to: e.to, edgeIdx: i });
+  });
+  const visited = /* @__PURE__ */ new Set();
+  const onStack = /* @__PURE__ */ new Set();
+  const backEdges = /* @__PURE__ */ new Set();
+  for (const startNode of nodes) {
+    if (visited.has(startNode.id)) continue;
+    const stack2 = [];
+    visited.add(startNode.id);
+    onStack.add(startNode.id);
+    stack2.push({ id: startNode.id, adjIdx: 0 });
+    while (stack2.length > 0) {
+      const frame = stack2[stack2.length - 1];
+      const neighbors = adj.get(frame.id) ?? [];
+      if (frame.adjIdx >= neighbors.length) {
+        onStack.delete(frame.id);
+        stack2.pop();
+      } else {
+        const { to, edgeIdx } = neighbors[frame.adjIdx];
+        frame.adjIdx++;
+        if (onStack.has(to)) {
+          backEdges.add(edgeIdx);
+        } else if (!visited.has(to)) {
+          visited.add(to);
+          onStack.add(to);
+          stack2.push({ id: to, adjIdx: 0 });
+        }
+      }
+    }
+  }
+  return backEdges;
+}
+function insertDummyNodes(nodes, edges2, layer, backEdgeSet) {
+  const newNodes = [...nodes];
+  const newEdges = [];
+  const newBackEdgeSet = /* @__PURE__ */ new Set();
+  const dummyChains = /* @__PURE__ */ new Map();
+  for (let i = 0; i < edges2.length; i++) {
+    const e = edges2[i];
+    if (backEdgeSet.has(i)) {
+      newBackEdgeSet.add(newEdges.length);
+      newEdges.push(e);
+      continue;
+    }
+    const lu = layer.get(e.from) ?? 0;
+    const lv = layer.get(e.to) ?? 0;
+    const span = lv - lu;
+    if (span <= 1) {
+      newEdges.push(e);
+      continue;
+    }
+    const dummies = [];
+    for (let seg = 0; seg < span - 1; seg++) {
+      const d = makeDummy(i, seg);
+      newNodes.push(d);
+      layer.set(d.id, lu + 1 + seg);
+      dummies.push(d.id);
+    }
+    dummyChains.set(i, dummies);
+    const chain = [e.from, ...dummies, e.to];
+    for (let s = 0; s < chain.length - 1; s++) {
+      newEdges.push({ from: chain[s], to: chain[s + 1] });
+    }
+  }
+  return { newNodes, newEdges, newBackEdgeSet, dummyChains };
+}
+function crossCount(byLayer, edges2, backEdgeSet) {
+  const layerKeys = [...byLayer.keys()].sort((a, b) => a - b);
+  const succList = /* @__PURE__ */ new Map();
+  for (const [, ns] of byLayer) for (const n of ns) succList.set(n.id, []);
+  edges2.forEach((e, i) => {
+    if (backEdgeSet.has(i) || e.from === e.to) return;
+    succList.get(e.from)?.push(e.to);
+  });
+  let cc = 0;
+  for (let i = 1; i < layerKeys.length; i++) {
+    cc += bilayerCrossCount(
+      byLayer.get(layerKeys[i - 1]),
+      byLayer.get(layerKeys[i]),
+      succList
+    );
+  }
+  return cc;
+}
+function bilayerCrossCount(northLayer, southLayer, succList) {
+  if (southLayer.length === 0) return 0;
+  const southPos = /* @__PURE__ */ new Map();
+  southLayer.forEach((n, i) => southPos.set(n.id, i));
+  const positions = northLayer.flatMap(
+    (n) => (succList.get(n.id) ?? []).filter((sid) => southPos.has(sid)).map((sid) => southPos.get(sid)).sort((a, b) => a - b)
+  );
+  if (positions.length === 0) return 0;
+  let firstIndex = 1;
+  while (firstIndex < southLayer.length) firstIndex <<= 1;
+  const treeSize = 2 * firstIndex - 1;
+  firstIndex -= 1;
+  const tree2 = new Array(treeSize).fill(0);
+  let cc = 0;
+  for (const pos of positions) {
+    let idx = pos + firstIndex;
+    tree2[idx] = (tree2[idx] ?? 0) + 1;
+    let weightSum = 0;
+    while (idx > 0) {
+      if (idx % 2 === 1) weightSum += tree2[idx + 1];
+      idx = idx - 1 >> 1;
+      tree2[idx] = (tree2[idx] ?? 0) + 1;
+    }
+    cc += weightSum;
+  }
+  return cc;
+}
+function minimizeCrossings2(byLayer, edges2, backEdgeSet) {
+  const predIds = /* @__PURE__ */ new Map();
+  const succIds = /* @__PURE__ */ new Map();
+  for (const [, ns] of byLayer) {
+    for (const n of ns) {
+      predIds.set(n.id, []);
+      succIds.set(n.id, []);
+    }
+  }
+  edges2.forEach((e, i) => {
+    if (backEdgeSet.has(i) || e.from === e.to) return;
+    predIds.get(e.to)?.push(e.from);
+    succIds.get(e.from)?.push(e.to);
+  });
+  const layerKeys = [...byLayer.keys()].sort((a, b) => a - b);
+  const nodeById2 = /* @__PURE__ */ new Map();
+  const nodeLayer2 = /* @__PURE__ */ new Map();
+  for (const [lk, ns] of byLayer) for (const n of ns) {
+    nodeById2.set(n.id, n);
+    nodeLayer2.set(n.id, lk);
+  }
+  function initOrder() {
+    const visited = /* @__PURE__ */ new Set();
+    const layers = /* @__PURE__ */ new Map();
+    for (const k of layerKeys) layers.set(k, []);
+    function dfs(v) {
+      if (visited.has(v)) return;
+      visited.add(v);
+      const lk = nodeLayer2.get(v);
+      if (lk !== void 0) layers.get(lk)?.push(nodeById2.get(v));
+      for (const w of succIds.get(v) ?? []) dfs(w);
+    }
+    const allNodes = [...nodeById2.keys()].sort(
+      (a, b) => (nodeLayer2.get(a) ?? 0) - (nodeLayer2.get(b) ?? 0)
+    );
+    for (const v of allNodes) dfs(v);
+    return layers;
+  }
+  const order = initOrder();
+  const posInLayer = /* @__PURE__ */ new Map();
+  function rebuildPos() {
+    for (const [, ns] of order) ns.forEach((n, i) => posInLayer.set(n.id, i));
+  }
+  rebuildPos();
+  function sortLayer(layerIdx, neighborMap, biasRight) {
+    const curr = order.get(layerIdx);
+    const entries = curr.map((node, origIdx) => {
+      const nbrs = (neighborMap.get(node.id) ?? []).filter((w) => posInLayer.has(w));
+      if (nbrs.length === 0) return { node, barycenter: void 0, origIdx };
+      const sum = nbrs.reduce((s, nid) => s + posInLayer.get(nid), 0);
+      return { node, barycenter: sum / nbrs.length, origIdx };
+    });
+    const sortable = entries.filter((e) => e.barycenter !== void 0);
+    const unsortable = entries.filter((e) => e.barycenter === void 0).sort((a, b) => b.origIdx - a.origIdx);
+    sortable.sort((a, b) => {
+      if (a.barycenter !== b.barycenter) return a.barycenter - b.barycenter;
+      return biasRight ? b.origIdx - a.origIdx : a.origIdx - b.origIdx;
+    });
+    const result = [];
+    let vsIndex = 0;
+    function consumeUnsortable() {
+      while (unsortable.length && unsortable[unsortable.length - 1].origIdx <= vsIndex) {
+        result.push(unsortable.pop().node);
+        vsIndex++;
+      }
+    }
+    consumeUnsortable();
+    for (const entry of sortable) {
+      result.push(entry.node);
+      vsIndex++;
+      consumeUnsortable();
+    }
+    order.set(layerIdx, result);
+    rebuildPos();
+  }
+  let bestCC = crossCount(order, edges2, backEdgeSet);
+  const best = /* @__PURE__ */ new Map();
+  for (const [k, v] of order) best.set(k, [...v]);
+  for (let pass = 0, lastBest = 0; lastBest < 4; pass++, lastBest++) {
+    const biasRight = pass % 4 >= 2;
+    if (pass % 2 === 0) {
+      for (let li = 1; li < layerKeys.length; li++) sortLayer(layerKeys[li], predIds, biasRight);
+    } else {
+      for (let li = layerKeys.length - 2; li >= 0; li--) sortLayer(layerKeys[li], succIds, biasRight);
+    }
+    const cc = crossCount(order, edges2, backEdgeSet);
+    if (cc < bestCC) {
+      lastBest = 0;
+      bestCC = cc;
+      for (const [k, v] of order) best.set(k, [...v]);
+    } else if (cc === bestCC) {
+      for (const [k, v] of order) best.set(k, [...v]);
+    }
+  }
+  return best;
+}
+function assignCoordinatesBK4(byLayer, edges2, backEdgeSet, isLR, nodeGap, layerGap, margin) {
+  const cross = (n) => isLR ? n.height : n.width;
+  const along = (n) => isLR ? n.width : n.height;
+  const isDummy = (id) => id.startsWith("__dummy_");
+  const nodeById = /* @__PURE__ */ new Map();
+  for (const [, ns] of byLayer) for (const n of ns) nodeById.set(n.id, n);
+  function sep(a, b) {
+    if (isDummy(a) || isDummy(b)) return 0;
+    const an = nodeById.get(a);
+    const bn = nodeById.get(b);
+    return cross(an) / 2 + nodeGap + cross(bn) / 2;
+  }
+  const layerKeys = [...byLayer.keys()].sort((a, b) => a - b);
+  const numLayers = layerKeys.length;
+  const baseLayers = layerKeys.map((lk) => byLayer.get(lk).map((n) => n.id));
+  const nodeLayerIdx = /* @__PURE__ */ new Map();
+  for (let li = 0; li < numLayers; li++) {
+    for (const id of baseLayers[li]) nodeLayerIdx.set(id, li);
+  }
+  const predMap = /* @__PURE__ */ new Map();
+  const succMap = /* @__PURE__ */ new Map();
+  for (const [, ns] of byLayer) for (const n of ns) {
+    predMap.set(n.id, []);
+    succMap.set(n.id, []);
+  }
+  edges2.forEach((e, i) => {
+    if (backEdgeSet.has(i) || e.from === e.to) return;
+    predMap.get(e.to)?.push(e.from);
+    succMap.get(e.from)?.push(e.to);
+  });
+  const conflicts = /* @__PURE__ */ new Set();
+  const ck = (u, v) => u < v ? `${u}\0${v}` : `${v}\0${u}`;
+  const addConflict = (u, v) => conflicts.add(ck(u, v));
+  const hasConflict = (u, v) => conflicts.has(ck(u, v));
+  for (let li = 1; li < numLayers; li++) {
+    const prevLayer = baseLayers[li - 1];
+    const layer = baseLayers[li];
+    const prevPos = /* @__PURE__ */ new Map();
+    prevLayer.forEach((id, i) => prevPos.set(id, i));
+    let k0 = 0;
+    let scanPos = 0;
+    const lastNode = layer[layer.length - 1];
+    layer.forEach((v, i) => {
+      let innerPredPos;
+      if (isDummy(v)) {
+        for (const u of predMap.get(v) ?? []) {
+          if (isDummy(u) && prevPos.has(u)) {
+            innerPredPos = prevPos.get(u);
+            break;
+          }
+        }
+      }
+      const k1 = innerPredPos !== void 0 ? innerPredPos : prevLayer.length;
+      if (innerPredPos !== void 0 || v === lastNode) {
+        for (let si = scanPos; si <= i; si++) {
+          const sn = layer[si];
+          for (const u of predMap.get(sn) ?? []) {
+            if (!prevPos.has(u)) continue;
+            const uPos = prevPos.get(u);
+            if ((uPos < k0 || uPos > k1) && !(isDummy(u) && isDummy(sn))) {
+              addConflict(u, sn);
+            }
+          }
+        }
+        scanPos = i + 1;
+        k0 = k1;
+      }
+    });
+  }
+  function verticalAlignment(sweepLayers, neighborFn) {
+    const root = /* @__PURE__ */ new Map();
+    const align = /* @__PURE__ */ new Map();
+    const pos = /* @__PURE__ */ new Map();
+    for (const layer of sweepLayers) {
+      layer.forEach((v, i) => {
+        root.set(v, v);
+        align.set(v, v);
+        pos.set(v, i);
+      });
+    }
+    for (const layer of sweepLayers) {
+      let prevIdx = -1;
+      for (const v of layer) {
+        const wsRaw = neighborFn(v);
+        if (!wsRaw.length) continue;
+        const ws = wsRaw.filter((w) => pos.has(w)).sort((a, b) => pos.get(a) - pos.get(b));
+        if (ws.length === 0) continue;
+        const mp = (ws.length - 1) / 2;
+        for (let mi = Math.floor(mp), mEnd = Math.ceil(mp); mi <= mEnd; mi++) {
+          const w = ws[mi];
+          const wPos = pos.get(w);
+          if (align.get(v) === v && prevIdx < wPos && !hasConflict(v, w)) {
+            align.set(w, v);
+            root.set(v, root.get(w));
+            align.set(v, root.get(v));
+            prevIdx = wPos;
+          }
+        }
+      }
+    }
+    return { root, align };
+  }
+  function horizontalCompaction(sweepLayers, root) {
+    const blockSucc = /* @__PURE__ */ new Map();
+    const blockPred = /* @__PURE__ */ new Map();
+    function ensureBlock(r) {
+      if (!blockSucc.has(r)) {
+        blockSucc.set(r, /* @__PURE__ */ new Map());
+        blockPred.set(r, /* @__PURE__ */ new Map());
+      }
+    }
+    for (const layer of sweepLayers) {
+      let prevId;
+      for (const v of layer) {
+        const rv = root.get(v);
+        ensureBlock(rv);
+        if (prevId !== void 0) {
+          const rp = root.get(prevId);
+          if (rp !== rv) {
+            const w = sep(prevId, v);
+            const curW = blockSucc.get(rp).get(rv) ?? 0;
+            if (w > curW) {
+              blockSucc.get(rp).set(rv, w);
+              blockPred.get(rv).set(rp, w);
+            }
+          }
+        }
+        prevId = v;
+      }
+    }
+    const xs = /* @__PURE__ */ new Map();
+    function iterate(applyFn, nextFn) {
+      const stack2 = [...blockSucc.keys()];
+      const visited = /* @__PURE__ */ new Set();
+      while (stack2.length > 0) {
+        const elem = stack2[stack2.length - 1];
+        if (visited.has(elem)) {
+          stack2.pop();
+          applyFn(elem);
+        } else {
+          visited.add(elem);
+          for (const nxt of nextFn(elem)) stack2.push(nxt);
+        }
+      }
+    }
+    iterate(
+      (elem) => {
+        let max = 0;
+        for (const [from, w] of blockPred.get(elem) ?? /* @__PURE__ */ new Map())
+          max = Math.max(max, (xs.get(from) ?? 0) + w);
+        xs.set(elem, max);
+      },
+      (elem) => blockPred.get(elem)?.keys() ?? []
+    );
+    iterate(
+      (elem) => {
+        const succs = blockSucc.get(elem);
+        if (succs && succs.size > 0) {
+          let min = Infinity;
+          for (const [to, w] of succs) min = Math.min(min, (xs.get(to) ?? 0) - w);
+          if (min !== Infinity) xs.set(elem, Math.max(xs.get(elem) ?? 0, min));
+        }
+      },
+      (elem) => blockSucc.get(elem)?.keys() ?? []
+    );
+    for (const layer of sweepLayers) {
+      for (const v of layer) xs.set(v, xs.get(root.get(v)));
+    }
+    return xs;
+  }
+  const xss = /* @__PURE__ */ new Map();
+  for (const vert of ["u", "d"]) {
+    const vertLayers = vert === "u" ? baseLayers : [...baseLayers].reverse();
+    for (const horiz of ["l", "r"]) {
+      const sweepLayers = horiz === "r" ? vertLayers.map((layer) => [...layer].reverse()) : vertLayers;
+      const neighborFn = vert === "u" ? (v) => predMap.get(v) ?? [] : (v) => succMap.get(v) ?? [];
+      const { root } = verticalAlignment(sweepLayers, neighborFn);
+      let xs = horizontalCompaction(sweepLayers, root);
+      if (horiz === "r") {
+        const neg = /* @__PURE__ */ new Map();
+        for (const [k, v] of xs) neg.set(k, -v);
+        xs = neg;
+      }
+      xss.set(vert + horiz, xs);
+    }
+  }
+  const SWEEP_KEYS = ["ul", "ur", "dl", "dr"];
+  const dummySweepXs = /* @__PURE__ */ new Map();
+  for (const id of nodeById.keys()) {
+    if (!isDummy(id)) continue;
+    const vals = SWEEP_KEYS.map((k) => xss.get(k)?.get(id) ?? 0);
+    dummySweepXs.set(id, vals);
+  }
+  let minSpan = Infinity;
+  let smallestXs = xss.get("ul");
+  for (const [, xs] of xss) {
+    let lo = Infinity, hi = -Infinity;
+    for (const [id, x] of xs) {
+      const n = nodeById.get(id);
+      if (!n) continue;
+      const half = cross(n) / 2;
+      lo = Math.min(lo, x - half);
+      hi = Math.max(hi, x + half);
+    }
+    if (hi - lo < minSpan) {
+      minSpan = hi - lo;
+      smallestXs = xs;
+    }
+  }
+  const refVals = [...smallestXs.values()];
+  const refMin = Math.min(...refVals);
+  const refMax = Math.max(...refVals);
+  for (const [key, xs] of xss) {
+    if (xs === smallestXs) continue;
+    const vals = [...xs.values()];
+    const isRight = key.endsWith("r");
+    const delta = isRight ? refMax - Math.max(...vals) : refMin - Math.min(...vals);
+    if (delta !== 0) {
+      const shifted = /* @__PURE__ */ new Map();
+      for (const [id, x] of xs) shifted.set(id, x + delta);
+      xss.set(key, shifted);
+    }
+  }
+  const balanced = /* @__PURE__ */ new Map();
+  for (const [id] of xss.get("ul")) {
+    const vals = [...xss.values()].map((xs) => xs.get(id) ?? 0).sort((a, b) => a - b);
+    balanced.set(id, ((vals[1] ?? 0) + (vals[2] ?? 0)) / 2);
+  }
+  const COLUMN_SNAP_EPSILON = 6;
+  const csParent = /* @__PURE__ */ new Map();
+  const csFind = (id) => {
+    let r = csParent.get(id) ?? id;
+    while (csParent.get(r) !== void 0 && csParent.get(r) !== r) r = csParent.get(r);
+    csParent.set(id, r);
+    return r;
+  };
+  const csUnion = (a, b) => {
+    const ra = csFind(a), rb = csFind(b);
+    if (ra !== rb) csParent.set(ra, rb);
+  };
+  edges2.forEach((edge, i) => {
+    if (backEdgeSet.has(i) || edge.from === edge.to) return;
+    if (isDummy(edge.from) || isDummy(edge.to)) return;
+    const fromLayer = nodeLayerIdx.get(edge.from);
+    const toLayer = nodeLayerIdx.get(edge.to);
+    if (fromLayer === void 0 || toLayer === void 0) return;
+    if (Math.abs(toLayer - fromLayer) !== 1) return;
+    const fromX = balanced.get(edge.from);
+    const toX = balanced.get(edge.to);
+    if (fromX === void 0 || toX === void 0) return;
+    if (Math.abs(fromX - toX) > COLUMN_SNAP_EPSILON) return;
+    csUnion(edge.from, edge.to);
+  });
+  const csGroups = /* @__PURE__ */ new Map();
+  for (const id of balanced.keys()) {
+    if (isDummy(id)) continue;
+    const root = csFind(id);
+    if (!csGroups.has(root)) csGroups.set(root, []);
+    csGroups.get(root).push(id);
+  }
+  for (const members of csGroups.values()) {
+    if (members.length < 2) continue;
+    const xs = members.map((id) => balanced.get(id)).sort((a, b) => a - b);
+    const medX = xs.length % 2 === 1 ? xs[Math.floor(xs.length / 2)] : (xs[xs.length / 2 - 1] + xs[xs.length / 2]) / 2;
+    for (const id of members) balanced.set(id, medX);
+  }
+  let minLeft = Infinity;
+  for (const [id, cx] of balanced) {
+    const n = nodeById.get(id);
+    if (n) minLeft = Math.min(minLeft, cx - cross(n) / 2);
+  }
+  const shift = margin - (isFinite(minLeft) ? minLeft : 0);
+  const nodePos = /* @__PURE__ */ new Map();
+  let alongCursor = margin;
+  for (let li = 0; li < numLayers; li++) {
+    const layerIdx = layerKeys[li];
+    const ns = byLayer.get(layerIdx);
+    const layerSize = ns.length > 0 ? Math.max(...ns.map(along)) : 0;
+    for (const node of ns) {
+      const cx = (balanced.get(node.id) ?? 0) + shift;
+      const crossLeft = cx - cross(node) / 2;
+      const alongPos = isDummy(node.id) && li > 0 ? alongCursor - layerGap / 2 : alongCursor + (layerSize - along(node)) / 2;
+      nodePos.set(node.id, {
+        id: node.id,
+        x: isLR ? alongPos : crossLeft,
+        y: isLR ? crossLeft : alongPos,
+        width: node.width,
+        height: node.height
+      });
+    }
+    alongCursor += layerSize + layerGap;
+  }
+  return { boxes: nodePos, dummySweepXs };
+}
+function layeredLayout(nodes, edges2, options = {}) {
+  const direction = options.direction ?? "TB";
+  const layerGap = options.layerGap ?? 70;
+  const nodeGap = options.nodeGap ?? 40;
+  const margin = options.margin ?? 32;
+  const isLR = direction === "LR";
+  if (nodes.length === 0) return { boxes: /* @__PURE__ */ new Map(), width: margin * 2, height: margin * 2, edgeBends: /* @__PURE__ */ new Map(), dummySweepXs: /* @__PURE__ */ new Map(), dummyChainIds: /* @__PURE__ */ new Map() };
+  const layer = assignLayers2(nodes, edges2);
+  const backEdges = detectBackEdges(nodes, edges2);
+  const { newNodes, newEdges, newBackEdgeSet, dummyChains } = insertDummyNodes(nodes, edges2, layer, backEdges);
+  const newMaxLayer = Math.max(...newNodes.map((n) => layer.get(n.id)));
+  const byLayerArr = /* @__PURE__ */ new Map();
+  for (let i = 0; i <= newMaxLayer; i++) byLayerArr.set(i, []);
+  for (const n of newNodes) byLayerArr.get(layer.get(n.id)).push(n);
+  const orderedByLayer = minimizeCrossings2(byLayerArr, newEdges, newBackEdgeSet);
+  const { boxes: allBoxesMap, dummySweepXs } = assignCoordinatesBK4(
+    orderedByLayer,
+    newEdges,
+    newBackEdgeSet,
+    isLR,
+    nodeGap,
+    layerGap,
+    margin
+  );
+  const edgeBends = /* @__PURE__ */ new Map();
+  for (const [origEdgeIdx, dummyIds] of dummyChains) {
+    const bends = dummyIds.map((id) => {
+      const b = allBoxesMap.get(id);
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    });
+    edgeBends.set(origEdgeIdx, bends);
+  }
+  const boxes = /* @__PURE__ */ new Map();
+  for (const [id, box] of allBoxesMap) {
+    if (!id.startsWith("__dummy_")) boxes.set(id, box);
+  }
+  if (boxes.size > 1) {
+    const uf = new Map(nodes.map((n) => [n.id, n.id]));
+    const find2 = (x) => {
+      while (uf.get(x) !== x) {
+        uf.set(x, uf.get(uf.get(x)));
+        x = uf.get(x);
+      }
+      return x;
+    };
+    for (const e of edges2) {
+      if (boxes.has(e.from) && boxes.has(e.to)) {
+        const ra = find2(e.from), rb = find2(e.to);
+        if (ra !== rb) uf.set(ra, rb);
+      }
+    }
+    const comps = /* @__PURE__ */ new Map();
+    for (const id of boxes.keys()) {
+      const r = find2(id);
+      if (!comps.has(r)) comps.set(r, []);
+      comps.get(r).push(id);
+    }
+    if (comps.size > 1) {
+      const compInfos = [...comps.values()].map((ids) => ({
+        ids,
+        left: Math.min(...ids.map((id) => boxes.get(id).x)),
+        right: Math.max(...ids.map((id) => boxes.get(id).x + boxes.get(id).width))
+      })).sort((a, b) => a.left - b.left);
+      let cursor = compInfos[0].right;
+      for (let ci = 1; ci < compInfos.length; ci++) {
+        const comp = compInfos[ci];
+        const gap = comp.left - cursor;
+        const targetGap = nodeGap * 2;
+        if (gap > targetGap) {
+          const dx = -(gap - targetGap);
+          for (const id of comp.ids) {
+            const b = boxes.get(id);
+            boxes.set(id, { id: b.id, x: b.x + dx, y: b.y, width: b.width, height: b.height });
+          }
+          comp.left += dx;
+          comp.right += dx;
+        }
+        cursor = comp.right;
+      }
+    }
+  }
+  const allBoxes = [...boxes.values()];
+  const width = allBoxes.length > 0 ? Math.max(...allBoxes.map((b) => b.x + b.width)) + margin : margin * 2;
+  const height = allBoxes.length > 0 ? Math.max(...allBoxes.map((b) => b.y + b.height)) + margin : margin * 2;
+  return { boxes, width, height, edgeBends, dummySweepXs, dummyChainIds: dummyChains };
+}
+function straightLineObstacleFree(p1, p2, obstacles, padding) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  for (const obs of obstacles) {
+    const xmin = obs.x - padding, xmax = obs.x + obs.width + padding;
+    const ymin = obs.y - padding, ymax = obs.y + obs.height + padding;
+    let tmin = 0, tmax = 1;
+    const clips = [
+      { p: -dx, q: p1.x - xmin },
+      { p: dx, q: xmax - p1.x },
+      { p: -dy, q: p1.y - ymin },
+      { p: dy, q: ymax - p1.y }
+    ];
+    let crosses = true;
+    for (const { p, q } of clips) {
+      if (Math.abs(p) < 1e-10) {
+        if (q <= 0) {
+          crosses = false;
+          break;
+        }
+      } else {
+        const t = q / p;
+        if (p < 0) tmin = Math.max(tmin, t);
+        else tmax = Math.min(tmax, t);
+        if (tmin >= tmax) {
+          crosses = false;
+          break;
+        }
+      }
+    }
+    if (crosses) return false;
+  }
+  return true;
+}
+function routeEdge(fromBox, toBox, allBoxes, yOff = 0, fromPt, toPt, forceOrthogonal = false) {
+  const fromRect = { x: fromBox.x, y: fromBox.y + yOff, width: fromBox.width, height: fromBox.height };
+  const toRect2 = { x: toBox.x, y: toBox.y + yOff, width: toBox.width, height: toBox.height };
+  const fromCx = fromRect.x + fromRect.width / 2;
+  const fromCy = fromRect.y + fromRect.height / 2;
+  const toCx = toRect2.x + toRect2.width / 2;
+  const toCy = toRect2.y + toRect2.height / 2;
+  const dx = toCx - fromCx;
+  const dy = toCy - fromCy;
+  let fromDir;
+  let toDir;
+  if (Math.abs(dy) >= Math.abs(dx)) {
+    fromDir = dy > 0 ? "S" : "N";
+    toDir = dy > 0 ? "N" : "S";
+  } else {
+    fromDir = dx > 0 ? "E" : "W";
+    toDir = dx > 0 ? "W" : "E";
+  }
+  const pa = fromPt ?? borderPoint(fromRect, toCx, toCy);
+  const pb = toPt ?? borderPoint(toRect2, fromCx, fromCy);
+  const fromId = fromBox.id;
+  const toId = toBox.id;
+  const obstacles = allBoxes.filter((b) => b.id !== fromId && b.id !== toId).map((b) => ({ x: b.x, y: b.y + yOff, width: b.width, height: b.height }));
+  if (!forceOrthogonal && (obstacles.length === 0 || straightLineObstacleFree(pa, pb, obstacles, 10))) {
+    return {
+      path: `M ${pa.x} ${pa.y} L ${pb.x} ${pb.y}`,
+      labelMidpoint: { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 }
+    };
+  }
+  const route = orthogonalRouter.route({
+    from: pa,
+    to: pb,
+    style: "orthogonal",
+    obstacles,
+    padding: 10,
+    fromDir,
+    toDir
+  });
+  const path = route.path || (forceOrthogonal ? `M ${pa.x} ${pa.y} L ${pa.x} ${pb.y} L ${pb.x} ${pb.y}` : `M ${pa.x} ${pa.y} L ${pb.x} ${pb.y}`);
+  return { path, labelMidpoint: route.labelPosition };
+}
+function segmentIntersectsBox(x1, y1, x2, y2, box) {
+  const bx1 = box.x, bx2 = box.x + box.width;
+  const by1 = box.y, by2 = box.y + box.height;
+  if (y1 === y2) {
+    const lx = Math.min(x1, x2), rx = Math.max(x1, x2);
+    return y1 > by1 && y1 < by2 && lx < bx2 && rx > bx1;
+  }
+  const ty = Math.min(y1, y2), by = Math.max(y1, y2);
+  return x1 > bx1 && x1 < bx2 && ty < by2 && by > by1;
+}
+function toRect(x1, y1, x2, y2) {
+  const W = 1;
+  return {
+    x1: Math.min(x1, x2) - W,
+    y1: Math.min(y1, y2) - W,
+    x2: Math.max(x1, x2) + W,
+    y2: Math.max(y1, y2) + W
+  };
+}
+function rectsOverlapLength(a, b) {
+  const ox = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+  const oy = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+  if (ox <= 0 || oy <= 0) return 0;
+  return Math.max(ox, oy);
+}
+var CLEARANCE = 12;
+var LANE_CLEARANCE = 48;
+function labelInBox(lx, ly, boxes, padding = 8) {
+  return boxes.some(
+    (b) => lx > b.x - padding && lx < b.x + b.width + padding && ly > b.y - padding && ly < b.y + b.height + padding
+  );
+}
+function dedup(arr, tol) {
+  const result = [];
+  for (const v of arr) {
+    if (!result.some((r) => Math.abs(r - v) < tol)) result.push(v);
+  }
+  return result;
+}
+function segmentsToPath(segs) {
+  if (segs.length === 0) return "";
+  if (segs.length === 1) {
+    return `M ${rhu(segs[0][0])} ${rhu(segs[0][1])} L ${rhu(segs[0][2])} ${rhu(segs[0][3])}`;
+  }
+  const pts = [`M ${rhu(segs[0][0])} ${rhu(segs[0][1])}`];
+  for (const [, , x2, y2] of segs) pts.push(`L ${rhu(x2)} ${rhu(y2)}`);
+  return pts.join(" ");
+}
+function classifyEdge(a, b, bends) {
+  const cxA = a.x + a.width / 2;
+  const cxB = b.x + b.width / 2;
+  const sameCol = Math.abs(cxA - cxB) < 8;
+  const isSkip = bends != null && bends.length > 0;
+  if (isSkip) return sameCol ? "skip-same-column" : "skip-cross-column";
+  return sameCol ? "direct-same-column" : "direct-cross-column";
+}
+var MIN_PORT_GAP = 32;
+var WALL_MARGIN = 16;
+function cascadePorts(ideals, lo, hi, minGap) {
+  const n = ideals.length;
+  if (n === 0) return [];
+  if (n === 1) return [Math.max(lo, Math.min(hi, ideals[0]))];
+  if ((n - 1) * minGap > hi - lo) {
+    const step = (hi - lo) / (n + 1);
+    return Array.from({ length: n }, (_, i) => lo + step * (i + 1));
+  }
+  const pos = ideals.map((v) => Math.max(lo, Math.min(hi, v)));
+  for (let iter = 0; iter < 5; iter++) {
+    let changed = false;
+    for (let i = 1; i < n; i++) {
+      const minI = pos[i - 1] + minGap;
+      if (pos[i] < minI) {
+        pos[i] = minI;
+        changed = true;
+      }
+    }
+    for (let i = n - 1; i >= 0; i--) {
+      const maxI = i === n - 1 ? hi : pos[i + 1] - minGap;
+      if (pos[i] > maxI) {
+        pos[i] = maxI;
+        changed = true;
+      }
+    }
+    if (pos[0] < lo) {
+      pos[0] = lo;
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return pos;
+}
+function assignGroupPorts(box, wall, group, yOff) {
+  const result = /* @__PURE__ */ new Map();
+  if (group.length === 0) return result;
+  const sorted = [...group].sort((a, b) => a.sourceCenter - b.sourceCenter);
+  let wallBase, wallLen, fixedCoord, isHorizontal;
+  switch (wall) {
+    case "top":
+      wallBase = box.x;
+      wallLen = box.width;
+      fixedCoord = box.y + yOff;
+      isHorizontal = true;
+      break;
+    case "bottom":
+      wallBase = box.x;
+      wallLen = box.width;
+      fixedCoord = box.y + yOff + box.height;
+      isHorizontal = true;
+      break;
+    case "left":
+      wallBase = box.y + yOff;
+      wallLen = box.height;
+      fixedCoord = box.x;
+      isHorizontal = false;
+      break;
+    default:
+      wallBase = box.y + yOff;
+      wallLen = box.height;
+      fixedCoord = box.x + box.width;
+      isHorizontal = false;
+      break;
+  }
+  const lo = wallBase + WALL_MARGIN;
+  const hi = wallBase + wallLen - WALL_MARGIN;
+  const ideals = sorted.map((e) => Math.max(lo, Math.min(hi, e.sourceCenter)));
+  const positions = cascadePorts(ideals, lo, hi, MIN_PORT_GAP);
+  for (let i = 0; i < sorted.length; i++) {
+    const p = positions[i];
+    result.set(sorted[i].ri, isHorizontal ? { x: p, y: fixedCoord } : { x: fixedCoord, y: p });
+  }
+  return result;
+}
 function layoutClass(ir, theme) {
   const { palette, typography, spacing } = theme;
   const p = pen(theme);
@@ -23503,8 +25813,9 @@ function layoutClass(ir, theme) {
   const lineH = rhuInt(memFont * 1.6);
   const headH = rhuInt(nameFont * 1.6);
   const sizeOf = (c) => {
-    const texts = [c.name, ...c.stereotype ? [`\xAB${c.stereotype}\xBB`] : [], ...c.attributes.map((m) => m.text), ...c.methods.map((m) => m.text)];
-    const w = Math.max(130, ...texts.map((t) => measureText(t, memFont).width + 24));
+    const memberTexts = [...c.stereotype ? [`\xAB${c.stereotype}\xBB`] : [], ...c.attributes.map((m) => m.text), ...c.methods.map((m) => m.text)];
+    const nameW = measureText(c.name, nameFont).width + 24;
+    const w = Math.max(130, nameW, ...memberTexts.map((t) => measureText(t, memFont).width + 24));
     const stereoH = c.stereotype ? memFont + 4 : 0;
     const attrH = c.attributes.length * lineH + 8;
     const methH = c.methods.length * lineH + 8;
@@ -23514,33 +25825,562 @@ function layoutClass(ir, theme) {
   const sizes = new Map(ir.classes.map((c) => [c.name, sizeOf(c)]));
   const nodes = ir.classes.map((c) => ({ id: c.name, width: sizes.get(c.name).w, height: sizes.get(c.name).h }));
   const edges2 = ir.relations.map((r) => r.leftHead === "triangle" ? { from: r.right, to: r.left } : { from: r.left, to: r.right });
-  const laid = layeredLayout(nodes, edges2, { direction: "TB", layerGap: 64, nodeGap: 46, margin });
+  const LAYER_GAP = 64;
+  const laid = layeredLayout(nodes, edges2, { direction: "TB", layerGap: LAYER_GAP, nodeGap: 46, margin });
+  const canvasWidth = laid.width + margin * 2;
+  const allRealBoxes = [...laid.boxes.values()];
+  const routedSegments = [];
+  const realColumnXs = [...new Set(
+    allRealBoxes.map((b) => b.x + b.width / 2)
+  )].sort((a, b) => a - b);
+  const interColMidpoints = [];
+  for (let ci = 0; ci < realColumnXs.length - 1; ci++) {
+    interColMidpoints.push((realColumnXs[ci] + realColumnXs[ci + 1]) / 2);
+  }
+  function scoreLane(laneX, segments, interBoxes, routed, canvasW, realMinX, wallPairPenalty = 0, sameWallBonus = 0, straightBonus = 0, labelMid = null) {
+    if (laneX > canvasW) return Infinity;
+    let pathLength = 0;
+    let segCount = segments.length;
+    let boxHits = 0;
+    let overlapHits = 0;
+    for (const [x1, y1, x2, y2] of segments) {
+      const dx = x2 - x1, dy = y2 - y1;
+      pathLength += Math.sqrt(dx * dx + dy * dy);
+      for (const nb of interBoxes) {
+        if (segmentIntersectsBox(x1, y1, x2, y2, nb)) boxHits++;
+      }
+      const segRect = toRect(x1, y1, x2, y2);
+      for (const rs of routed) {
+        if (rectsOverlapLength(segRect, rs) >= 10) overlapHits++;
+      }
+    }
+    const dirPenalty = laneX <= realMinX - CLEARANCE ? 0 : 5;
+    const expansionPenalty = laneX < realMinX ? (realMinX - laneX) * 0.05 : 0;
+    const labelPenalty = labelMid != null && labelInBox(labelMid.x, labelMid.y, allRealBoxes) ? 200 : 0;
+    return 0.3 * pathLength + 10 * segCount + 1e3 * boxHits + 50 * overlapHits + dirPenalty + expansionPenalty + wallPairPenalty - sameWallBonus - // bonus for same-wall same-column routing (B/C)
+    straightBonus + // reward for single-segment straight vertical
+    labelPenalty;
+  }
   const title = ir.metadata.title;
   const titleH = title ? typography.titleFontSize + 14 : 0;
   const yOff = titleH;
   const elements = [];
   if (title) elements.push(p.text(title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
-  for (const r of ir.relations) {
-    const a = laid.boxes.get(r.left), b = laid.boxes.get(r.right);
+  const allBoxes = [...laid.boxes.values()];
+  const approachWall = (from, to) => {
+    if (from.y + from.height <= to.y) return "top";
+    if (to.y + to.height <= from.y) return "bottom";
+    const dx = to.x + to.width / 2 - (from.x + from.width / 2);
+    const dy = to.y + to.height / 2 - (from.y + from.height / 2);
+    if (Math.abs(dy) >= Math.abs(dx)) return dy >= 0 ? "top" : "bottom";
+    return dx >= 0 ? "left" : "right";
+  };
+  const wallPoint2 = (box, wall, t, yOff_) => {
+    const bx = box.x, by = box.y + yOff_, bw = box.width, bh = box.height;
+    switch (wall) {
+      case "top":
+        return { x: bx + t * bw, y: by };
+      case "bottom":
+        return { x: bx + t * bw, y: by + bh };
+      case "left":
+        return { x: bx, y: by + t * bh };
+      case "right":
+        return { x: bx + bw, y: by + t * bh };
+    }
+  };
+  const toGroupAccum = /* @__PURE__ */ new Map();
+  for (let ri = 0; ri < ir.relations.length; ri++) {
+    const r = ir.relations[ri];
+    const isFlipped = r.leftHead === "triangle";
+    const a = laid.boxes.get(isFlipped ? r.right : r.left), b = laid.boxes.get(isFlipped ? r.left : r.right);
     if (!a || !b) continue;
-    const ac = { x: a.x + a.width / 2, y: a.y + a.height / 2 + yOff };
-    const bc = { x: b.x + b.width / 2, y: b.y + b.height / 2 + yOff };
-    const pa = borderPoint({ ...a, y: a.y + yOff }, bc.x, bc.y);
-    const pb = borderPoint({ ...b, y: b.y + yOff }, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.textMuted, 1.3, r.dashed ? { dash: "6 4" } : {}));
-    elements.push(...endMarker(p, pa, bc, r.leftHead, palette));
-    elements.push(...endMarker(p, pb, ac, r.rightHead, palette));
-    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
-    if (r.label) elements.push(p.text(r.label, rhuInt(mx), rhuInt(my - 4), memFont, palette.textMuted, { anchor: "middle" }));
-    if (r.leftCard) elements.push(p.text(r.leftCard, rhu(pa.x + 6), rhu(pa.y - 4), memFont, palette.textMuted));
-    if (r.rightCard) elements.push(p.text(r.rightCard, rhu(pb.x + 6), rhu(pb.y - 4), memFont, palette.textMuted));
+    const wall = approachWall(a, b);
+    const key = `${b.id}:${wall}`;
+    const bends = laid.edgeBends.get(ri);
+    const sourceCenter = wall === "top" || wall === "bottom" ? bends && bends.length > 0 ? bends[0].x : a.x + a.width / 2 : a.y + a.height / 2 + yOff;
+    if (!toGroupAccum.has(key)) toGroupAccum.set(key, []);
+    toGroupAccum.get(key).push({ ri, sourceCenter });
+  }
+  const toPortMap2 = /* @__PURE__ */ new Map();
+  for (const [key, group] of toGroupAccum) {
+    const nodeId = key.split(":")[0];
+    const wall = key.split(":")[1];
+    toPortMap2.set(key, assignGroupPorts(laid.boxes.get(nodeId), wall, group, yOff));
+  }
+  const fromGroupAccum = /* @__PURE__ */ new Map();
+  for (let ri = 0; ri < ir.relations.length; ri++) {
+    const r = ir.relations[ri];
+    const isFlipped = r.leftHead === "triangle";
+    const a = laid.boxes.get(isFlipped ? r.right : r.left), b = laid.boxes.get(isFlipped ? r.left : r.right);
+    if (!a || !b) continue;
+    const wall = approachWall(b, a);
+    const key = `${a.id}:${wall}`;
+    const bends = laid.edgeBends.get(ri);
+    const targetCenter = wall === "top" || wall === "bottom" ? bends && bends.length > 0 ? bends[0].x : b.x + b.width / 2 : b.y + b.height / 2 + yOff;
+    if (!fromGroupAccum.has(key)) fromGroupAccum.set(key, []);
+    fromGroupAccum.get(key).push({ ri, sourceCenter: targetCenter });
+  }
+  const fromPortMap2 = /* @__PURE__ */ new Map();
+  for (const [key, group] of fromGroupAccum) {
+    const nodeId = key.split(":")[0];
+    const wall = key.split(":")[1];
+    fromPortMap2.set(key, assignGroupPorts(laid.boxes.get(nodeId), wall, group, yOff));
+  }
+  const wallDir = (wall, pt) => {
+    switch (wall) {
+      case "top":
+        return { x: pt.x, y: pt.y - 1 };
+      case "bottom":
+        return { x: pt.x, y: pt.y + 1 };
+      case "left":
+        return { x: pt.x - 1, y: pt.y };
+      case "right":
+        return { x: pt.x + 1, y: pt.y };
+    }
+  };
+  const edgeEntries = [];
+  for (let ri_ = 0; ri_ < ir.relations.length; ri_++) {
+    const r_ = ir.relations[ri_];
+    const isFlipped_ = r_.leftHead === "triangle";
+    const a_ = laid.boxes.get(isFlipped_ ? r_.right : r_.left), b_ = laid.boxes.get(isFlipped_ ? r_.left : r_.right);
+    if (!a_ || !b_) continue;
+    const bends_ = laid.edgeBends.get(ri_);
+    const cls_ = classifyEdge(a_, b_, bends_);
+    const span_ = Math.abs(a_.x + a_.width / 2 - (b_.x + b_.width / 2)) + Math.abs(a_.y + a_.height / 2 - (b_.y + b_.height / 2));
+    edgeEntries.push({ ri: ri_, cls: cls_, span: span_ });
+  }
+  const classOrder = {
+    "skip-cross-column": 0,
+    "skip-same-column": 1,
+    "direct-cross-column": 2,
+    "direct-same-column": 3
+  };
+  edgeEntries.sort(
+    (ea, eb) => classOrder[ea.cls] - classOrder[eb.cls] || eb.span - ea.span
+  );
+  for (const { ri, cls } of edgeEntries) {
+    const r = ir.relations[ri];
+    const isFlipped = r.leftHead === "triangle";
+    const a = laid.boxes.get(isFlipped ? r.right : r.left), b = laid.boxes.get(isFlipped ? r.left : r.right);
+    if (!a || !b) continue;
+    const toWall = approachWall(a, b);
+    const toPt = toPortMap2.get(`${b.id}:${toWall}`)?.get(ri) ?? wallPoint2(b, toWall, 0.5, yOff);
+    const fromWall = approachWall(b, a);
+    const fromPt = fromPortMap2.get(`${a.id}:${fromWall}`)?.get(ri) ?? borderPoint({ ...a, y: a.y + yOff }, toPt.x, toPt.y);
+    const bends = laid.edgeBends.get(ri);
+    let safePath;
+    let labelMid;
+    let skipEdgeLateralStrategy = false;
+    let effectiveFromPt = fromPt;
+    let effectiveFromWall = fromWall;
+    let effectiveToPt = toPt;
+    let effectiveToWall = toWall;
+    if (bends && bends.length > 0) {
+      let buildSegmentsA = function(laneX) {
+        const fx = fromPt.x, fy = fromPt.y;
+        const tx = toPt.x, ty = toPt.y;
+        if (Math.abs(laneX - fx) < 1 && Math.abs(laneX - tx) < 1) {
+          return [[fx, fy, tx, ty]];
+        }
+        return [
+          [fx, fy, fx, exitY],
+          [fx, exitY, laneX, exitY],
+          [laneX, exitY, laneX, entryY],
+          [laneX, entryY, tx, entryY],
+          [tx, entryY, tx, ty]
+        ];
+      }, buildSegmentsB = function(laneX) {
+        return [
+          [srcLeft_, srcMidY_, laneX, srcMidY_],
+          [laneX, srcMidY_, laneX, tgtMidY_],
+          [laneX, tgtMidY_, tgtLeft_, tgtMidY_]
+        ];
+      }, buildSegmentsC = function(laneX) {
+        return [
+          [srcRight_, srcMidY_, laneX, srcMidY_],
+          [laneX, srcMidY_, laneX, tgtMidY_],
+          [laneX, tgtMidY_, tgtRight_, tgtMidY_]
+        ];
+      }, buildSegmentsD = function(laneX) {
+        return [
+          [srcLeft_, srcMidY_, laneX, srcMidY_],
+          [laneX, srcMidY_, laneX, entryY],
+          [laneX, entryY, toPt.x, entryY],
+          [toPt.x, entryY, toPt.x, toPt.y]
+        ];
+      }, buildSegmentsE = function(laneX) {
+        return [
+          [srcRight_, srcMidY_, laneX, srcMidY_],
+          [laneX, srcMidY_, laneX, entryY],
+          [laneX, entryY, toPt.x, entryY],
+          [toPt.x, entryY, toPt.x, toPt.y]
+        ];
+      }, buildSegmentsF = function(laneX) {
+        return [
+          [fromPt.x, fromPt.y, fromPt.x, exitY],
+          [fromPt.x, exitY, laneX, exitY],
+          [laneX, exitY, laneX, tgtMidY_],
+          [laneX, tgtMidY_, tgtLeft_, tgtMidY_]
+        ];
+      };
+      const srcLayerY = a.y;
+      const tgtLayerY = b.y;
+      const minY = Math.min(srcLayerY, tgtLayerY);
+      const maxY = Math.max(srcLayerY, tgtLayerY);
+      const interBoxes = allRealBoxes.filter((nb) => {
+        const cy = nb.y + nb.height / 2;
+        return cy > minY && cy < maxY;
+      });
+      const firstDummyId = laid.dummyChainIds.get(ri)?.[0] ?? null;
+      const sweepCandidates = firstDummyId ? laid.dummySweepXs.get(firstDummyId) ?? [] : [];
+      const rightMarginX = Math.max(...allRealBoxes.map((b2) => b2.x + b2.width)) + CLEARANCE;
+      const sourceX = fromPt.x;
+      const realMinX = Math.min(...allRealBoxes.map((b2) => b2.x));
+      const exitY = bends[0].y + yOff;
+      const entryY = toPt.y - LAYER_GAP / 2;
+      const blockingAtExit = interBoxes.filter((b2) => exitY > b2.y && exitY < b2.y + b2.height);
+      const blockingAtEntry = interBoxes.filter((b2) => entryY > b2.y && entryY < b2.y + b2.height);
+      const allBlocking = [...blockingAtExit, ...blockingAtEntry];
+      const adaptiveLeftX = allBlocking.length > 0 ? Math.min(...allBlocking.map((b2) => b2.x)) - CLEARANCE : realMinX - CLEARANCE;
+      const candidates_A = [
+        ...sweepCandidates,
+        adaptiveLeftX,
+        rightMarginX,
+        sourceX,
+        ...interColMidpoints
+      ];
+      const srcMidY_ = a.y + a.height / 2 + yOff;
+      const tgtMidY_ = b.y + b.height / 2 + yOff;
+      const srcLeft_ = a.x;
+      const srcRight_ = a.x + a.width;
+      const tgtLeft_ = b.x;
+      const tgtRight_ = b.x + b.width;
+      const interBoxesExt = allRealBoxes.filter((nb) => {
+        const cy = nb.y + nb.height / 2;
+        return cy > a.y && cy < b.y + b.height && nb.id !== a.id && nb.id !== b.id;
+      });
+      const blockingBD = allRealBoxes.filter((nb) => {
+        const ny = nb.y, nh = nb.height;
+        return srcMidY_ > ny && srcMidY_ < ny + nh || tgtMidY_ > ny && tgtMidY_ < ny + nh;
+      });
+      const adaptiveLeftX_BD = blockingBD.length > 0 ? Math.min(...blockingBD.map((nb) => nb.x)) - LANE_CLEARANCE : realMinX - LANE_CLEARANCE;
+      const adaptiveRightX_CE = blockingBD.length > 0 ? Math.max(...blockingBD.map((nb) => nb.x + nb.width)) + LANE_CLEARANCE : rightMarginX;
+      const blockingF = allRealBoxes.filter((nb) => {
+        return exitY > nb.y && exitY < nb.y + nb.height || tgtMidY_ > nb.y && tgtMidY_ < nb.y + nb.height;
+      });
+      const adaptiveLeftX_F = blockingF.length > 0 ? Math.min(...blockingF.map((nb) => nb.x)) - LANE_CLEARANCE : realMinX - LANE_CLEARANCE;
+      const allCandidates = [];
+      for (const laneX of candidates_A) {
+        allCandidates.push({
+          strategy: "A",
+          laneX,
+          isMixed: false,
+          segments: buildSegmentsA(laneX),
+          labelMid: { x: laneX, y: (exitY + entryY) / 2 }
+        });
+      }
+      const minAllowedLaneX = Math.min(srcLeft_, tgtLeft_) - LANE_CLEARANCE;
+      const laneXsB = [
+        adaptiveLeftX_BD,
+        // LANE_CLEARANCE from nearest box
+        realMinX - LANE_CLEARANCE * 1.5,
+        realMinX - LANE_CLEARANCE * 2,
+        realMinX - LANE_CLEARANCE * 3,
+        ...sweepCandidates
+      ].filter((x) => x <= minAllowedLaneX);
+      for (const laneX of laneXsB) {
+        allCandidates.push({
+          strategy: "B",
+          laneX,
+          isMixed: false,
+          segments: buildSegmentsB(laneX),
+          labelMid: { x: laneX, y: (srcMidY_ + tgtMidY_) / 2 }
+        });
+      }
+      const laneXsC = [
+        adaptiveRightX_CE,
+        rightMarginX,
+        rightMarginX + LANE_CLEARANCE * 0.5,
+        rightMarginX + LANE_CLEARANCE,
+        ...sweepCandidates
+      ].filter((x) => x > Math.max(srcRight_, tgtRight_));
+      for (const laneX of laneXsC) {
+        allCandidates.push({
+          strategy: "C",
+          laneX,
+          isMixed: false,
+          segments: buildSegmentsC(laneX),
+          labelMid: { x: laneX, y: (srcMidY_ + tgtMidY_) / 2 }
+        });
+      }
+      const laneXsD = [adaptiveLeftX_BD, realMinX - CLEARANCE, ...sweepCandidates].filter((x) => x < srcLeft_);
+      for (const laneX of laneXsD) {
+        allCandidates.push({
+          strategy: "D",
+          laneX,
+          isMixed: true,
+          segments: buildSegmentsD(laneX),
+          labelMid: { x: laneX, y: (srcMidY_ + entryY) / 2 }
+        });
+      }
+      const laneXsE = [adaptiveRightX_CE, rightMarginX, ...sweepCandidates].filter((x) => x > srcRight_);
+      for (const laneX of laneXsE) {
+        allCandidates.push({
+          strategy: "E",
+          laneX,
+          isMixed: true,
+          segments: buildSegmentsE(laneX),
+          labelMid: { x: laneX, y: (srcMidY_ + entryY) / 2 }
+        });
+      }
+      const laneXsF = [adaptiveLeftX_F, realMinX - CLEARANCE, ...sweepCandidates].filter((x) => x < tgtLeft_);
+      for (const laneX of laneXsF) {
+        allCandidates.push({
+          strategy: "F",
+          laneX,
+          isMixed: true,
+          segments: buildSegmentsF(laneX),
+          labelMid: { x: laneX, y: (exitY + tgtMidY_) / 2 }
+        });
+      }
+      let bestScore = Infinity;
+      let bestCandidate = allCandidates[0] ?? {
+        strategy: "A",
+        laneX: bends[0].x,
+        isMixed: false,
+        segments: buildSegmentsA(bends[0].x),
+        labelMid: { x: bends[0].x, y: (exitY + entryY) / 2 }
+      };
+      for (const c of allCandidates) {
+        const sameWallBonus = c.strategy === "B" || c.strategy === "C" ? 30 : 0;
+        const score = scoreLane(
+          c.laneX,
+          c.segments,
+          interBoxesExt,
+          routedSegments,
+          canvasWidth,
+          realMinX,
+          c.isMixed ? 2 : 0,
+          sameWallBonus,
+          0,
+          c.labelMid
+        );
+        if (score < bestScore) {
+          bestScore = score;
+          bestCandidate = c;
+        }
+      }
+      for (const [x1, y1, x2, y2] of bestCandidate.segments) {
+        routedSegments.push(toRect(x1, y1, x2, y2));
+      }
+      skipEdgeLateralStrategy = bestCandidate.strategy === "B" || bestCandidate.strategy === "C";
+      switch (bestCandidate.strategy) {
+        case "B":
+          effectiveFromPt = { x: srcLeft_, y: srcMidY_ };
+          effectiveFromWall = "left";
+          effectiveToPt = { x: tgtLeft_, y: tgtMidY_ };
+          effectiveToWall = "left";
+          break;
+        case "C":
+          effectiveFromPt = { x: srcRight_, y: srcMidY_ };
+          effectiveFromWall = "right";
+          effectiveToPt = { x: tgtRight_, y: tgtMidY_ };
+          effectiveToWall = "right";
+          break;
+        case "D":
+          effectiveFromPt = { x: srcLeft_, y: srcMidY_ };
+          effectiveFromWall = "left";
+          break;
+        case "E":
+          effectiveFromPt = { x: srcRight_, y: srcMidY_ };
+          effectiveFromWall = "right";
+          break;
+        case "F":
+          effectiveToPt = { x: tgtLeft_, y: tgtMidY_ };
+          effectiveToWall = "left";
+          break;
+      }
+      const segs = bestCandidate.segments;
+      if (segs.length === 1) {
+        safePath = `M ${rhu(segs[0][0])} ${rhu(segs[0][1])} L ${rhu(segs[0][2])} ${rhu(segs[0][3])}`;
+      } else {
+        const pts = [`M ${rhu(segs[0][0])} ${rhu(segs[0][1])}`];
+        for (const [, , x2, y2] of segs) {
+          pts.push(`L ${rhu(x2)} ${rhu(y2)}`);
+        }
+        safePath = pts.join(" ");
+      }
+      labelMid = bestCandidate.labelMid;
+      elements.push(p.path(safePath, palette.textMuted, 1.3, r.dashed ? { dash: "6 4" } : {}));
+      const headFrom = isFlipped ? r.rightHead : r.leftHead;
+      const headTo = isFlipped ? r.leftHead : r.rightHead;
+      elements.push(...endMarker(p, effectiveFromPt, wallDir(effectiveFromWall, effectiveFromPt), headFrom, palette));
+      elements.push(...endMarker(p, effectiveToPt, wallDir(effectiveToWall, effectiveToPt), headTo, palette));
+    } else {
+      const fx = fromPt.x, fy = fromPt.y, tx = toPt.x, ty = toPt.y;
+      const realMinX_d = Math.min(...allRealBoxes.map((nb) => nb.x));
+      const rightMarginX_d = Math.max(...allRealBoxes.map((nb) => nb.x + nb.width)) + CLEARANCE;
+      const interBoxesDirect = allRealBoxes.filter((nb) => nb.id !== a.id && nb.id !== b.id);
+      const directCandidates = [];
+      if (cls === "direct-same-column") {
+        directCandidates.push({
+          strategy: "V",
+          laneX: fx,
+          isMixed: false,
+          segments: [[fx, fy, tx, ty]],
+          labelMid: { x: fx, y: (fy + ty) / 2 }
+        });
+        const srcMidY_d = a.y + a.height / 2 + yOff;
+        const tgtMidY_d = b.y + b.height / 2 + yOff;
+        const srcLeft_d = a.x;
+        const srcRight_d = a.x + a.width;
+        const tgtLeft_d = b.x;
+        const tgtRight_d = b.x + b.width;
+        const blockingBD_d = allRealBoxes.filter((nb) => {
+          const ny = nb.y, nh = nb.height;
+          return srcMidY_d > ny && srcMidY_d < ny + nh || tgtMidY_d > ny && tgtMidY_d < ny + nh;
+        });
+        const adaptiveLeftX_BD_d = blockingBD_d.length > 0 ? Math.min(...blockingBD_d.map((nb) => nb.x)) - LANE_CLEARANCE : realMinX_d - LANE_CLEARANCE;
+        const adaptiveRightX_CE_d = blockingBD_d.length > 0 ? Math.max(...blockingBD_d.map((nb) => nb.x + nb.width)) + LANE_CLEARANCE : rightMarginX_d;
+        if (adaptiveLeftX_BD_d < srcLeft_d) {
+          directCandidates.push({
+            strategy: "B",
+            laneX: adaptiveLeftX_BD_d,
+            isMixed: false,
+            segments: [
+              [srcLeft_d, srcMidY_d, adaptiveLeftX_BD_d, srcMidY_d],
+              [adaptiveLeftX_BD_d, srcMidY_d, adaptiveLeftX_BD_d, tgtMidY_d],
+              [adaptiveLeftX_BD_d, tgtMidY_d, tgtLeft_d, tgtMidY_d]
+            ],
+            labelMid: { x: adaptiveLeftX_BD_d, y: (srcMidY_d + tgtMidY_d) / 2 }
+          });
+        }
+        if (adaptiveRightX_CE_d > srcRight_d) {
+          directCandidates.push({
+            strategy: "C",
+            laneX: adaptiveRightX_CE_d,
+            isMixed: false,
+            segments: [
+              [srcRight_d, srcMidY_d, adaptiveRightX_CE_d, srcMidY_d],
+              [adaptiveRightX_CE_d, srcMidY_d, adaptiveRightX_CE_d, tgtMidY_d],
+              [adaptiveRightX_CE_d, tgtMidY_d, tgtRight_d, tgtMidY_d]
+            ],
+            labelMid: { x: adaptiveRightX_CE_d, y: (srcMidY_d + tgtMidY_d) / 2 }
+          });
+        }
+      } else {
+        const midYRaw = [
+          (fy + ty) / 2,
+          fy + LAYER_GAP / 2,
+          ty - LAYER_GAP / 2
+        ];
+        for (const midY of dedup(midYRaw, 2)) {
+          const segsX1 = Math.abs(fx - tx) < 1 ? [[fx, fy, tx, ty]] : [[fx, fy, fx, midY], [fx, midY, tx, midY], [tx, midY, tx, ty]];
+          directCandidates.push({
+            strategy: "X1",
+            laneX: (fx + tx) / 2,
+            isMixed: false,
+            segments: segsX1,
+            labelMid: { x: (fx + tx) / 2, y: midY }
+          });
+        }
+        const midXRaw = [
+          ...interColMidpoints.filter((x) => x > Math.min(fx, tx) && x < Math.max(fx, tx)),
+          realMinX_d - CLEARANCE,
+          rightMarginX_d
+        ];
+        for (const midX of dedup(midXRaw, 2)) {
+          const segsX2 = Math.abs(fy - ty) < 1 ? [[fx, fy, tx, ty]] : [[fx, fy, midX, fy], [midX, fy, midX, ty], [midX, ty, tx, ty]];
+          directCandidates.push({
+            strategy: "X2",
+            laneX: midX,
+            isMixed: false,
+            segments: segsX2,
+            labelMid: { x: midX, y: (fy + ty) / 2 }
+          });
+        }
+      }
+      let bestScoreDirect = Infinity;
+      let bestDirect = directCandidates[0] ?? null;
+      for (const c of directCandidates) {
+        const straightBns = c.strategy === "V" ? 40 : 0;
+        const boxesForScoring = c.strategy === "X1" || c.strategy === "X2" ? allRealBoxes : interBoxesDirect;
+        const score = scoreLane(
+          c.laneX,
+          c.segments,
+          boxesForScoring,
+          routedSegments,
+          canvasWidth,
+          realMinX_d,
+          c.isMixed ? 2 : 0,
+          0,
+          straightBns,
+          c.labelMid
+        );
+        if (score < bestScoreDirect) {
+          bestScoreDirect = score;
+          bestDirect = c;
+        }
+      }
+      if (bestScoreDirect === Infinity || bestDirect == null || cls === "direct-same-column") {
+        const routed = routeEdge(a, b, allBoxes, yOff, fromPt, toPt, true);
+        safePath = routed.path || `M ${fromPt.x} ${fromPt.y} L ${toPt.x} ${toPt.y}`;
+        labelMid = routed.labelMidpoint;
+        routedSegments.push(toRect(fromPt.x, fromPt.y, toPt.x, toPt.y));
+      } else {
+        for (const [x1, y1, x2, y2] of bestDirect.segments) {
+          routedSegments.push(toRect(x1, y1, x2, y2));
+        }
+        safePath = segmentsToPath(bestDirect.segments);
+        labelMid = bestDirect.labelMid;
+      }
+      elements.push(p.path(safePath, palette.textMuted, 1.3, r.dashed ? { dash: "6 4" } : {}));
+      elements.push(...endMarker(p, effectiveFromPt, wallDir(effectiveFromWall, effectiveFromPt), isFlipped ? r.rightHead : r.leftHead, palette));
+      elements.push(...endMarker(p, effectiveToPt, wallDir(effectiveToWall, effectiveToPt), isFlipped ? r.leftHead : r.rightHead, palette));
+    }
+    const mx = labelMid.x, my = labelMid.y;
+    if (r.label) {
+      let labelX, labelAnchor2;
+      if (skipEdgeLateralStrategy && labelMid.x < Math.min(...allRealBoxes.map((b2) => b2.x))) {
+        labelX = mx - 4;
+        labelAnchor2 = "end";
+      } else if (skipEdgeLateralStrategy) {
+        labelX = mx + 8;
+        labelAnchor2 = "start";
+      } else {
+        labelX = mx;
+        labelAnchor2 = "middle";
+      }
+      elements.push(p.text(r.label, rhuInt(labelX), rhuInt(my - 4), memFont, palette.textMuted, { anchor: labelAnchor2 }));
+    }
+    const cardOffset = (wall, pt) => {
+      switch (wall) {
+        case "top":
+          return { cx: pt.x + 10, cy: pt.y - 10 };
+        case "bottom":
+          return { cx: pt.x + 10, cy: pt.y + 10 };
+        case "left":
+          return { cx: pt.x - 10, cy: pt.y - 10 };
+        default:
+          return { cx: pt.x + 10, cy: pt.y - 10 };
+      }
+    };
+    if (r.leftCard) {
+      const o = cardOffset(isFlipped ? effectiveToWall : effectiveFromWall, isFlipped ? effectiveToPt : effectiveFromPt);
+      elements.push(p.text(r.leftCard, rhu(o.cx), rhu(o.cy), memFont, palette.textMuted));
+    }
+    if (r.rightCard) {
+      const o = cardOffset(isFlipped ? effectiveFromWall : effectiveToWall, isFlipped ? effectiveFromPt : effectiveToPt);
+      elements.push(p.text(r.rightCard, rhu(o.cx), rhu(o.cy), memFont, palette.textMuted));
+    }
   }
   for (const c of ir.classes) {
     const box = laid.boxes.get(c.name);
     const s = sizes.get(c.name);
     const x = box.x, y = box.y + yOff;
     elements.push(p.rect({ x: rhu(x), y: rhu(y), width: rhu(s.w), height: rhu(s.h) }, palette.surface, palette.border, 1.4, { rx: 4 }));
-    let ty = y + nameFont + 6;
+    const headerMidY = y + headH / 2;
+    let ty = headerMidY + nameFont * 0.35;
     elements.push(p.text(c.name, rhuInt(x + s.w / 2), rhu(ty), nameFont, palette.text, { weight: "bold", anchor: "middle" }));
     if (c.stereotype) {
       ty += memFont + 2;
@@ -23563,8 +26403,11 @@ function layoutClass(ir, theme) {
   }
   const totalW = rhuInt(laid.width + margin);
   const totalH = rhuInt(laid.height + yOff + margin);
+  const LABEL_EXTRA = 48;
+  const routingMinX = Math.min(0, ...routedSegments.map((s) => s.x1));
+  const leftOvershoot = routingMinX < margin ? Math.ceil(margin - routingMinX) + LABEL_EXTRA : 0;
   const scene = applyOverlays({
-    viewBox: { x: 0, y: 0, width: totalW, height: totalH },
+    viewBox: { x: -leftOvershoot, y: 0, width: totalW + leftOvershoot, height: totalH },
     background: palette.background,
     elements
   }, ir.overlays, theme);
@@ -25184,7 +28027,7 @@ var classDiagram = {
     return layoutClass(ir, theme);
   }
 };
-var ARROW_ID3 = "state-arrow";
+var ARROW_ID4 = "state-arrow";
 function layoutState(ir, theme) {
   const { palette, typography, spacing } = theme;
   const p = pen(theme);
@@ -25208,13 +28051,31 @@ function layoutState(ir, theme) {
   const containerRect = /* @__PURE__ */ new Map();
   const hidden = /* @__PURE__ */ new Set();
   for (const comp of composites) {
+    const memberIdSet = new Set(comp.nodeIds);
     const rects = comp.nodeIds.map((id) => laid.boxes.get(id)).filter((r) => !!r);
     if (rects.length === 0) continue;
-    const pad = 22;
-    const minX = Math.min(...rects.map((r) => r.x)) - pad;
-    const minY = Math.min(...rects.map((r) => r.y)) - pad - 14 + yOff;
-    const maxX = Math.max(...rects.map((r) => r.x + r.width)) + pad;
-    const maxY = Math.max(...rects.map((r) => r.y + r.height)) + pad + yOff;
+    const pad = 16;
+    let minX = Math.min(...rects.map((r) => r.x)) - pad;
+    let minY = Math.min(...rects.map((r) => r.y)) - pad - 14 + yOff;
+    let maxX = Math.max(...rects.map((r) => r.x + r.width)) + pad;
+    let maxY = Math.max(...rects.map((r) => r.y + r.height)) + pad + yOff;
+    for (const [id, box] of laid.boxes) {
+      if (memberIdSet.has(id) || hidden.has(id)) continue;
+      const nmMinY = box.y;
+      const nmMaxY = box.y + box.height;
+      const rawMinY = Math.min(...rects.map((r) => r.y)) - pad;
+      const rawMaxY = Math.max(...rects.map((r) => r.y + r.height)) + pad;
+      if (nmMaxY <= rawMinY || nmMinY >= rawMaxY) continue;
+      const nmLeft = box.x, nmRight = box.x + box.width;
+      const memberCentreX = (Math.min(...rects.map((r) => r.x)) + Math.max(...rects.map((r) => r.x + r.width))) / 2;
+      if (nmLeft < maxX && nmRight > minX) {
+        if (nmRight <= memberCentreX) {
+          minX = Math.max(minX, nmRight + 4);
+        } else {
+          maxX = Math.min(maxX, nmLeft - 4);
+        }
+      }
+    }
     const rect = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     containerRect.set(comp.id, rect);
     hidden.add(comp.id);
@@ -25227,6 +28088,7 @@ function layoutState(ir, theme) {
     const b = laid.boxes.get(id);
     return b ? { x: b.x, y: b.y + yOff, width: b.width, height: b.height } : void 0;
   };
+  const allBoxes = [...laid.boxes.values()];
   for (const t of ir.transitions) {
     const a = rectFor(t.from), b = rectFor(t.to);
     if (!a || !b) continue;
@@ -25234,9 +28096,28 @@ function layoutState(ir, theme) {
     const bc = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     const pa = borderPoint(a, bc.x, bc.y);
     const pb = borderPoint(b, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.textMuted, 1.4, { markerEnd: ARROW_ID3 }));
+    const fromBox = laid.boxes.get(t.from), toBox = laid.boxes.get(t.to);
+    let edgePath;
+    if (fromBox && toBox) {
+      ({ path: edgePath } = routeEdge(fromBox, toBox, allBoxes, yOff));
+    } else {
+      edgePath = `M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`;
+    }
+    elements.push(p.path(edgePath, palette.textMuted, 1.4, { markerEnd: ARROW_ID4 }));
     if (t.label) {
-      const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+      let mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+      for (const [compId, cr] of containerRect) {
+        const comp = composites.find((c) => c.id === compId);
+        if (!comp) continue;
+        const fromInside = comp.nodeIds.includes(t.from);
+        const toInside = comp.nodeIds.includes(t.to);
+        if (fromInside && toInside) continue;
+        if (!fromInside && !toInside) continue;
+        if (mx > cr.x && mx < cr.x + cr.width && my > cr.y && my < cr.y + cr.height) {
+          my = cr.y - typography.smallFontSize - 4;
+          break;
+        }
+      }
       const w = measureText(t.label, typography.smallFontSize).width + 8;
       elements.push(p.rect({ x: rhu(mx - w / 2), y: rhu(my - typography.smallFontSize), width: rhu(w), height: typography.smallFontSize + 4 }, palette.background, palette.background, 0));
       elements.push(p.text(t.label, rhuInt(mx), rhu(my - 1), typography.smallFontSize, palette.textMuted, { anchor: "middle" }));
@@ -25262,7 +28143,7 @@ function layoutState(ir, theme) {
   }
   const totalW = rhuInt(laid.width + margin);
   const totalH = rhuInt(laid.height + yOff + margin);
-  const defs = [`<marker id="${ARROW_ID3}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.textMuted}" /></marker>`];
+  const defs = [`<marker id="${ARROW_ID4}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.textMuted}" /></marker>`];
   const scene = applyOverlays({
     viewBox: { x: 0, y: 0, width: totalW, height: totalH },
     background: palette.background,
@@ -25298,9 +28179,9 @@ function collect(stmts, states, transitions, composites) {
       ensure(st.id, st.label || st.id, "normal");
       localIds.add(st.id);
     } else if (st.t === "trans") {
-      const f = ref(st.from, "from"), to = ref(st.to, "to");
-      transitions.push({ from: f, to, ...st.label ? { label: st.label } : {} });
-      if (f !== "__start__" && f !== "__end__") localIds.add(f);
+      const f2 = ref(st.from, "from"), to = ref(st.to, "to");
+      transitions.push({ from: f2, to, ...st.label ? { label: st.label } : {} });
+      if (f2 !== "__start__" && f2 !== "__end__") localIds.add(f2);
       if (to !== "__start__" && to !== "__end__") localIds.add(to);
     } else if (st.t === "block") {
       ensure(st.name, st.name, "normal");
@@ -26798,6 +29679,7 @@ function layoutEr(ir, theme) {
   const yOff = titleH;
   const elements = [];
   if (title) elements.push(p.text(title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
+  const allBoxes = [...laid.boxes.values()];
   for (const r of ir.relations) {
     const a = laid.boxes.get(r.left), b = laid.boxes.get(r.right);
     if (!a || !b) continue;
@@ -26805,7 +29687,8 @@ function layoutEr(ir, theme) {
     const bc = { x: b.x + b.width / 2, y: b.y + b.height / 2 + yOff };
     const pa = borderPoint({ ...a, y: a.y + yOff }, bc.x, bc.y);
     const pb = borderPoint({ ...b, y: b.y + yOff }, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.textMuted, 1.3, r.dashed ? { dash: "6 4" } : {}));
+    const { path } = routeEdge(a, b, allBoxes, yOff);
+    elements.push(p.path(path, palette.textMuted, 1.3, r.dashed ? { dash: "6 4" } : {}));
     elements.push(...crowFoot(p, pa, bc, r.leftCard, palette));
     elements.push(...crowFoot(p, pb, ac, r.rightCard, palette));
     if (r.label) {
@@ -28279,7 +31162,7 @@ var er = {
     return layoutEr(ir, theme);
   }
 };
-var ARROW_ID4 = "block-arrow";
+var ARROW_ID5 = "block-arrow";
 function layoutBlock(ir, theme) {
   const { palette, typography, spacing } = theme;
   const p = pen(theme);
@@ -28313,7 +31196,7 @@ function layoutBlock(ir, theme) {
     const bc = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     const pa = borderPoint(a, bc.x, bc.y);
     const pb = borderPoint(b, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.primary, 1.6, { markerEnd: ARROW_ID4 }));
+    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.primary, 1.6, { markerEnd: ARROW_ID5 }));
     if (e.label) elements.push(p.text(e.label, rhuInt((pa.x + pb.x) / 2), rhuInt((pa.y + pb.y) / 2 - 4), typography.smallFontSize, palette.textMuted, { anchor: "middle" }));
   }
   ir.blocks.forEach((b, i) => {
@@ -28324,7 +31207,7 @@ function layoutBlock(ir, theme) {
   });
   const maxRight = Math.max(margin, ...[...rects.values()].map((r) => r.x + r.width));
   const maxBottom = Math.max(top, ...[...rects.values()].map((r) => r.y + r.height));
-  const defs = [`<marker id="${ARROW_ID4}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.primary}" /></marker>`];
+  const defs = [`<marker id="${ARROW_ID5}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.primary}" /></marker>`];
   const scene = applyOverlays({
     viewBox: { x: 0, y: 0, width: rhuInt(maxRight + margin), height: rhuInt(maxBottom + margin) },
     background: palette.background,
@@ -29288,7 +32171,7 @@ var block = {
     return layoutBlock(ir, theme);
   }
 };
-var ARROW_ID5 = "req-arrow";
+var ARROW_ID6 = "req-arrow";
 var BOX_W = 230;
 function layoutRequirement(ir, theme) {
   const { palette, typography, spacing } = theme;
@@ -29300,8 +32183,8 @@ function layoutRequirement(ir, theme) {
   const prepared = /* @__PURE__ */ new Map();
   const sizeOf = (n) => {
     const lines2 = [];
-    for (const f of n.fields) {
-      const wrapped = wrapText2(`${f.key}: ${f.value}`, fieldFont, BOX_W - 20, 3).lines;
+    for (const f2 of n.fields) {
+      const wrapped = wrapText2(`${f2.key}: ${f2.value}`, fieldFont, BOX_W - 20, 3).lines;
       lines2.push(...wrapped);
     }
     const headH = rhuInt(nameFont * 1.5) + fieldFont + 8;
@@ -29314,15 +32197,13 @@ function layoutRequirement(ir, theme) {
   const edges2 = ir.relations.map((r) => ({ from: r.from, to: r.to }));
   const laid = layeredLayout(nodes, edges2, { direction: "TB", layerGap: 60, nodeGap: 44, margin });
   const elements = [];
+  const allBoxes = [...laid.boxes.values()];
   for (const r of ir.relations) {
     const a = laid.boxes.get(r.from), b = laid.boxes.get(r.to);
     if (!a || !b) continue;
-    const ac = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
-    const bc = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-    const pa = borderPoint(a, bc.x, bc.y);
-    const pb = borderPoint(b, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.textMuted, 1.3, { dash: "6 4", markerEnd: ARROW_ID5 }));
-    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+    const { path, labelMidpoint } = routeEdge(a, b, allBoxes);
+    elements.push(p.path(path, palette.textMuted, 1.3, { dash: "6 4", markerEnd: ARROW_ID6 }));
+    const mx = labelMidpoint.x, my = labelMidpoint.y;
     const w = measureText(`\xAB${r.type}\xBB`, fieldFont).width + 8;
     elements.push(p.rect({ x: rhu(mx - w / 2), y: rhu(my - fieldFont), width: rhu(w), height: fieldFont + 4 }, palette.background, palette.background, 0));
     elements.push(p.text(`\xAB${r.type}\xBB`, rhuInt(mx), rhu(my - 1), fieldFont, palette.secondary, { anchor: "middle" }));
@@ -29342,7 +32223,7 @@ function layoutRequirement(ir, theme) {
       fy += lineH;
     }
   }
-  const defs = [`<marker id="${ARROW_ID5}" markerWidth="11" markerHeight="9" refX="9" refY="4.5" orient="auto"><polyline points="0 0, 10 4.5, 0 9" fill="none" stroke="${palette.textMuted}" stroke-width="1.3" /></marker>`];
+  const defs = [`<marker id="${ARROW_ID6}" markerWidth="11" markerHeight="9" refX="9" refY="4.5" orient="auto"><polyline points="0 0, 10 4.5, 0 9" fill="none" stroke="${palette.textMuted}" stroke-width="1.3" /></marker>`];
   const scene = applyOverlays({
     viewBox: { x: 0, y: 0, width: rhuInt(laid.width + margin), height: rhuInt(laid.height + margin) },
     background: palette.background,
@@ -33451,7 +36332,7 @@ var gitgraph = {
     return layoutGitgraph(ir, theme);
   }
 };
-var ARROW_ID6 = "c4-arrow";
+var ARROW_ID7 = "c4-arrow";
 var NODE_W2 = 180;
 function layoutC4(ir, theme) {
   const { palette, typography, spacing } = theme;
@@ -33488,6 +36369,7 @@ function layoutC4(ir, theme) {
     elements.push(p.path(`M ${bx} ${by} h ${bw} v ${bh} h ${-bw} Z`, palette.textMuted, 1.3, { dash: "7 5" }));
     elements.push(p.text(bnd.label, rhu(minX + 10), rhu(minY + 16), font, palette.textMuted, { weight: "bold" }));
   }
+  const allBoxes = [...laid.boxes.values()];
   for (const r of ir.rels) {
     const a = laid.boxes.get(r.from), b = laid.boxes.get(r.to);
     if (!a || !b) continue;
@@ -33496,8 +36378,9 @@ function layoutC4(ir, theme) {
     const bc = { x: bo.x + bo.width / 2, y: bo.y + bo.height / 2 };
     const pa = borderPoint(ao, bc.x, bc.y);
     const pb = borderPoint(bo, ac.x, ac.y);
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.textMuted, 1.4, { ...r.ext ? { dash: "6 4" } : {}, markerEnd: ARROW_ID6 }));
-    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+    const { path, labelMidpoint } = routeEdge(a, b, allBoxes, yOff);
+    elements.push(p.path(path, palette.textMuted, 1.4, { ...r.ext ? { dash: "6 4" } : {}, markerEnd: ARROW_ID7 }));
+    const mx = labelMidpoint.x, my = labelMidpoint.y;
     const lbl = r.tech ? `${r.label ?? ""} [${r.tech}]` : r.label ?? "";
     if (lbl) {
       const w = measureText(lbl, font).width + 8;
@@ -33531,7 +36414,7 @@ function layoutC4(ir, theme) {
   });
   const totalW = rhuInt(Math.max(laid.width, ...allRects.map((r) => r.x + r.width)) + margin + 24);
   const totalH = rhuInt(Math.max(...allRects.map((r) => r.y + r.height)) + margin + 24);
-  const defs = [`<marker id="${ARROW_ID6}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.textMuted}" /></marker>`];
+  const defs = [`<marker id="${ARROW_ID7}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.textMuted}" /></marker>`];
   const scene = applyOverlays({
     viewBox: { x: 0, y: 0, width: totalW, height: totalH },
     background: palette.background,
@@ -35254,7 +38137,7 @@ var c4 = {
     return layoutC4(ir, theme);
   }
 };
-var ARROW_ID7 = "arch-arrow";
+var ARROW_ID8 = "arch-arrow";
 function port(r, side) {
   switch (side.toUpperCase()) {
     case "L":
@@ -35296,13 +38179,24 @@ function layoutArchitecture(ir, theme) {
     elements.push(p.rect({ x: rhu(minX), y: rhu(minY), width: rhu(maxX - minX), height: rhu(maxY - minY) }, hue + "14", hue, 1.4, { rx: 10 }));
     elements.push(p.text(g.label, rhu(minX + 12), rhu(minY + 16), typography.smallFontSize, hue, { weight: "bold" }));
   });
+  const allBoxes = [...laid.boxes.values()];
   for (const e of ir.edges) {
     const a = rectOf(e.from), b = rectOf(e.to);
     if (!a || !b) continue;
     const pa = port(a, e.fromSide), pb = port(b, e.toSide);
-    const horiz = e.fromSide.toUpperCase() === "L" || e.fromSide.toUpperCase() === "R";
-    const mid = horiz ? `L ${rhu((pa.x + pb.x) / 2)} ${rhu(pa.y)} L ${rhu((pa.x + pb.x) / 2)} ${rhu(pb.y)}` : `L ${rhu(pa.x)} ${rhu((pa.y + pb.y) / 2)} L ${rhu(pb.x)} ${rhu((pa.y + pb.y) / 2)}`;
-    elements.push(p.path(`M ${rhu(pa.x)} ${rhu(pa.y)} ${mid} L ${rhu(pb.x)} ${rhu(pb.y)}`, palette.primary, 1.6, { markerEnd: ARROW_ID7 }));
+    const fromDir = e.fromSide.toUpperCase() === "L" ? "W" : e.fromSide.toUpperCase() === "R" ? "E" : e.fromSide.toUpperCase() === "T" ? "N" : "S";
+    const toDir = e.toSide.toUpperCase() === "L" ? "W" : e.toSide.toUpperCase() === "R" ? "E" : e.toSide.toUpperCase() === "T" ? "N" : "S";
+    const obstacles = allBoxes.filter((bx) => bx.id !== e.from && bx.id !== e.to).map((bx) => ({ x: bx.x, y: bx.y + yOff, width: bx.width, height: bx.height }));
+    const route = orthogonalRouter.route({
+      from: pa,
+      to: pb,
+      style: "orthogonal",
+      obstacles,
+      padding: 10,
+      fromDir,
+      toDir
+    });
+    elements.push(p.path(route.path, palette.primary, 1.6, { markerEnd: ARROW_ID8 }));
   }
   ir.services.forEach((s, i) => {
     const r = rectOf(s.id);
@@ -35315,7 +38209,7 @@ function layoutArchitecture(ir, theme) {
   const allR = ir.services.map((s) => rectOf(s.id));
   const totalW = rhuInt(Math.max(...allR.map((r) => r.x + r.width)) + margin + 26);
   const totalH = rhuInt(Math.max(...allR.map((r) => r.y + r.height)) + margin + 26);
-  const defs = [`<marker id="${ARROW_ID7}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.primary}" /></marker>`];
+  const defs = [`<marker id="${ARROW_ID8}" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="${palette.primary}" /></marker>`];
   const scene = applyOverlays({
     viewBox: { x: 0, y: 0, width: totalW, height: totalH },
     background: palette.background,
@@ -36470,7 +39364,7 @@ function layoutPacket(ir, theme) {
   const p = pen(theme);
   const margin = spacing.diagramMargin;
   const fields = [...ir.fields].sort((a, b) => a.start - b.start);
-  const maxBit = Math.max(0, ...fields.map((f) => f.end));
+  const maxBit = Math.max(0, ...fields.map((f2) => f2.end));
   const numRows = Math.floor(maxBit / BITS_PER_ROW) + 1;
   const bitW = 26;
   const rowH = 46;
@@ -36491,19 +39385,19 @@ function layoutPacket(ir, theme) {
       if (c < BITS_PER_ROW) elements.push(p.text(String(bit), rhu(x + 2), rhu(rowTop(r) - 6), bitFont, palette.textMuted));
     }
   }
-  fields.forEach((f, i) => {
+  fields.forEach((f2, i) => {
     const hue = categoricalHue(i);
-    for (let r = Math.floor(f.start / BITS_PER_ROW); r <= Math.floor(f.end / BITS_PER_ROW); r++) {
+    for (let r = Math.floor(f2.start / BITS_PER_ROW); r <= Math.floor(f2.end / BITS_PER_ROW); r++) {
       const rowStartBit = r * BITS_PER_ROW;
-      const cStart = Math.max(f.start, rowStartBit) - rowStartBit;
-      const cEnd = Math.min(f.end, rowStartBit + BITS_PER_ROW - 1) - rowStartBit;
+      const cStart = Math.max(f2.start, rowStartBit) - rowStartBit;
+      const cEnd = Math.min(f2.end, rowStartBit + BITS_PER_ROW - 1) - rowStartBit;
       const x = gridLeft + cStart * bitW;
       const w = (cEnd - cStart + 1) * bitW;
       const y = rowTop(r);
       elements.push(p.rect({ x: rhu(x), y: rhu(y), width: rhu(w), height: rowH }, hue + "33", hue, 1.4, { rx: 3 }));
-      const label = truncateText(f.label, labelFont, w - 6);
+      const label = truncateText(f2.label, labelFont, w - 6);
       elements.push(p.text(label, rhuInt(x + w / 2), rhu(y + rowH / 2 + labelFont * 0.35), labelFont, palette.text, { weight: "bold", anchor: "middle" }));
-      elements.push(p.text(String(f.start), rhu(x + 3), rhu(y + bitFont + 1), bitFont, palette.textMuted));
+      elements.push(p.text(String(f2.start), rhu(x + 3), rhu(y + bitFont + 1), bitFont, palette.textMuted));
     }
   });
   const totalW = rhuInt(gridLeft + BITS_PER_ROW * bitW + margin);
@@ -37428,27 +40322,125 @@ function treeLayout(nodes, options = {}) {
     height: horizontal ? crossTotal : alongTotal
   };
 }
-var RED = "#d64545";
-var BLACK = "#2b2b2b";
-var SCAN = "#2f80ed";
-var JOIN = "#9b51e0";
+var RB_RED = "#d64545";
 function stripCells(label, font) {
   return label.split("|").map((s) => s.trim()).map((key) => ({
     key,
     width: Math.max(measureText(key, font).width + 18, 34)
   }));
 }
+function parseHex(c) {
+  const s = c.trim();
+  const m3 = s.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (m3) return [parseInt(m3[1] + m3[1], 16), parseInt(m3[2] + m3[2], 16), parseInt(m3[3] + m3[3], 16)];
+  const m6 = s.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (m6) return [parseInt(m6[1], 16), parseInt(m6[2], 16), parseInt(m6[3], 16)];
+  return null;
+}
+function toHex(n) {
+  return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+}
+function mixHex(a, b, t) {
+  const ca = parseHex(a), cb = parseHex(b);
+  if (!ca || !cb) return a;
+  const r = ca[0] + (cb[0] - ca[0]) * t;
+  const g = ca[1] + (cb[1] - ca[1]) * t;
+  const bl = ca[2] + (cb[2] - ca[2]) * t;
+  return `#${toHex(r)}${toHex(g)}${toHex(bl)}`;
+}
+function relativeLuminance(c) {
+  const rgb = parseHex(c);
+  if (!rgb) return void 0;
+  const linear = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2]);
+}
+function contrastRatio(a, b) {
+  const la = relativeLuminance(a), lb = relativeLuminance(b);
+  if (la === void 0 || lb === void 0) return 1;
+  const hi = Math.max(la, lb), lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+function canvasColor(theme) {
+  return parseHex(theme.palette.background) ? theme.palette.background : theme.palette.surface;
+}
+function isDarkTheme(theme) {
+  const lum = relativeLuminance(theme.palette.background) ?? relativeLuminance(theme.palette.surface);
+  return lum !== void 0 ? lum < 0.5 : false;
+}
+function bestContrast(fill, candidates, fallback) {
+  let best = fallback, score = contrastRatio(fallback, fill);
+  for (const c of candidates) {
+    if (!parseHex(c)) continue;
+    const next = contrastRatio(c, fill);
+    if (next > score) {
+      best = c;
+      score = next;
+    }
+  }
+  return best;
+}
+function readableText(fill, theme) {
+  const themed = bestContrast(fill, [theme.palette.text, theme.palette.background], theme.palette.text);
+  if (contrastRatio(themed, fill) >= 4.5) return themed;
+  return bestContrast(fill, ["#ffffff", "#000000"], themed);
+}
+function outlineStroke(fill, theme) {
+  const canvas = canvasColor(theme);
+  const candidates = [theme.palette.text, theme.palette.border, theme.palette.textMuted, theme.palette.background];
+  let best = theme.palette.text, score = -Infinity;
+  for (const c of candidates) {
+    if (!parseHex(c)) continue;
+    const next = Math.min(contrastRatio(c, fill), contrastRatio(c, canvas)) + contrastRatio(c, canvas) * 0.15;
+    if (next > score) {
+      best = c;
+      score = next;
+    }
+  }
+  return best;
+}
+function isRedHue(c) {
+  const rgb = parseHex(c);
+  return rgb !== null && rgb[0] > rgb[1] * 1.35 && rgb[0] > rgb[2] * 1.35;
+}
+function redNodeFill(theme) {
+  const { palette } = theme;
+  if (isRedHue(palette.error)) return mixHex(RB_RED, palette.error, isDarkTheme(theme) ? 0.7 : 0.6);
+  return mixHex(RB_RED, palette.text, isDarkTheme(theme) ? 0.12 : 0.08);
+}
+function blackNodeFill(theme) {
+  const { palette } = theme;
+  if (!isDarkTheme(theme)) return mixHex(palette.text, palette.background, 0.08);
+  const canvas = canvasColor(theme);
+  for (const source of [palette.text, palette.surface, palette.border, "#ffffff"]) {
+    for (const t of [0.22, 0.26, 0.3, 0.34]) {
+      const fill = mixHex(canvas, source, t);
+      const lum = relativeLuminance(fill);
+      if (lum !== void 0 && lum < 0.32 && contrastRatio(fill, canvas) >= 1.7) return fill;
+    }
+  }
+  return mixHex(canvas, "#ffffff", 0.28);
+}
 function nodeStyle(kinds, theme) {
   const { palette } = theme;
   const has = (k) => kinds.includes(k);
   const shape = has("strip") ? "strip" : has("leaf") || has("pill") ? "pill" : has("circle") || has("red") || has("black") || has("dot") ? "circle" : "rect";
-  if (has("red")) return { shape, fill: RED, stroke: RED, text: "#ffffff" };
-  if (has("black")) return { shape, fill: BLACK, stroke: BLACK, text: "#ffffff" };
-  if (has("active") || has("primary")) return { shape, fill: palette.primary, stroke: palette.primary, text: "#ffffff" };
-  if (has("scan")) return { shape, fill: palette.surface, stroke: SCAN, text: palette.text };
-  if (has("join")) return { shape, fill: palette.surface, stroke: JOIN, text: palette.text };
+  if (has("red")) {
+    const fill2 = redNodeFill(theme);
+    return { shape, fill: fill2, stroke: outlineStroke(fill2, theme), text: readableText(fill2, theme) };
+  }
+  if (has("black")) {
+    const fill2 = blackNodeFill(theme);
+    return { shape, fill: fill2, stroke: outlineStroke(fill2, theme), text: readableText(fill2, theme) };
+  }
+  if (has("active") || has("primary")) return { shape, fill: palette.primary, stroke: palette.primary, text: readableText(palette.primary, theme) };
+  if (has("scan")) return { shape, fill: palette.surface, stroke: palette.primary, text: palette.text };
+  if (has("join")) return { shape, fill: palette.surface, stroke: palette.secondary, text: palette.text };
   if (has("build") || has("muted")) return { shape, fill: palette.surface, stroke: palette.textMuted, text: palette.text };
-  return { shape, fill: palette.surface, stroke: palette.primary, text: palette.text };
+  const fill = palette.surface;
+  return { shape, fill, stroke: palette.primary, text: palette.text };
 }
 function infoLine(node) {
   return node.info;
@@ -37517,18 +40509,34 @@ function layoutTree(ir, theme) {
     ));
   }
   const byId = new Map(ir.nodes.map((n) => [n.id, n]));
+  const activeEdgeSet = new Set((ir.activePaths ?? []).map(([a, b]) => `${a}:${b}`));
+  function circleBorder(center, radius, dir, sign) {
+    return { x: rhu(center.x + sign * radius * dir.x), y: rhu(center.y + sign * radius * dir.y) };
+  }
   for (const node of ir.nodes) {
     const pb = box(node.id);
+    const parentShape = style.get(node.id).shape;
     for (const cid of node.children) {
       const cb = box(cid);
-      const { start, end } = connectSlots(pb, cb);
-      elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, palette.textMuted, 1.5));
+      const childShape = style.get(cid).shape;
+      const pc = { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 };
+      const cc = { x: cb.x + cb.width / 2, y: cb.y + cb.height / 2 };
+      const dx = cc.x - pc.x, dy = cc.y - pc.y;
+      const len = Math.hypot(dx, dy);
+      const dir = len > 0 ? { x: dx / len, y: dy / len } : { x: 0, y: 1 };
+      const { start: boxStart, end: boxEnd } = connectSlots(pb, cb);
+      const start = parentShape === "circle" ? circleBorder(pc, pb.width / 2, dir, 1) : boxStart;
+      const end = childShape === "circle" ? circleBorder(cc, cb.width / 2, dir, -1) : boxEnd;
+      const isActive = activeEdgeSet.has(`${node.id}:${cid}`);
+      const edgeColor = isActive ? palette.primary : palette.textMuted;
+      const edgeWidth = isActive ? 2.5 : 1.5;
+      elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, edgeColor, edgeWidth));
       const child = byId.get(cid);
       if (child.edgeLabel) {
         const mx = (start.x + end.x) / 2, my = (start.y + end.y) / 2;
         const w = measureText(child.edgeLabel, smallFont).width + 8;
         elements.push(p.rect({ x: mx - w / 2, y: my - 9, width: w, height: 16 }, palette.background, palette.background, 0, { rx: 3 }));
-        elements.push(p.text(child.edgeLabel, mx, my + 3, smallFont, palette.primary, { anchor: "middle", weight: "bold" }));
+        elements.push(p.text(child.edgeLabel, mx, my + 3, smallFont, isActive ? palette.primary : palette.textMuted, { anchor: "middle", weight: "bold" }));
       }
     }
   }
@@ -37554,14 +40562,14 @@ function layoutTree(ir, theme) {
     if (st.shape !== "strip") {
       if (info) {
         elements.push(p.text(node.label, cx, b.y + font + 4, font, st.text, { anchor: "middle", weight: "bold" }));
-        elements.push(p.text(info, cx, b.y + font + smallFont + 6, smallFont, st.fill === palette.surface ? palette.textMuted : "#ffffff", { anchor: "middle" }));
+        elements.push(p.text(info, cx, b.y + font + smallFont + 6, smallFont, st.fill === palette.surface ? palette.textMuted : st.text, { anchor: "middle" }));
       } else {
         elements.push(p.text(node.label, cx, cy + font * 0.35, font, st.text, { anchor: "middle", weight: "bold" }));
       }
     }
     if (node.badge !== void 0) {
       const bc = badgeColor(node.badge, theme);
-      elements.push(p.circle({ x: b.x + b.width - 3, y: b.y + 3 }, 9, palette.background, bc, 1.5));
+      elements.push(p.circle({ x: b.x + b.width - 3, y: b.y + 3 }, 9, palette.surface, bc, 1.5));
       elements.push(p.text(node.badge, b.x + b.width - 3, b.y + 7, smallFont, bc, { anchor: "middle", weight: "bold" }));
     }
   }
@@ -39025,14 +42033,46 @@ function buildNodes(lines2) {
   });
   return nodes;
 }
+function extractPathDirectives(input) {
+  const cleanLines = [];
+  const paths = [];
+  const PATH_RE = /^[ \t]*path[ \t]+(.+)$/;
+  for (const line of input.split("\n")) {
+    const m = line.match(PATH_RE);
+    if (m && m[1].includes("->")) {
+      const nodes = m[1].split("->").map((s) => s.trim()).filter(Boolean);
+      if (nodes.length >= 2) {
+        paths.push(nodes);
+        continue;
+      }
+    }
+    cleanLines.push(line);
+  }
+  return { clean: cleanLines.join("\n"), paths };
+}
 var tree = {
   parseMermaid(input) {
-    const raw = parseLines(input);
+    const { clean, paths } = extractPathDirectives(input);
+    const raw = parseLines(clean);
+    const nodes = buildNodes(raw.lines);
+    const labelToId = /* @__PURE__ */ new Map();
+    for (const node of nodes) {
+      if (!labelToId.has(node.label)) labelToId.set(node.label, node.id);
+    }
+    const activePairs = [];
+    for (const seg of paths) {
+      for (let i = 0; i < seg.length - 1; i++) {
+        const fromId = labelToId.get(seg[i]);
+        const toId = labelToId.get(seg[i + 1]);
+        if (fromId && toId) activePairs.push([fromId, toId]);
+      }
+    }
     return {
       version: raw.version,
       metadata: raw.metadata ?? {},
       direction: raw.direction,
-      nodes: buildNodes(raw.lines)
+      nodes,
+      ...activePairs.length > 0 ? { activePaths: activePairs } : {}
     };
   },
   parseYaml(input) {
@@ -39141,15 +42181,15 @@ var avl = {
     return layoutTree(ir, theme);
   }
 };
-var RED2 = true;
-var BLACK2 = false;
-var isRed = (n) => n !== null && n.color === RED2;
+var RED = true;
+var BLACK = false;
+var isRed = (n) => n !== null && n.color === RED;
 function rotateLeft2(h2) {
   const x = h2.right;
   h2.right = x.left;
   x.left = h2;
   x.color = h2.color;
-  h2.color = RED2;
+  h2.color = RED;
   return x;
 }
 function rotateRight2(h2) {
@@ -39157,7 +42197,7 @@ function rotateRight2(h2) {
   h2.left = x.right;
   x.right = h2;
   x.color = h2.color;
-  h2.color = RED2;
+  h2.color = RED;
   return x;
 }
 function flip(h2) {
@@ -39166,7 +42206,7 @@ function flip(h2) {
   if (h2.right) h2.right.color = !h2.right.color;
 }
 function insert2(h2, key) {
-  if (!h2) return { key, left: null, right: null, color: RED2 };
+  if (!h2) return { key, left: null, right: null, color: RED };
   if (key < h2.key) h2.left = insert2(h2.left, key);
   else if (key > h2.key) h2.right = insert2(h2.right, key);
   if (isRed(h2.right) && !isRed(h2.left)) h2 = rotateLeft2(h2);
@@ -39179,14 +42219,14 @@ function buildRbtree(input) {
   let root = null;
   for (const k of keys) {
     root = insert2(root, k);
-    root.color = BLACK2;
+    root.color = BLACK;
   }
   const nodes = [];
   let i = 0;
   const emit = (n) => {
     const id = `n${i++}`;
     const children = [];
-    nodes.push({ id, label: String(n.key), kinds: [n.color === RED2 ? "red" : "black"], children });
+    nodes.push({ id, label: String(n.key), kinds: [n.color === RED ? "red" : "black"], children });
     if (n.left) children.push(emit(n.left));
     if (n.right) children.push(emit(n.right));
     return id;
@@ -39395,155 +42435,17 @@ var heap = {
   parseYaml: (input) => JSON.parse(input),
   layout: (ir, theme) => layoutTree(ir, theme)
 };
-function buildStrip(pen2, theme, cells2, options) {
-  const { origin, cellWidth, cellHeight } = options;
-  const orientation = options.orientation ?? "horizontal";
-  const gap = options.gap ?? 0;
-  const horizontal = orientation === "horizontal";
-  const palette = theme.palette;
-  const elements = [];
-  const slots = [];
-  cells2.forEach((cell, i) => {
-    const step = (horizontal ? cellWidth : cellHeight) + gap;
-    const x = origin.x + (horizontal ? i * step : 0);
-    const y = origin.y + (horizontal ? 0 : i * step);
-    const slot = { x, y, width: cellWidth, height: cellHeight };
-    slots.push(slot);
-    elements.push(pen2.rect(slot, cell.fill ?? palette.surface, palette.border, 1.5, { rx: 3 }));
-    if (cell.label !== void 0) {
-      elements.push(pen2.text(
-        cell.label,
-        x + cellWidth / 2,
-        y + cellHeight / 2 + 5,
-        theme.typography.baseFontSize,
-        palette.text,
-        { anchor: "middle", weight: "bold" }
-      ));
-    }
-    if (cell.index !== void 0) {
-      const ix = horizontal ? x + cellWidth / 2 : x - 6;
-      const iy = horizontal ? y - 6 : y + cellHeight / 2 + 4;
-      elements.push(pen2.text(
-        cell.index,
-        ix,
-        iy,
-        theme.typography.smallFontSize,
-        palette.textMuted,
-        { anchor: horizontal ? "middle" : "end" }
-      ));
-    }
-  });
-  const n = cells2.length;
-  const totalAlong = n === 0 ? 0 : n * (horizontal ? cellWidth : cellHeight) + (n - 1) * gap;
-  const bounds = {
-    x: origin.x,
-    y: origin.y,
-    width: horizontal ? totalAlong : cellWidth,
-    height: horizontal ? cellHeight : totalAlong
-  };
-  return { elements, slots, bounds };
-}
-var ARROW_ID8 = "struct-arrow";
-function arrowDef(color) {
-  return `<marker id="${ARROW_ID8}" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="${color}" /></marker>`;
-}
-function lines(input) {
-  return input.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-}
-function parse(input) {
-  let title;
-  let cells2 = [];
-  let index = false;
-  const ptrs = [];
-  for (const line of lines(input)) {
-    const t = line.split(/\s+/);
-    if (t[0] === "array") {
-      if (t.length > 1) cells2 = t.slice(1);
-      continue;
-    }
-    if (t[0] === "title") {
-      title = line.slice(5).trim();
-      continue;
-    }
-    if (t[0] === "cells") {
-      cells2 = t.slice(1);
-      continue;
-    }
-    if (t[0] === "index") {
-      index = true;
-      continue;
-    }
-    if (t[0] === "ptr") {
-      const m = line.match(/^ptr\s+(\S+)\s*->\s*(\d+)/);
-      if (m) ptrs.push({ name: m[1], idx: Number(m[2]) });
-    }
-  }
-  return { ...title !== void 0 ? { title } : {}, cells: cells2, index, ptrs };
-}
-function layoutArray(doc, theme) {
-  const { palette, typography, spacing } = theme;
-  const p = pen(theme);
-  const margin = spacing.diagramMargin;
-  const font = typography.baseFontSize;
-  const cellH = 40;
-  const cellW = Math.max(40, ...doc.cells.map((c) => measureText(c, font).width + 24));
-  const titleH = doc.title ? typography.titleFontSize + 14 : 0;
-  const indexH = doc.index ? typography.smallFontSize + 8 : 0;
-  const origin = { x: margin, y: margin + titleH + indexH };
-  const cellInputs = doc.cells.map((v, i) => ({
-    label: v,
-    ...doc.index ? { index: String(i) } : {}
-  }));
-  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH });
-  const elements = [...strip.elements];
-  if (doc.title) {
-    elements.push(p.text(doc.title, origin.x, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
-  }
-  let maxPtrBottom = origin.y + cellH;
-  for (const ptr of doc.ptrs) {
-    const slot = strip.slots[ptr.idx];
-    if (!slot) continue;
-    const cx = slot.x + slot.width / 2;
-    const yTop = slot.y + cellH + 4;
-    const yBot = slot.y + cellH + 34;
-    elements.push(p.path(`M ${rhu(cx)} ${rhu(yBot)} L ${rhu(cx)} ${rhu(yTop)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
-    elements.push(p.text(ptr.name, cx, yBot + 14, font, palette.primary, { anchor: "middle", weight: "bold" }));
-    maxPtrBottom = Math.max(maxPtrBottom, yBot + 18);
-  }
-  const anchors = {};
-  strip.slots.forEach((slot, i) => {
-    anchors[`c${i}`] = { bounds: slot };
-  });
-  const scene = {
-    viewBox: { x: 0, y: 0, width: strip.bounds.width + margin * 2, height: maxPtrBottom + margin },
-    background: palette.background,
-    elements,
-    defs: [arrowDef(palette.primary)]
-  };
-  return { scene, anchors };
-}
-var array = {
-  parseMermaid(input) {
-    return { version: "1.0", metadata: {}, ...parse(input) };
-  },
-  parseYaml(input) {
-    return JSON.parse(input);
-  },
-  layout(ir, theme) {
-    return layoutArray(ir, theme);
-  }
-};
 function parse2(input) {
   let title;
   const values = [];
   for (const line of lines(input)) {
-    const t = line.split(/\s+/);
+    const t = tokenizeDirective(line);
     if (t[0] === "linkedlist") {
       values.push(...t.slice(1));
       continue;
     }
     if (t[0] === "title") {
-      title = line.slice(5).trim();
+      title = t.slice(1).join(" ");
       continue;
     }
     if (t[0] === "values" || t[0] === "nodes") {
@@ -39577,7 +42479,7 @@ function layoutList(doc, theme) {
   }
   elements.push(p.text("head", margin, y + nh / 2 + font * 0.35, font, palette.textMuted, { weight: "bold" }));
   if (nodes.length > 0) {
-    elements.push(p.path(`M ${rhu(margin + headW + 6)} ${rhu(y + nh / 2)} L ${rhu(nodes[0].x - 4)} ${rhu(y + nh / 2)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
+    elements.push(p.path(`M ${rhu(margin + headW + 6)} ${rhu(y + nh / 2)} L ${rhu(nodes[0].x - 4)} ${rhu(y + nh / 2)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
   }
   nodes.forEach((node, i) => {
     const nextX = node.x + node.vw;
@@ -39588,7 +42490,7 @@ function layoutList(doc, theme) {
     const linkCx = nextX + nw / 2, linkCy = y + nh / 2;
     if (i < nodes.length - 1) {
       elements.push(p.circle({ x: linkCx, y: linkCy }, 3, palette.primary, palette.primary, 1));
-      elements.push(p.path(`M ${rhu(linkCx)} ${rhu(linkCy)} L ${rhu(nodes[i + 1].x - 4)} ${rhu(linkCy)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
+      elements.push(p.path(`M ${rhu(linkCx)} ${rhu(linkCy)} L ${rhu(nodes[i + 1].x - 4)} ${rhu(linkCy)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
     } else {
       elements.push(p.path(`M ${rhu(nextX)} ${rhu(y + nh)} L ${rhu(nextX + nw)} ${rhu(y)}`, palette.textMuted, 1.5));
     }
@@ -39622,27 +42524,27 @@ function parse3(input) {
   const regions = [];
   let cur;
   for (const line of lines(input)) {
-    const t = line.split(/\s+/);
+    const t = tokenizeDirective(line);
     if (t[0] === "memory") continue;
     if (t[0] === "title") {
-      title = line.slice(5).trim();
+      title = t.slice(1).join(" ");
       continue;
     }
     if (t[0] === "region") {
-      cur = { name: line.slice(6).trim(), items: [] };
+      cur = { name: decodeLabel(line.slice(6)), items: [] };
       regions.push(cur);
       continue;
     }
     if (!cur) continue;
     if (t[0] === "var") {
-      const m = line.match(/^var\s+(\S+)(?:\s*->\s*(\S+))?/);
-      if (m) cur.items.push({ kind: "var", name: m[1], ...m[2] ? { target: m[2] } : {} });
+      const parsed = parseVarDirective(t);
+      if (parsed) cur.items.push({ kind: "var", name: parsed.name, ...parsed.target ? { target: parsed.target } : {} });
       continue;
     }
     if (t[0] === "object") {
       const parts = line.slice(6).split(":").map((s) => s.trim());
       const id = parts[0] ?? "obj";
-      const titleO = parts[1] || id;
+      const titleO = parts[1] ? decodeLabel(parts[1]) : id;
       const fields = (parts[2] ?? "").split(",").map((s) => s.trim()).filter(Boolean).map((pair) => {
         const [k, v] = pair.split("=").map((x) => x.trim());
         return { k: k ?? "", v: v ?? "" };
@@ -39652,6 +42554,27 @@ function parse3(input) {
   }
   return { ...title !== void 0 ? { title } : {}, regions };
 }
+function decodeLabel(raw) {
+  return tokenizeDirective(raw.trim()).join(" ");
+}
+function parseVarDirective(tokens) {
+  const nameToken = tokens[1];
+  if (nameToken === void 0) return void 0;
+  const inlineArrow = nameToken.indexOf("->");
+  if (inlineArrow >= 0) {
+    const name = nameToken.slice(0, inlineArrow);
+    const target = nameToken.slice(inlineArrow + 2);
+    return { name, ...target ? { target } : {} };
+  }
+  if (tokens[2] === "->") {
+    return { name: nameToken, ...tokens[3] ? { target: tokens[3] } : {} };
+  }
+  if (tokens[2]?.startsWith("->")) {
+    const target = tokens[2].slice(2) || tokens[3];
+    return { name: nameToken, ...target ? { target } : {} };
+  }
+  return { name: nameToken };
+}
 function layoutMemory(doc, theme) {
   const { palette, typography, spacing } = theme;
   const p = pen(theme);
@@ -39660,12 +42583,15 @@ function layoutMemory(doc, theme) {
   const small = typography.smallFontSize;
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const HEADER = 26, PAD = 14, GAP = 14, REGION_GAP = 90;
+  const REGION_FILL_OPACITY = 0.26;
+  const VAR_FILL_OPACITY = 0.56;
+  const OBJECT_FILL_OPACITY = 0.62;
   const itemSize = (item) => {
     if (item.kind === "var") {
       return { w: Math.max(130, measureText(item.name, font).width + 56), h: 34 };
     }
     const titleW = measureText(item.title, font).width;
-    const fieldW = Math.max(0, ...item.fields.map((f) => measureText(`${f.k}: ${f.v}`, small).width));
+    const fieldW = Math.max(0, ...item.fields.map((f2) => measureText(`${f2.k}: ${f2.v}`, small).width));
     return { w: Math.max(120, titleW + 24, fieldW + 24), h: 24 + item.fields.length * 20 + 8 };
   };
   const elements = [];
@@ -39679,17 +42605,23 @@ function layoutMemory(doc, theme) {
   for (const region of doc.regions) {
     const sizes = region.items.map(itemSize);
     const innerW = Math.max(80, ...sizes.map((s) => s.w));
-    const regionW = innerW + PAD * 2;
+    const regionW = Math.max(innerW + PAD * 2, measureText(region.name, small).width + 24);
     const contentH = sizes.reduce((s, sz) => s + sz.h + GAP, 0) - (sizes.length ? GAP : 0);
     const regionH = HEADER + PAD + contentH + PAD;
-    elements.push(p.rect({ x: regionX, y: regionTop, width: regionW, height: regionH }, "#fbfbfd", palette.border, 1.5, { rx: 8 }));
+    elements.push(p.rect(
+      { x: regionX, y: regionTop, width: regionW, height: regionH },
+      palette.surface,
+      palette.border,
+      1.5,
+      { rx: 8, fillOpacity: REGION_FILL_OPACITY }
+    ));
     elements.push(p.text(region.name, regionX + 12, regionTop + 17, small, palette.textMuted, { weight: "bold" }));
     let iy = regionTop + HEADER + PAD;
     region.items.forEach((item, i) => {
       const { h: h2 } = sizes[i];
       const box = { x: regionX + PAD, y: iy, width: innerW, height: h2 };
       if (item.kind === "var") {
-        elements.push(p.rect(box, palette.surface, palette.border, 1.5, { rx: 4 }));
+        elements.push(p.rect(box, palette.surface, palette.border, 1.5, { rx: 4, fillOpacity: VAR_FILL_OPACITY }));
         elements.push(p.text(item.name, box.x + 12, box.y + h2 / 2 + font * 0.35, font, palette.text, { weight: "bold" }));
         idBox.set(item.name, box);
         anchors[item.name] = { bounds: box };
@@ -39698,10 +42630,10 @@ function layoutMemory(doc, theme) {
           pending.push({ from: box, target: item.target });
         }
       } else {
-        elements.push(p.rect(box, palette.surface, palette.primary, 2, { rx: 6 }));
+        elements.push(p.rect(box, palette.surface, palette.primary, 2, { rx: 6, fillOpacity: OBJECT_FILL_OPACITY }));
         elements.push(p.text(item.title, box.x + 12, box.y + 18, font, palette.primary, { weight: "bold" }));
-        item.fields.forEach((f, fi) => {
-          elements.push(p.text(`${f.k}: ${f.v}`, box.x + 12, box.y + 24 + (fi + 1) * 18, small, palette.text));
+        item.fields.forEach((f2, fi) => {
+          elements.push(p.text(`${f2.k}: ${f2.v}`, box.x + 12, box.y + 24 + (fi + 1) * 18, small, palette.text));
         });
         idBox.set(item.id, box);
         anchors[item.id] = { bounds: box };
@@ -39717,7 +42649,7 @@ function layoutMemory(doc, theme) {
     if (!to) continue;
     const origin = { x: from.x + from.width - 12, y: from.y + from.height / 2 - 1, width: 2, height: 2 };
     const { start, end } = connectSlots(origin, to);
-    elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
+    elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
   }
   const scene = {
     viewBox: { x: 0, y: 0, width: regionX - REGION_GAP + margin, height: maxBottom + margin },
@@ -39743,10 +42675,10 @@ function parse4(input) {
   let slots;
   const tuples = [];
   for (const line of lines(input)) {
-    const t = line.split(/\s+/);
+    const t = tokenizeDirective(line);
     if (t[0] === "page") continue;
     if (t[0] === "title") {
-      title = line.slice(5).trim();
+      title = t.slice(1).join(" ");
       continue;
     }
     if (t[0] === "slots") {
@@ -39769,48 +42701,82 @@ function layoutPage(doc, theme) {
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const slotCount = doc.slots ?? doc.tuples.length;
   const PAD = 14, HEADER = 26, SLOT_W = 54, SLOT_H = 22, TUPLE_H = 28, TGAP = 18;
-  const tupleW = Math.max(110, ...doc.tuples.map((t) => measureText(t, font).width + 24));
-  const tuplesRowW = doc.tuples.length * tupleW + (doc.tuples.length - 1) * TGAP;
-  const slotsRowW = slotCount * (SLOT_W + 8) - 8;
-  const innerW = Math.max(tuplesRowW, slotsRowW, 240);
+  const SLOT_TOP_GAP = 12, FREE_BAND = 48, MIN_INNER_W = 240, SLOT_FILL_OPACITY = 0.14;
+  const tupleWidths = doc.tuples.map((t) => Math.max(110, measureText(t, font).width + 24));
+  const columnCount = Math.max(slotCount, doc.tuples.length, 1);
+  const columnWidths = Array.from({ length: columnCount }, (_, i) => Math.max(SLOT_W, tupleWidths[i] ?? 0));
+  const contentW = columnWidths.reduce((sum, width) => sum + width, 0) + (columnCount - 1) * TGAP;
+  const innerW = Math.max(contentW, MIN_INNER_W);
   const pageW = innerW + PAD * 2;
-  const pageH = HEADER + 36 + 70 + TUPLE_H + PAD;
+  const pageH = HEADER + SLOT_TOP_GAP + SLOT_H + FREE_BAND + TUPLE_H + PAD;
+  const contentX = pxForCenteredContent(margin + PAD, innerW, contentW);
   const px = margin, py = margin + titleH;
   const elements = [];
   if (doc.title) elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
-  elements.push(p.rect({ x: px, y: py, width: pageW, height: pageH }, "#fbfbfd", palette.border, 1.5, { rx: 6 }));
+  elements.push(p.rect({ x: px, y: py, width: pageW, height: pageH }, palette.surface, palette.border, 1.5, { rx: 6 }));
   elements.push(p.rect({ x: px, y: py, width: pageW, height: HEADER }, palette.primary, palette.primary, 0, { rx: 0 }));
   elements.push(p.text("PageHeader    freeStart \u2192        \u2190 freeEnd", px + 12, py + 17, small, "#ffffff", { weight: "bold" }));
-  const slotY = py + HEADER + 10;
+  const slotY = py + HEADER + SLOT_TOP_GAP;
   const slotCx = [];
+  const tupleCx = [];
   const anchors = {};
+  const columnX = [];
+  let x = contentX;
+  for (const width of columnWidths) {
+    columnX.push(x);
+    x += width + TGAP;
+  }
   for (let i = 0; i < slotCount; i++) {
-    const sx = px + PAD + i * (SLOT_W + 8);
+    const sx = (columnX[i] ?? contentX) + ((columnWidths[i] ?? SLOT_W) - SLOT_W) / 2;
     const box = { x: sx, y: slotY, width: SLOT_W, height: SLOT_H };
-    elements.push(p.rect(box, "#eef2ff", palette.primary, 1.5, { rx: 3 }));
+    elements.push(p.rect(box, palette.primary, palette.primary, 1.5, { rx: 3, fillOpacity: SLOT_FILL_OPACITY }));
     elements.push(p.text(`slot${i}`, sx + SLOT_W / 2, slotY + 15, small, palette.primary, { anchor: "middle", weight: "bold" }));
     slotCx.push(sx + SLOT_W / 2);
     anchors[`slot${i}`] = { bounds: box };
   }
-  elements.push(p.text("free space", px + pageW / 2, py + HEADER + 70, font, palette.textMuted, { anchor: "middle" }));
-  const tupleY = py + pageH - PAD - TUPLE_H;
+  const tupleY = slotY + SLOT_H + FREE_BAND;
+  const freeLabel = "free space";
+  const freeLabelY = slotY + SLOT_H + FREE_BAND / 2 + font * 0.35;
+  const freeLabelX = px + pageW / 2;
+  const freeLabelWidth = measureText(freeLabel, font).width;
+  const freeLabelBounds = {
+    x1: freeLabelX - freeLabelWidth / 2 - 6,
+    x2: freeLabelX + freeLabelWidth / 2 + 6,
+    y1: freeLabelY - font - 3,
+    y2: freeLabelY + 5
+  };
+  elements.push(p.text(freeLabel, freeLabelX, freeLabelY, font, palette.textMuted, { anchor: "middle" }));
   doc.tuples.forEach((tuple, i) => {
-    const tx = px + PAD + i * (tupleW + TGAP);
+    const tupleW = tupleWidths[i];
+    const tx = (columnX[i] ?? contentX) + ((columnWidths[i] ?? tupleW) - tupleW) / 2;
     const box = { x: tx, y: tupleY, width: tupleW, height: TUPLE_H };
+    const cx = tx + tupleW / 2;
+    tupleCx.push(cx);
     elements.push(p.rect(box, palette.surface, palette.border, 1.5, { rx: 3 }));
-    elements.push(p.text(tuple, tx + tupleW / 2, tupleY + TUPLE_H / 2 + font * 0.35, font, palette.text, { anchor: "middle", weight: "bold" }));
+    elements.push(p.text(tuple, cx, tupleY + TUPLE_H / 2 + font * 0.35, font, palette.text, { anchor: "middle", weight: "bold" }));
     anchors[`tuple${i}`] = { bounds: box };
-    if (i < slotCx.length) {
-      elements.push(p.path(`M ${rhu(slotCx[i])} ${rhu(slotY + SLOT_H)} L ${rhu(tx + tupleW / 2)} ${rhu(tupleY)}`, palette.textMuted, 1.5, { markerEnd: ARROW_ID8 }));
-    }
   });
+  for (let i = 0; i < Math.min(slotCx.length, tupleCx.length); i++) {
+    elements.push(p.path(verticalArrow(slotCx[i], slotY + SLOT_H, tupleY, freeLabelBounds), palette.textMuted, 1.5, { markerEnd: ARROW_ID2 }));
+  }
   const scene = {
     viewBox: { x: 0, y: 0, width: pageW + margin * 2, height: py + pageH + margin },
     background: palette.background,
     elements,
     defs: [arrowDef(palette.textMuted)]
   };
-  return { scene, anchors };
+  const chromeRects = [{ x: px, y: py, width: pageW, height: HEADER }];
+  return { scene, anchors, chromeRects };
+}
+function pxForCenteredContent(innerLeft, innerW, contentW) {
+  return innerLeft + Math.max(0, (innerW - contentW) / 2);
+}
+function verticalArrow(x, y1, y2, avoid) {
+  const rx = rhu(x);
+  if (avoid && x >= avoid.x1 && x <= avoid.x2 && y1 < avoid.y2 && y2 > avoid.y1) {
+    return `M ${rx} ${rhu(y1)} L ${rx} ${rhu(Math.max(y1, avoid.y1))} M ${rx} ${rhu(Math.min(y2, avoid.y2))} L ${rx} ${rhu(y2)}`;
+  }
+  return `M ${rx} ${rhu(y1)} L ${rx} ${rhu(y2)}`;
 }
 var page = {
   parseMermaid(input) {
@@ -39823,29 +42789,212 @@ var page = {
     return layoutPage(ir, theme);
   }
 };
+function buildStrip(pen2, theme, cells2, options) {
+  const { origin, cellWidth, cellHeight } = options;
+  const orientation = options.orientation ?? "horizontal";
+  const gap = options.gap ?? 0;
+  const horizontal = orientation === "horizontal";
+  const palette = theme.palette;
+  const elements = [];
+  const slots = [];
+  cells2.forEach((cell, i) => {
+    const step = (horizontal ? cellWidth : cellHeight) + gap;
+    const x = origin.x + (horizontal ? i * step : 0);
+    const y = origin.y + (horizontal ? 0 : i * step);
+    const slot = { x, y, width: cellWidth, height: cellHeight };
+    slots.push(slot);
+    elements.push(pen2.rect(slot, cell.fill ?? palette.surface, cell.stroke ?? palette.border, 1.5, { rx: 3, ...cell.fillOpacity !== void 0 ? { fillOpacity: cell.fillOpacity } : {} }));
+    if (cell.label !== void 0) {
+      elements.push(pen2.text(
+        cell.label,
+        x + cellWidth / 2,
+        y + cellHeight / 2 + 5,
+        theme.typography.baseFontSize,
+        palette.text,
+        { anchor: "middle", weight: "bold" }
+      ));
+    }
+    if (cell.index !== void 0) {
+      const ix = horizontal ? x + cellWidth / 2 : x - 6;
+      const iy = horizontal ? y - 6 : y + cellHeight / 2 + 4;
+      elements.push(pen2.text(
+        cell.index,
+        ix,
+        iy,
+        theme.typography.smallFontSize,
+        palette.textMuted,
+        { anchor: horizontal ? "middle" : "end" }
+      ));
+    }
+  });
+  const n = cells2.length;
+  const totalAlong = n === 0 ? 0 : n * (horizontal ? cellWidth : cellHeight) + (n - 1) * gap;
+  const bounds = {
+    x: origin.x,
+    y: origin.y,
+    width: horizontal ? totalAlong : cellWidth,
+    height: horizontal ? cellHeight : totalAlong
+  };
+  return { elements, slots, bounds };
+}
 var ARROW_FWD = "queue-arrow-fwd";
 var ARROW_REV = "queue-arrow-rev";
+function parseAxisToken(token, fallback) {
+  return token === "horizontal" || token === "vertical" ? token : fallback;
+}
 function arrowDefs(color) {
   return `<marker id="${ARROW_FWD}" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="${color}" /></marker><marker id="${ARROW_REV}" markerWidth="9" markerHeight="9" refX="2" refY="4" orient="auto"><path d="M8 0 L0 4 L8 8 z" fill="${color}" /></marker>`;
 }
 function pointerBelow(p, theme, slot, name, color, stack2 = 0) {
+  const pointer = pointerToSlot(p, theme, slot, name, color, "bottom", stack2);
+  return { elements: pointer.elements, bottom: pointer.outerEdge };
+}
+function pointerToSlot(p, theme, slot, name, color, side, stack2 = 0) {
   const font = theme.typography.baseFontSize;
+  const laneGap = font + 6;
+  const arrowLen = 30;
+  const labelGap = 6;
   const cx = slot.x + slot.width / 2;
-  const yTop = slot.y + slot.height + 4;
-  const yBot = slot.y + slot.height + 30 + stack2 * (font + 6);
-  const labelY = yBot + font;
+  const cy = slot.y + slot.height / 2;
+  if (side === "bottom" || side === "top") {
+    const s2 = side === "bottom" ? 1 : -1;
+    const laneX = cx;
+    const edgeY = side === "bottom" ? slot.y + slot.height + 4 : slot.y - 4;
+    const tailY = edgeY + s2 * (arrowLen + stack2 * laneGap);
+    const labelY = tailY + s2 * (labelGap + (s2 > 0 ? font : 0));
+    return {
+      elements: [
+        p.path(`M ${rhu(laneX)} ${rhu(tailY)} L ${rhu(laneX)} ${rhu(edgeY)}`, color, 1.5, { markerEnd: ARROW_FWD }),
+        p.text(name, laneX, labelY, font, color, { anchor: "middle", weight: "bold" })
+      ],
+      outerEdge: s2 > 0 ? labelY + 4 : labelY - font - 4
+    };
+  }
+  const s = side === "right" ? 1 : -1;
+  const laneY = cy + stack2 * laneGap;
+  const edgeX = side === "right" ? slot.x + slot.width + 4 : slot.x - 4;
+  const tailX = edgeX + s * arrowLen;
+  const labelX = tailX + s * labelGap;
+  const anchor = s > 0 ? "start" : "end";
   return {
     elements: [
-      p.path(`M ${rhu(cx)} ${rhu(yBot)} L ${rhu(cx)} ${rhu(yTop)}`, color, 1.5, { markerEnd: ARROW_FWD }),
-      p.text(name, cx, labelY, font, color, { anchor: "middle", weight: "bold" })
+      p.path(`M ${rhu(tailX)} ${rhu(laneY)} L ${rhu(edgeX)} ${rhu(laneY)}`, color, 1.5, { markerEnd: ARROW_FWD }),
+      p.text(name, labelX, laneY + 4, font, color, { anchor, weight: "bold" })
     ],
-    bottom: labelY + 4
+    outerEdge: labelX
   };
+}
+function finalizeStripScene(elements, anchors, theme, defs) {
+  const margin = theme.spacing.diagramMargin;
+  const contentBounds = boundsForElements2(elements);
+  const dx = margin - contentBounds.x;
+  const dy = margin - contentBounds.y;
+  const shiftedElements = translateElements2(elements, dx, dy);
+  const shiftedAnchors = translateAnchors2(anchors, dx, dy);
+  return {
+    scene: {
+      viewBox: {
+        x: 0,
+        y: 0,
+        width: rhu(contentBounds.width + margin * 2),
+        height: rhu(contentBounds.height + margin * 2)
+      },
+      background: theme.palette.background,
+      elements: shiftedElements,
+      ...defs !== void 0 ? { defs } : {}
+    },
+    anchors: shiftedAnchors
+  };
+}
+function boundsForElements2(elements) {
+  const bounds = elements.map(boundsForElement2).filter((b) => b !== void 0);
+  if (bounds.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  const minX = Math.min(...bounds.map((b) => b.x));
+  const minY = Math.min(...bounds.map((b) => b.y));
+  const maxX = Math.max(...bounds.map((b) => b.x + b.width));
+  const maxY = Math.max(...bounds.map((b) => b.y + b.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+function boundsForElement2(element) {
+  switch (element.type) {
+    case "rect":
+      return element.bounds;
+    case "circle":
+      return {
+        x: element.center.x - element.radius,
+        y: element.center.y - element.radius,
+        width: element.radius * 2,
+        height: element.radius * 2
+      };
+    case "path":
+      return boundsForPath2(element.d, element.strokeWidth);
+    case "text":
+      return boundsForText2(element);
+    case "group":
+      return boundsForElements2(element.children);
+  }
+}
+function boundsForText2(text) {
+  const measured = measureText(text.content, text.fontSize);
+  const x = text.anchor === "middle" ? text.position.x - measured.width / 2 : text.anchor === "end" ? text.position.x - measured.width : text.position.x;
+  return {
+    x,
+    y: text.position.y - text.fontSize,
+    width: measured.width,
+    height: text.fontSize * 1.25
+  };
+}
+function boundsForPath2(d, strokeWidth) {
+  const nums = [...d.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+  if (nums.length < 2) return { x: 0, y: 0, width: 0, height: 0 };
+  const xs = nums.filter((_, i) => i % 2 === 0);
+  const ys = nums.filter((_, i) => i % 2 === 1);
+  const pad = strokeWidth / 2;
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+  const maxX = Math.max(...xs) + pad;
+  const maxY = Math.max(...ys) + pad;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+function translateElements2(elements, dx, dy) {
+  return elements.map((element) => translateElement2(element, dx, dy));
+}
+function translateElement2(element, dx, dy) {
+  switch (element.type) {
+    case "rect":
+      return { ...element, bounds: translateRect2(element.bounds, dx, dy) };
+    case "circle":
+      return { ...element, center: { x: rhu(element.center.x + dx), y: rhu(element.center.y + dy) } };
+    case "path":
+      return { ...element, d: translatePathD2(element.d, dx, dy) };
+    case "text":
+      return { ...element, position: { x: rhu(element.position.x + dx), y: rhu(element.position.y + dy) } };
+    case "group":
+      return { ...element, children: translateElements2(element.children, dx, dy) };
+    case "icon":
+      return { ...element, x: rhu(element.x + dx), y: rhu(element.y + dy) };
+  }
+}
+function translateAnchors2(anchors, dx, dy) {
+  return Object.fromEntries(
+    Object.entries(anchors).map(([key, anchor]) => [key, { bounds: translateRect2(anchor.bounds, dx, dy) }])
+  );
+}
+function translateRect2(rect, dx, dy) {
+  return { x: rhu(rect.x + dx), y: rhu(rect.y + dy), width: rect.width, height: rect.height };
+}
+function translatePathD2(d, dx, dy) {
+  let i = 0;
+  return d.replace(/-?\d+(?:\.\d+)?/g, (value) => {
+    const delta = i++ % 2 === 0 ? dx : dy;
+    return String(rhu(Number(value) + delta));
+  });
 }
 function parse5(input) {
   let title;
   let cells2 = [];
   let capacity;
+  let axis = "horizontal";
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
     if (t[0] === "queue") {
@@ -39865,8 +43014,12 @@ function parse5(input) {
       if (Number.isFinite(n)) capacity = n;
       continue;
     }
+    if (t[0] === "axis") {
+      axis = parseAxisToken(t[1], axis);
+      continue;
+    }
   }
-  return { ...title !== void 0 ? { title } : {}, cells: cells2, ...capacity !== void 0 ? { capacity } : {} };
+  return { ...title !== void 0 ? { title } : {}, cells: cells2, ...capacity !== void 0 ? { capacity } : {}, axis };
 }
 function layoutQueue(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -39877,44 +43030,49 @@ function layoutQueue(doc, theme) {
   const filled = doc.cells.length;
   const total = Math.max(filled, doc.capacity ?? filled);
   const cellW = Math.max(46, ...doc.cells.map((c) => measureText(c, font).width + 24));
+  const axis = doc.axis === "vertical" ? "vertical" : "horizontal";
+  const horizontal = axis === "horizontal";
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const topH = font + 14;
   const sideGap = 50;
-  const origin = { x: margin + sideGap, y: margin + titleH + topH };
+  const origin = horizontal ? { x: margin + sideGap, y: margin + titleH + topH } : { x: margin, y: margin + titleH + sideGap };
   const cellInputs = Array.from({ length: total }, (_, i) => i < filled ? { label: doc.cells[i] } : { fill: palette.background });
-  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH });
+  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH, orientation: axis });
   const elements = [...strip.elements];
   if (doc.title) {
     elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
   }
-  const midY = origin.y + cellH / 2;
-  const leftEdge = origin.x;
-  const rightEdge = origin.x + total * cellW;
-  elements.push(p.path(`M ${rhu(leftEdge)} ${rhu(midY)} L ${rhu(margin)} ${rhu(midY)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
-  elements.push(p.text("dequeue", leftEdge - sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
-  elements.push(p.path(`M ${rhu(rightEdge + sideGap)} ${rhu(midY)} L ${rhu(rightEdge)} ${rhu(midY)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
-  elements.push(p.text("enqueue", rightEdge + sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
-  let bottom = origin.y + cellH;
+  if (horizontal) {
+    const midY = origin.y + cellH / 2;
+    const leftEdge = origin.x;
+    const rightEdge = origin.x + total * cellW;
+    elements.push(p.path(`M ${rhu(leftEdge)} ${rhu(midY)} L ${rhu(margin)} ${rhu(midY)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
+    elements.push(p.text("dequeue", leftEdge - sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
+    elements.push(p.path(`M ${rhu(rightEdge + sideGap)} ${rhu(midY)} L ${rhu(rightEdge)} ${rhu(midY)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
+    elements.push(p.text("enqueue", rightEdge + sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
+  } else {
+    const midX = origin.x + cellW / 2;
+    const topEdge = origin.y;
+    const bottomEdge = origin.y + total * cellH;
+    elements.push(p.path(`M ${rhu(midX)} ${rhu(topEdge)} L ${rhu(midX)} ${rhu(topEdge - sideGap)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
+    elements.push(p.text("dequeue", midX, topEdge - sideGap / 2 - 6, font, palette.primary, { anchor: "middle", weight: "bold" }));
+    elements.push(p.path(`M ${rhu(midX)} ${rhu(bottomEdge + sideGap)} L ${rhu(midX)} ${rhu(bottomEdge)}`, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
+    elements.push(p.text("enqueue", midX, bottomEdge + sideGap / 2 + font, font, palette.primary, { anchor: "middle", weight: "bold" }));
+  }
   if (filled > 0) {
     const frontSlot = strip.slots[0];
     const rearSlot = strip.slots[filled - 1];
     const same = filled === 1;
-    const front = pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0);
-    const rear = pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0);
+    const front = horizontal ? pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0) : pointerToSlot(p, theme, frontSlot, "front", palette.secondary, "right", 0);
+    const rear = horizontal ? pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0) : pointerToSlot(p, theme, rearSlot, "rear", palette.primary, "right", same ? 1 : 0);
     elements.push(...front.elements, ...rear.elements);
-    bottom = Math.max(front.bottom, rear.bottom);
   }
   const anchors = {};
   strip.slots.forEach((slot, i) => {
     anchors[`c${i}`] = { bounds: slot };
   });
-  const scene = {
-    viewBox: { x: 0, y: 0, width: rightEdge + sideGap + margin, height: bottom + margin },
-    background: palette.background,
-    elements,
-    defs: [arrowDefs(palette.primary)]
-  };
-  return { scene, anchors };
+  const finalized = finalizeStripScene(elements, anchors, theme, [arrowDefs(palette.primary)]);
+  return { scene: finalized.scene, anchors: finalized.anchors };
 }
 var queue = {
   parseMermaid(input) {
@@ -39934,6 +43092,7 @@ function parse6(input) {
   let capacity;
   let front;
   let rear;
+  let axis = "horizontal";
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
     if (t[0] === "cqueue") {
@@ -39962,20 +43121,25 @@ function parse6(input) {
       if (Number.isFinite(n)) rear = n;
       continue;
     }
+    if (t[0] === "axis") {
+      axis = parseAxisToken(t[1], axis);
+      continue;
+    }
   }
   const cap = capacity ?? cells2.length;
   const padded = Array.from({ length: cap }, (_, i) => cells2[i] ?? null);
   const firstFilled = padded.findIndex((c) => c !== null);
   let lastFilled = -1;
   for (let i = 0; i < padded.length; i++) if (padded[i] !== null) lastFilled = i;
-  const f = front ?? (firstFilled >= 0 ? firstFilled : 0);
+  const f2 = front ?? (firstFilled >= 0 ? firstFilled : 0);
   const r = rear ?? (lastFilled >= 0 ? lastFilled : 0);
   return {
     ...title !== void 0 ? { title } : {},
     capacity: cap,
     cells: padded,
-    front: f,
-    rear: r
+    front: f2,
+    rear: r,
+    axis
   };
 }
 function layoutCQueue(doc, theme) {
@@ -39987,46 +43151,80 @@ function layoutCQueue(doc, theme) {
   const total = doc.capacity;
   const labelW = doc.cells.map((c) => c ? measureText(c, font).width : 0);
   const cellW = Math.max(46, ...labelW.map((w) => w + 24));
+  const axis = doc.axis === "vertical" ? "vertical" : "horizontal";
+  const horizontal = axis === "horizontal";
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const arcH = 44;
-  const origin = { x: margin, y: margin + titleH + arcH };
+  const origin = horizontal ? { x: margin, y: margin + titleH + arcH } : { x: margin + arcH, y: margin + titleH };
   const cellInputs = doc.cells.map((v, i) => v !== null ? { label: v, index: String(i) } : { fill: palette.background, index: String(i) });
-  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH });
+  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH, orientation: axis });
   const elements = [...strip.elements];
   if (doc.title) {
     elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
   }
   const rearSlot = strip.slots[doc.rear ?? 0];
   const frontSlot = strip.slots[doc.front ?? 0];
-  if (rearSlot && frontSlot) {
-    const rx = rearSlot.x + rearSlot.width / 2;
-    const fx = frontSlot.x + frontSlot.width / 2;
-    const yTop = origin.y;
-    const apexY = origin.y - arcH + 8;
-    const d = `M ${rhu(rx)} ${rhu(yTop)} C ${rhu(rx)} ${rhu(apexY)}, ${rhu(fx)} ${rhu(apexY)}, ${rhu(fx)} ${rhu(yTop)}`;
-    elements.push(p.path(d, palette.primary, 1.5, { markerEnd: ARROW_FWD }));
-    const midX = (rx + fx) / 2;
-    elements.push(p.text(`mod ${total}`, midX, apexY - 2, typography.smallFontSize, palette.textMuted, { anchor: "middle" }));
-  }
-  let bottom = origin.y + cellH;
-  if (frontSlot && rearSlot) {
-    const same = (doc.front ?? 0) === (doc.rear ?? 0);
-    const front = pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0);
-    const rear = pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0);
-    elements.push(...front.elements, ...rear.elements);
-    bottom = Math.max(front.bottom, rear.bottom);
-  }
   const anchors = {};
   strip.slots.forEach((slot, i) => {
     anchors[`c${i}`] = { bounds: slot };
   });
-  const scene = {
-    viewBox: { x: 0, y: 0, width: strip.bounds.width + margin * 2, height: bottom + margin },
-    background: palette.background,
-    elements,
-    defs: [arrowDefs(palette.primary)]
+  if (frontSlot) anchors.front = { bounds: frontSlot };
+  if (rearSlot) anchors.rear = { bounds: rearSlot };
+  if (rearSlot && frontSlot) {
+    const selfLoop = (doc.front ?? 0) === (doc.rear ?? 0);
+    const connectorAnchors = selfLoop ? selfLoopWrapAnchors(frontSlot, horizontal) : strip.slots.reduce((acc, slot, i) => {
+      acc[`c${i}`] = { bounds: slot };
+      return acc;
+    }, {});
+    const fromKey = selfLoop ? "__rearWrap" : `c${doc.rear ?? 0}`;
+    const toKey = selfLoop ? "__frontWrap" : `c${doc.front ?? 0}`;
+    const connectorResult = routeConnectors({
+      anchors: connectorAnchors,
+      connectors: [{
+        fromKey,
+        toKey,
+        direction: "directed",
+        style: "solid",
+        label: `mod ${total}`,
+        routing: "orthogonal",
+        exitWall: horizontal ? "N" : "W",
+        entryWall: horizontal ? "N" : "W",
+        animation: "none",
+        props: {
+          color: palette.primary,
+          routePadding: arcH - 8,
+          labelPlacement: "path-midpoint"
+        }
+      }],
+      theme
+    });
+    const connectorElements = connectorResult.elements.map(
+      (element) => element.type === "path" && element.markerEnd === "triton-crosslink-arrow" ? { ...element, markerEnd: ARROW_FWD, strokeWidth: 1.5 } : element
+    );
+    const linkPaths = connectorElements.filter((e) => e.type !== "text");
+    const linkLabels = connectorElements.filter((e) => e.type === "text");
+    elements.push(...linkPaths, ...linkLabels);
+  }
+  if (frontSlot && rearSlot) {
+    const same = (doc.front ?? 0) === (doc.rear ?? 0);
+    const front = horizontal ? pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0) : pointerToSlot(p, theme, frontSlot, "front", palette.secondary, "right", 0);
+    const rear = horizontal ? pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0) : pointerToSlot(p, theme, rearSlot, "rear", palette.primary, "right", same ? 1 : 0);
+    elements.push(...front.elements, ...rear.elements);
+  }
+  const finalized = finalizeStripScene(elements, anchors, theme, [arrowDefs(palette.primary)]);
+  return { scene: finalized.scene, anchors: finalized.anchors };
+}
+function selfLoopWrapAnchors(slot, horizontal) {
+  if (horizontal) {
+    return {
+      __rearWrap: { bounds: { x: slot.x + slot.width / 2, y: slot.y, width: slot.width / 2, height: slot.height } },
+      __frontWrap: { bounds: { x: slot.x, y: slot.y, width: slot.width / 2, height: slot.height } }
+    };
+  }
+  return {
+    __rearWrap: { bounds: { x: slot.x, y: slot.y + slot.height / 2, width: slot.width, height: slot.height / 2 } },
+    __frontWrap: { bounds: { x: slot.x, y: slot.y, width: slot.width, height: slot.height / 2 } }
   };
-  return { scene, anchors };
 }
 var cqueue = {
   parseMermaid(input) {
@@ -40042,6 +43240,7 @@ var cqueue = {
 function parse7(input) {
   let title;
   let cells2 = [];
+  let axis = "horizontal";
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
     if (t[0] === "deque") {
@@ -40056,8 +43255,12 @@ function parse7(input) {
       cells2 = t.slice(1);
       continue;
     }
+    if (t[0] === "axis") {
+      axis = parseAxisToken(t[1], axis);
+      continue;
+    }
   }
-  return { ...title !== void 0 ? { title } : {}, cells: cells2 };
+  return { ...title !== void 0 ? { title } : {}, cells: cells2, axis };
 }
 function layoutDeque(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -40067,44 +43270,49 @@ function layoutDeque(doc, theme) {
   const cellH = 40;
   const n = doc.cells.length;
   const cellW = Math.max(46, ...doc.cells.map((c) => measureText(c, font).width + 24));
+  const axis = doc.axis === "vertical" ? "vertical" : "horizontal";
+  const horizontal = axis === "horizontal";
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const topH = font + 14;
   const sideGap = 56;
-  const origin = { x: margin + sideGap, y: margin + titleH + topH };
+  const origin = horizontal ? { x: margin + sideGap, y: margin + titleH + topH } : { x: margin, y: margin + titleH + sideGap };
   const cellInputs = doc.cells.map((v) => ({ label: v }));
-  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH });
+  const strip = buildStrip(p, theme, cellInputs, { origin, cellWidth: cellW, cellHeight: cellH, orientation: axis });
   const elements = [...strip.elements];
   if (doc.title) {
     elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
   }
-  const midY = origin.y + cellH / 2;
-  const leftEdge = origin.x;
-  const rightEdge = origin.x + n * cellW;
-  elements.push(p.path(`M ${rhu(leftEdge)} ${rhu(midY)} L ${rhu(margin)} ${rhu(midY)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
-  elements.push(p.text("push / pop", leftEdge - sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
-  elements.push(p.path(`M ${rhu(rightEdge)} ${rhu(midY)} L ${rhu(rightEdge + sideGap)} ${rhu(midY)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
-  elements.push(p.text("push / pop", rightEdge + sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
-  let bottom = origin.y + cellH;
+  if (horizontal) {
+    const midY = origin.y + cellH / 2;
+    const leftEdge = origin.x;
+    const rightEdge = origin.x + n * cellW;
+    elements.push(p.path(`M ${rhu(leftEdge)} ${rhu(midY)} L ${rhu(margin)} ${rhu(midY)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
+    elements.push(p.text("push / pop", leftEdge - sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
+    elements.push(p.path(`M ${rhu(rightEdge)} ${rhu(midY)} L ${rhu(rightEdge + sideGap)} ${rhu(midY)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
+    elements.push(p.text("push / pop", rightEdge + sideGap / 2, origin.y - 8, font, palette.primary, { anchor: "middle", weight: "bold" }));
+  } else {
+    const midX = origin.x + cellW / 2;
+    const topEdge = origin.y;
+    const bottomEdge = origin.y + n * cellH;
+    elements.push(p.path(`M ${rhu(midX)} ${rhu(topEdge)} L ${rhu(midX)} ${rhu(topEdge - sideGap)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
+    elements.push(p.text("push / pop", midX, topEdge - sideGap / 2 - 6, font, palette.primary, { anchor: "middle", weight: "bold" }));
+    elements.push(p.path(`M ${rhu(midX)} ${rhu(bottomEdge)} L ${rhu(midX)} ${rhu(bottomEdge + sideGap)}`, palette.primary, 1.5, { markerStart: ARROW_REV, markerEnd: ARROW_FWD }));
+    elements.push(p.text("push / pop", midX, bottomEdge + sideGap / 2 + font, font, palette.primary, { anchor: "middle", weight: "bold" }));
+  }
   if (n > 0) {
     const frontSlot = strip.slots[0];
     const rearSlot = strip.slots[n - 1];
     const same = n === 1;
-    const front = pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0);
-    const rear = pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0);
+    const front = horizontal ? pointerBelow(p, theme, frontSlot, "front", palette.secondary, 0) : pointerToSlot(p, theme, frontSlot, "front", palette.secondary, "right", 0);
+    const rear = horizontal ? pointerBelow(p, theme, rearSlot, "rear", palette.primary, same ? 1 : 0) : pointerToSlot(p, theme, rearSlot, "rear", palette.primary, "right", same ? 1 : 0);
     elements.push(...front.elements, ...rear.elements);
-    bottom = Math.max(front.bottom, rear.bottom);
   }
   const anchors = {};
   strip.slots.forEach((slot, i) => {
     anchors[`c${i}`] = { bounds: slot };
   });
-  const scene = {
-    viewBox: { x: 0, y: 0, width: rightEdge + sideGap + margin, height: bottom + margin },
-    background: palette.background,
-    elements,
-    defs: [arrowDefs(palette.primary)]
-  };
-  return { scene, anchors };
+  const finalized = finalizeStripScene(elements, anchors, theme, [arrowDefs(palette.primary)]);
+  return { scene: finalized.scene, anchors: finalized.anchors };
 }
 var deque = {
   parseMermaid(input) {
@@ -40120,6 +43328,7 @@ var deque = {
 function parse8(input) {
   let title;
   const items = [];
+  let axis = "horizontal";
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
     if (t[0] === "pqueue") {
@@ -40129,6 +43338,10 @@ function parse8(input) {
       title = line.slice(5).trim();
       continue;
     }
+    if (t[0] === "axis") {
+      axis = parseAxisToken(t[1], axis);
+      continue;
+    }
     if (t[0] === "item") {
       const rest = line.slice(4).trim();
       const m = rest.match(/^(.*?)\s+(-?\d+(?:\.\d+)?)\s*$/);
@@ -40136,9 +43349,9 @@ function parse8(input) {
       else if (rest) items.push({ label: rest, priority: 0 });
     }
   }
-  return { ...title !== void 0 ? { title } : {}, items };
+  return { ...title !== void 0 ? { title } : {}, items, axis };
 }
-function parseHex(c) {
+function parseHex2(c) {
   const s = c.trim();
   const m3 = s.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
   if (m3) return [parseInt(m3[1] + m3[1], 16), parseInt(m3[2] + m3[2], 16), parseInt(m3[3] + m3[3], 16)];
@@ -40146,16 +43359,16 @@ function parseHex(c) {
   if (m6) return [parseInt(m6[1], 16), parseInt(m6[2], 16), parseInt(m6[3], 16)];
   return null;
 }
-function toHex(n) {
+function toHex2(n) {
   return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 }
-function mixHex(a, b, t) {
-  const ca = parseHex(a), cb = parseHex(b);
+function mixHex2(a, b, t) {
+  const ca = parseHex2(a), cb = parseHex2(b);
   if (!ca || !cb) return a;
   const r = ca[0] + (cb[0] - ca[0]) * t;
   const g = ca[1] + (cb[1] - ca[1]) * t;
   const bl = ca[2] + (cb[2] - ca[2]) * t;
-  return `#${toHex(r)}${toHex(g)}${toHex(bl)}`;
+  return `#${toHex2(r)}${toHex2(g)}${toHex2(bl)}`;
 }
 function layoutPQueue(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -40163,6 +43376,7 @@ function layoutPQueue(doc, theme) {
   const margin = spacing.diagramMargin;
   const font = typography.baseFontSize;
   const cellH = 38;
+  const axis = doc.axis === "vertical" ? "vertical" : "horizontal";
   const items = doc.items.map((it, i) => ({ ...it, i })).sort((a, b) => b.priority - a.priority || a.i - b.i);
   const priorities = items.map((it) => it.priority);
   const max = priorities.length ? Math.max(...priorities) : 0;
@@ -40177,13 +43391,13 @@ function layoutPQueue(doc, theme) {
   const cellInputs = items.map((it) => {
     const norm = span === 0 ? 1 : (it.priority - min) / span;
     const t = 0.15 + (1 - norm) * 0.65;
-    return { fill: mixHex(palette.primary, palette.surface, t) };
+    return { fill: mixHex2(palette.primary, palette.surface, t) };
   });
   const strip = buildStrip(p, theme, cellInputs, {
     origin,
     cellWidth: cellW,
     cellHeight: cellH,
-    orientation: "vertical"
+    orientation: axis
   });
   const elements = [...strip.elements];
   if (doc.title) {
@@ -40199,12 +43413,8 @@ function layoutPQueue(doc, theme) {
   strip.slots.forEach((slot, i) => {
     anchors[`c${i}`] = { bounds: slot };
   });
-  const scene = {
-    viewBox: { x: 0, y: 0, width: cellW + margin * 2, height: origin.y + items.length * cellH + margin },
-    background: palette.background,
-    elements
-  };
-  return { scene, anchors };
+  const finalized = finalizeStripScene(elements, anchors, theme);
+  return { scene: finalized.scene, anchors: finalized.anchors };
 }
 var pqueue = {
   parseMermaid(input) {
@@ -40221,6 +43431,7 @@ function parse9(input) {
   let title;
   let cells2 = [];
   let capacity;
+  let axis = "vertical";
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
     if (t[0] === "stack") {
@@ -40240,8 +43451,12 @@ function parse9(input) {
       if (Number.isFinite(n)) capacity = n;
       continue;
     }
+    if (t[0] === "axis") {
+      axis = parseAxisToken(t[1], axis);
+      continue;
+    }
   }
-  return { ...title !== void 0 ? { title } : {}, cells: cells2, ...capacity !== void 0 ? { capacity } : {} };
+  return { ...title !== void 0 ? { title } : {}, cells: cells2, ...capacity !== void 0 ? { capacity } : {}, axis };
 }
 function layoutStack(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -40253,10 +43468,12 @@ function layoutStack(doc, theme) {
   const total = Math.max(filled, doc.capacity ?? filled, 1);
   const empty = total - filled;
   const cellW = Math.max(64, ...doc.cells.map((c) => measureText(c, font).width + 28));
+  const axis = doc.axis === "horizontal" ? "horizontal" : "vertical";
+  const horizontal = axis === "horizontal";
   const titleH = doc.title ? typography.titleFontSize + 14 : 0;
   const topH = font + 18;
   const sideGap = 64;
-  const origin = { x: margin + sideGap, y: margin + titleH + topH };
+  const origin = horizontal ? { x: margin, y: margin + titleH + topH } : { x: margin + sideGap, y: margin + titleH + topH };
   const display = [
     ...Array.from({ length: empty }, () => null),
     ...[...doc.cells].reverse()
@@ -40266,33 +43483,32 @@ function layoutStack(doc, theme) {
     origin,
     cellWidth: cellW,
     cellHeight: cellH,
-    orientation: "vertical"
+    orientation: axis
   });
   const elements = [...strip.elements];
   if (doc.title) {
     elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
   }
-  const cx = origin.x + cellW / 2;
-  elements.push(p.text("push / pop", cx, origin.y - 9, font, palette.primary, { anchor: "middle", weight: "bold" }));
-  elements.push(p.path(`M ${rhu(cx)} ${rhu(origin.y - topH + 8)} L ${rhu(cx)} ${rhu(origin.y)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
+  const topSlot = filled > 0 ? strip.slots[empty] : strip.slots[0];
+  const actionX = topSlot ? topSlot.x + topSlot.width / 2 : origin.x + cellW / 2;
+  elements.push(p.text("push / pop", actionX, origin.y - 9, font, palette.primary, { anchor: "middle", weight: "bold" }));
+  elements.push(p.path(`M ${rhu(actionX)} ${rhu(origin.y - topH + 8)} L ${rhu(actionX)} ${rhu(origin.y)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
   if (filled > 0) {
-    const topSlot = strip.slots[empty];
-    const cyTop = topSlot.y + topSlot.height / 2;
-    elements.push(p.path(`M ${rhu(origin.x - sideGap + 8)} ${rhu(cyTop)} L ${rhu(origin.x)} ${rhu(cyTop)}`, palette.secondary, 1.5, { markerEnd: ARROW_ID8 }));
-    elements.push(p.text("top", origin.x - sideGap + 6, cyTop - 6, font, palette.secondary, { anchor: "start", weight: "bold" }));
+    if (horizontal) {
+      const top = pointerToSlot(p, theme, topSlot, "top", palette.secondary, "bottom", 0);
+      elements.push(...top.elements);
+    } else {
+      const cyTop = topSlot.y + topSlot.height / 2;
+      elements.push(p.path(`M ${rhu(origin.x - sideGap + 8)} ${rhu(cyTop)} L ${rhu(origin.x)} ${rhu(cyTop)}`, palette.secondary, 1.5, { markerEnd: ARROW_ID2 }));
+      elements.push(p.text("top", origin.x - sideGap + 6, cyTop - 6, font, palette.secondary, { anchor: "start", weight: "bold" }));
+    }
   }
   const anchors = {};
   strip.slots.forEach((slot, i) => {
     anchors[`c${i}`] = { bounds: slot };
   });
-  const bottom = origin.y + total * cellH;
-  const scene = {
-    viewBox: { x: 0, y: 0, width: origin.x + cellW + margin, height: bottom + margin },
-    background: palette.background,
-    elements,
-    defs: [arrowDef(palette.primary)]
-  };
-  return { scene, anchors };
+  const finalized = finalizeStripScene(elements, anchors, theme, [arrowDef(palette.primary)]);
+  return { scene: finalized.scene, anchors: finalized.anchors };
 }
 var stack = {
   parseMermaid(input) {
@@ -40312,9 +43528,89 @@ function parseEntries(spec) {
     return { key: pair, value: "" };
   });
 }
+function parseBucketLabels(spec) {
+  const labels = [];
+  let current = "";
+  let inQuotes = false;
+  let escaping = false;
+  for (const ch of spec) {
+    if (escaping) {
+      current += ch;
+      escaping = false;
+      continue;
+    }
+    if (inQuotes && ch === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && ch === ",") {
+      const label = current.trim();
+      if (label) labels.push(label);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (inQuotes) throw new Error(`Unterminated bucket label: ${spec}`);
+  const tail = current.trim();
+  if (tail) labels.push(tail);
+  return labels;
+}
+function splitBucketDirective(spec) {
+  let inQuotes = false;
+  let escaping = false;
+  for (let i = 0; i < spec.length; i++) {
+    const ch = spec[i];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+    if (inQuotes && ch === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (!inQuotes && ch === ":") {
+      return { id: spec.slice(0, i).trim(), entries: spec.slice(i + 1).trim() };
+    }
+  }
+  return null;
+}
+function parseBucketId(spec) {
+  const [label = ""] = parseBucketLabels(spec);
+  return /^\d+$/.test(label) ? Number(label) : label;
+}
+function normalizeDoc(doc) {
+  const chains = doc.chains ?? [];
+  const bucketLabels = [...doc.bucketLabels ?? []];
+  for (const chain of chains) {
+    if (typeof chain.index === "string" && !bucketLabels.includes(chain.index)) bucketLabels.push(chain.index);
+  }
+  const maxIdx = chains.reduce((mx, c) => typeof c.index === "number" ? Math.max(mx, c.index) : mx, -1);
+  const numericBucketCount = Math.max(doc.buckets ?? 0, maxIdx + 1, 1);
+  if (bucketLabels.length === 0) {
+    for (let i = 0; i < numericBucketCount; i++) bucketLabels.push(String(i));
+  } else {
+    while (bucketLabels.length < numericBucketCount) bucketLabels.push(String(bucketLabels.length));
+  }
+  return {
+    ...doc.title !== void 0 ? { title: doc.title } : {},
+    buckets: bucketLabels.length,
+    bucketLabels,
+    chains
+  };
+}
 function parse10(input) {
   let title;
   let bucketCount;
+  let explicitBucketLabels;
   const chains = [];
   for (const line of lines(input)) {
     const t = line.split(/\s+/);
@@ -40326,18 +43622,25 @@ function parse10(input) {
       continue;
     }
     if (t[0] === "buckets") {
-      const n = Number(t[1]);
-      if (Number.isFinite(n)) bucketCount = n;
+      const spec = line.slice(7).trim();
+      if (!spec) continue;
+      if (/^\d+$/.test(spec)) {
+        bucketCount = Number(spec);
+        explicitBucketLabels = void 0;
+      } else {
+        explicitBucketLabels = parseBucketLabels(spec);
+      }
       continue;
     }
     if (t[0] === "bucket") {
-      const m = line.match(/^bucket\s+(\d+)\s*:\s*(.*)$/);
-      if (m) chains.push({ index: Number(m[1]), entries: parseEntries(m[2]) });
+      const parsed = splitBucketDirective(line.slice(6).trim());
+      if (parsed) chains.push({ index: parseBucketId(parsed.id), entries: parseEntries(parsed.entries) });
     }
   }
-  const maxIdx = chains.reduce((mx, c) => Math.max(mx, c.index), -1);
-  const buckets = Math.max(bucketCount ?? maxIdx + 1, maxIdx + 1, 1);
-  return { ...title !== void 0 ? { title } : {}, buckets, chains };
+  return normalizeDoc({ title, buckets: bucketCount, bucketLabels: explicitBucketLabels, chains });
+}
+function bucketKey(id) {
+  return typeof id === "number" ? `n:${id}` : `s:${id}`;
 }
 function layoutHashmap(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -40345,7 +43648,7 @@ function layoutHashmap(doc, theme) {
   const margin = spacing.diagramMargin;
   const font = typography.baseFontSize;
   const cellH = 38;
-  const idxW = 46;
+  const idxW = Math.max(46, ...doc.bucketLabels.map((label) => measureText(label, font).width + 24));
   const entryH = 30;
   const entryGap = 30;
   const chainGap = 36;
@@ -40355,22 +43658,23 @@ function layoutHashmap(doc, theme) {
   if (doc.title) {
     elements.push(p.text(doc.title, margin, margin + typography.titleFontSize, typography.titleFontSize, palette.text, { weight: "bold" }));
   }
-  const slots = [];
+  const slotById = /* @__PURE__ */ new Map();
+  const anchors = {};
   for (let i = 0; i < doc.buckets; i++) {
     const slot = { x: origin.x, y: origin.y + i * cellH, width: idxW, height: cellH };
-    slots.push(slot);
-    elements.push(p.rect(slot, palette.surface, palette.border, 1.5, { rx: 3 }));
-    elements.push(p.text(String(i), slot.x + slot.width / 2, slot.y + slot.height / 2 + font * 0.35, font, palette.textMuted, { anchor: "middle", weight: "bold" }));
-  }
-  const anchors = {};
-  slots.forEach((slot, i) => {
+    const label = doc.bucketLabels[i] ?? String(i);
+    slotById.set(bucketKey(i), { row: i, bounds: slot });
+    if (!slotById.has(bucketKey(label))) slotById.set(bucketKey(label), { row: i, bounds: slot });
     anchors[`b${i}`] = { bounds: slot };
-  });
+    elements.push(p.rect(slot, palette.surface, palette.border, 1.5, { rx: 3 }));
+    elements.push(p.text(label, slot.x + slot.width / 2, slot.y + slot.height / 2 + font * 0.35, font, palette.textMuted, { anchor: "middle", weight: "bold" }));
+  }
   const chainStartX = origin.x + idxW + chainGap;
   let maxRight = chainStartX;
   for (const chain of doc.chains) {
-    const slot = slots[chain.index];
-    if (!slot || chain.entries.length === 0) continue;
+    const slotRef = slotById.get(bucketKey(chain.index));
+    if (!slotRef || chain.entries.length === 0) continue;
+    const { bounds: slot, row } = slotRef;
     const cy = slot.y + slot.height / 2;
     let x = chainStartX;
     let fromX = slot.x + slot.width;
@@ -40378,10 +43682,10 @@ function layoutHashmap(doc, theme) {
       const label = e.value ? `${e.key} : ${e.value}` : e.key;
       const w = measureText(label, font).width + 22;
       const box = { x, y: cy - entryH / 2, width: w, height: entryH };
-      elements.push(p.path(`M ${rhu(fromX)} ${rhu(cy)} L ${rhu(x - 3)} ${rhu(cy)}`, palette.primary, 1.5, { markerEnd: ARROW_ID8 }));
+      elements.push(p.path(`M ${rhu(fromX)} ${rhu(cy)} L ${rhu(x - 3)} ${rhu(cy)}`, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
       elements.push(p.rect(box, palette.surface, palette.border, 1.5, { rx: 4 }));
       elements.push(p.text(label, x + w / 2, cy + font * 0.35, font, palette.text, { anchor: "middle", weight: "bold" }));
-      anchors[`b${chain.index}e${j}`] = { bounds: box };
+      anchors[`b${row}e${j}`] = { bounds: box };
       fromX = x + w;
       x = fromX + entryGap;
       maxRight = Math.max(maxRight, fromX);
@@ -40402,7 +43706,7 @@ var hashmap = {
     return { version: "1.0", metadata: {}, ...parse10(input) };
   },
   parseYaml(input) {
-    return JSON.parse(input);
+    return { version: "1.0", metadata: {}, ...normalizeDoc(JSON.parse(input)) };
   },
   layout(ir, theme) {
     return layoutHashmap(ir, theme);
@@ -40412,6 +43716,7 @@ function parse11(input) {
   let title;
   const rows = [];
   let showIndex = true;
+  const highlights = [];
   for (const line of input.split(/\r?\n/).map((l) => l.trimEnd())) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -40436,8 +43741,15 @@ function parse11(input) {
       rows.push(t.slice(1));
       continue;
     }
+    if (t[0] === "highlight") {
+      for (const tok of t.slice(1)) {
+        const m = tok.match(/^(\d+),(\d+)$/);
+        if (m) highlights.push([Number(m[1]), Number(m[2])]);
+      }
+      continue;
+    }
   }
-  return { ...title !== void 0 ? { title } : {}, rows, showIndex };
+  return { ...title !== void 0 ? { title } : {}, rows, showIndex, ...highlights.length > 0 ? { highlights } : {} };
 }
 function layoutMatrix(doc, theme) {
   const { palette, typography, spacing } = theme;
@@ -40460,7 +43772,10 @@ function layoutMatrix(doc, theme) {
   const anchors = {};
   grid.forEach((row, r) => {
     const rowOrigin = { x: origin.x, y: origin.y + r * cellH };
-    const cellInputs = row.map((v) => ({ label: v }));
+    const cellInputs = row.map((v, c) => {
+      const isHighlit = doc.highlights?.some(([hr, hc]) => hr === r && hc === c) ?? false;
+      return isHighlit ? { label: v, fill: palette.primary, fillOpacity: 0.22, stroke: palette.primary } : { label: v };
+    });
     const strip = buildStrip(p, theme, cellInputs, { origin: rowOrigin, cellWidth: cellW, cellHeight: cellH });
     elements.push(...strip.elements);
     strip.slots.forEach((slot, c) => {
@@ -40574,9 +43889,15 @@ function parse12(input) {
     const m = line.match(EDGE_RE);
     if (m) {
       const from = m[1], to = m[3];
+      const rawLabel = m[4]?.trim();
+      let label;
+      let kind;
+      if (rawLabel === "active") kind = "active";
+      else if (rawLabel === "dashed") kind = "dashed";
+      else label = rawLabel;
       ensure(from);
       ensure(to);
-      edges2.push({ from, to, ...m[4] ? { label: m[4].trim() } : {} });
+      edges2.push({ from, to, ...label ? { label } : {}, ...kind ? { kind } : {} });
     }
   }
   const nodes = order.map((id) => ({ id, label: labels.get(id) }));
@@ -40607,13 +43928,19 @@ function layoutGraph(doc, theme) {
     const b = placed.boxes.has(e.to) ? box(e.to) : void 0;
     if (!a || !b) continue;
     const { start, end } = connectSlots(a, b);
-    const opts2 = doc.directed ? { markerEnd: ARROW_ID8 } : {};
-    elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, palette.textMuted, 1.5, opts2));
+    const isActive = e.kind === "active";
+    const edgeColor = isActive ? palette.primary : palette.textMuted;
+    const edgeWidth = isActive ? 2.5 : 1.5;
+    const pathOpts = {
+      ...doc.directed ? { markerEnd: ARROW_ID2 } : {},
+      ...e.kind === "dashed" ? { dash: "6 3" } : {}
+    };
+    elements.push(p.path(`M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`, edgeColor, edgeWidth, pathOpts));
     if (e.label) {
       const mx = (start.x + end.x) / 2, my = (start.y + end.y) / 2;
       const w = measureText(e.label, small).width + 8;
       elements.push(p.rect({ x: mx - w / 2, y: my - 9, width: w, height: 16 }, palette.background, palette.background, 0, { rx: 3 }));
-      elements.push(p.text(e.label, mx, my + 3, small, palette.primary, { anchor: "middle", weight: "bold" }));
+      elements.push(p.text(e.label, mx, my + 3, small, isActive ? palette.primary : palette.textMuted, { anchor: "middle", weight: "bold" }));
     }
   }
   const anchors = {};
@@ -40912,6 +44239,7 @@ var topology = {
 function renderSVG(scene) {
   const { viewBox, background, elements, defs } = scene;
   const vb = `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`;
+  const markerMetrics = markerMetricsById(defs ?? []);
   const lines2 = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${viewBox.width}" height="${viewBox.height}">`
   ];
@@ -40921,39 +44249,43 @@ function renderSVG(scene) {
     lines2.push("  </defs>");
   }
   if (background) {
-    lines2.push(`  <rect width="100%" height="100%" fill="${background}" />`);
+    lines2.push(`  <rect x="${viewBox.x}" y="${viewBox.y}" width="${viewBox.width}" height="${viewBox.height}" fill="${background}" />`);
   }
   for (const el of elements) {
-    lines2.push(renderElement(el, 1));
+    lines2.push(renderElement(el, 1, markerMetrics));
   }
   lines2.push("</svg>");
   return lines2.join("\n");
 }
-function renderElement(el, depth) {
+function renderElement(el, depth, markerMetrics) {
   const pad = "  ".repeat(depth);
   switch (el.type) {
     case "rect": {
       const rx = el.rx != null ? ` rx="${el.rx}"` : "";
+      const fillOpacity = el.fillOpacity != null ? ` fill-opacity="${el.fillOpacity}"` : "";
       const opacity = el.opacity != null ? ` opacity="${el.opacity}"` : "";
-      return `${pad}<rect x="${el.bounds.x}" y="${el.bounds.y}" width="${el.bounds.width}" height="${el.bounds.height}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}"${rx}${opacity} />`;
+      return `${pad}<rect x="${el.bounds.x}" y="${el.bounds.y}" width="${el.bounds.width}" height="${el.bounds.height}" fill="${fillVal(el.fill)}"${fillOpacity} stroke="${el.stroke}" stroke-width="${el.strokeWidth}"${rx}${opacity} />`;
     }
     case "circle": {
       const opacity = el.opacity != null ? ` opacity="${el.opacity}"` : "";
-      return `${pad}<circle cx="${el.center.x}" cy="${el.center.y}" r="${el.radius}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}"${opacity} />`;
+      return `${pad}<circle cx="${el.center.x}" cy="${el.center.y}" r="${el.radius}" fill="${fillVal(el.fill)}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}"${opacity} />`;
     }
     case "text": {
       const anchor = el.anchor != null ? ` text-anchor="${el.anchor}"` : "";
       const weight = el.fontWeight != null ? ` font-weight="${el.fontWeight}"` : "";
       const opacity = el.opacity != null ? ` opacity="${el.opacity}"` : "";
-      return `${pad}<text x="${el.position.x}" y="${el.position.y}" font-size="${el.fontSize}" font-family="${escapeAttr(el.fontFamily)}" fill="${el.fill}"${anchor}${weight}${opacity}>${escapeXml(el.content)}</text>`;
+      return `${pad}<text x="${el.position.x}" y="${el.position.y}" font-size="${el.fontSize}" font-family="${escapeAttr(el.fontFamily)}" fill="${fillVal(el.fill)}"${anchor}${weight}${opacity}>${escapeXml(el.content)}</text>`;
     }
     case "path": {
-      const dash = el.strokeDasharray != null ? ` stroke-dasharray="${el.strokeDasharray}"` : "";
-      const mEnd = el.markerEnd != null ? ` marker-end="url(#${el.markerEnd})"` : "";
-      const mStart = el.markerStart != null ? ` marker-start="url(#${el.markerStart})"` : "";
-      const fill = el.fill != null ? ` fill="${el.fill}"` : ' fill="none"';
+      const drawLength = el.animated === "draw" ? pathLengthApprox(el.d) : void 0;
+      const dashValue = drawLength != null ? `${drawLength} ${drawLength}` : el.strokeDasharray;
+      const dash = dashValue != null ? ` stroke-dasharray="${escapeAttr(dashValue)}"` : "";
+      const mEnd = el.markerEnd != null ? ` marker-end="url(#${escapeAttr(el.markerEnd)})"` : "";
+      const mStart = el.markerStart != null ? ` marker-start="url(#${escapeAttr(el.markerStart)})"` : "";
+      const fill = ` fill="${fillVal(el.fill)}"`;
       const opacity = el.opacity != null ? ` opacity="${el.opacity}"` : "";
-      const attrs = `${pad}<path d="${el.d}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}"${fill}${dash}${mEnd}${mStart}${opacity}`;
+      const stroke = el.animated === "flow" ? `url(#${flowGradientId(el.d, el.stroke)})` : el.stroke;
+      const attrs = `${pad}<path d="${escapeAttr(el.d)}" stroke="${escapeAttr(stroke)}" stroke-width="${el.strokeWidth}"${fill}${dash}${mEnd}${mStart}${opacity}`;
       if (el.animated === "march" && el.strokeDasharray) {
         const period = parseDasharrayPeriod(el.strokeDasharray);
         const animate = `<animate attributeName="stroke-dashoffset" from="0" to="-${period}" dur="0.8s" repeatCount="indefinite"/>`;
@@ -40961,14 +44293,62 @@ function renderElement(el, depth) {
 ${pad}  ${animate}
 ${pad}</path>`;
       }
+      if (el.animated === "draw") {
+        const animate = `<animate attributeName="stroke-dashoffset" values="0;${drawLength};0" dur="2s" repeatCount="indefinite"/>`;
+        return `${attrs}>
+${pad}  ${animate}
+${pad}</path>`;
+      }
+      if (el.animated === "pulse") {
+        const wide = formatNum(el.strokeWidth * 2);
+        const animate = `<animate attributeName="stroke-width" values="${el.strokeWidth};${wide};${el.strokeWidth}" dur="1.4s" repeatCount="indefinite"/>`;
+        return `${attrs}>
+${pad}  ${animate}
+${pad}</path>`;
+      }
+      if (el.animated === "glow") {
+        const animate = '<animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/>';
+        return `${attrs}>
+${pad}  ${animate}
+${pad}</path>`;
+      }
+      if (el.animated === "colorcycle") {
+        const animate = '<animate attributeName="stroke" values="#4A90D9;#9b51e0;#e54444;#2ecc71;#4A90D9" dur="3s" repeatCount="indefinite"/>';
+        return `${attrs}>
+${pad}  ${animate}
+${pad}</path>`;
+      }
+      if (el.animated === "flow") {
+        const gradient = renderFlowGradient(el, pad);
+        return `${gradient}
+${attrs} />`;
+      }
       if (el.animated === "particle") {
-        const circle = `${pad}<circle r="4" fill="${el.stroke}">
-${pad}  <animateMotion dur="1.5s" repeatCount="indefinite" rotate="auto" path="${el.d}"/>
-${pad}</circle>`;
+        const motionPath = trimMotionPathForArrowhead(el.d, motionArrowheadClearance(el, 4, markerMetrics));
+        const circle = renderMotionCircle(motionPath, el.stroke, 4, void 0, "1.5s", "0s", pad);
         return `${attrs} />
 ${circle}`;
       }
+      if (el.animated === "comet") {
+        const motionPath = trimMotionPathForArrowhead(el.d, motionArrowheadClearance(el, 4.2, markerMetrics));
+        const circles = [
+          renderMotionCircle(motionPath, el.stroke, 4.2, 0.95, "1.8s", "0s", pad),
+          renderMotionCircle(motionPath, el.stroke, 3.1, 0.45, "1.8s", "-0.18s", pad),
+          renderMotionCircle(motionPath, el.stroke, 2.2, 0.22, "1.8s", "-0.36s", pad)
+        ].join("\n");
+        return `${attrs} />
+${circles}`;
+      }
+      if (el.animated === "stream") {
+        const motionPath = trimMotionPathForArrowhead(el.d, motionArrowheadClearance(el, 3.2, markerMetrics));
+        const circles = [0, 1, 2, 3].map((i) => renderMotionCircle(motionPath, el.stroke, 3.2, 0.9, "2s", i === 0 ? "0s" : `-${formatNum(i * 0.5)}s`, pad)).join("\n");
+        return `${attrs} />
+${circles}`;
+      }
       return `${attrs} />`;
+    }
+    case "icon": {
+      return renderIcon(el, depth);
     }
     case "group": {
       const id = el.id != null ? ` id="${escapeAttr(el.id)}"` : "";
@@ -40977,21 +44357,205 @@ ${circle}`;
       if (el.children.length === 0) {
         return `${pad}<g${id}${transform}${opacity} />`;
       }
-      const inner = el.children.map((c) => renderElement(c, depth + 1)).join("\n");
+      const inner = el.children.map((c) => renderElement(c, depth + 1, markerMetrics)).join("\n");
       return `${pad}<g${id}${transform}${opacity}>
 ${inner}
 ${pad}</g>`;
     }
   }
 }
+var iconEmitCounter = 0;
+function renderIcon(el, depth) {
+  const pad = "  ".repeat(depth);
+  const { icon, x, y, size } = el;
+  const { viewBox, transforms, colorMode } = icon;
+  const vbW = viewBox.width;
+  const vbH = viewBox.height;
+  const vbL = viewBox.left;
+  const vbT = viewBox.top;
+  const scale = Math.min(size / vbW, size / vbH);
+  const scaledW = formatNum(vbW * scale);
+  const scaledH = formatNum(vbH * scale);
+  const offX = formatNum(x + (size - vbW * scale) / 2);
+  const offY = formatNum(y + (size - vbH * scale) / 2);
+  const styleAttr = colorMode === "monochrome" && el.color ? ` style="color:${escapeAttr(el.color)}"` : "";
+  const opacityAttr = el.opacity != null ? ` opacity="${el.opacity}"` : "";
+  const body = colorMode === "brand" ? namespaceIconIds(icon.body, `icn${iconEmitCounter++}`) : icon.body;
+  const cx = vbL + vbW / 2;
+  const cy = vbT + vbH / 2;
+  const innerTransform = buildIconTransform(transforms, cx, cy);
+  const vbAttr = `${vbL} ${vbT} ${formatNum(vbW)} ${formatNum(vbH)}`;
+  const inner = innerTransform ? `${pad}  <g transform="${innerTransform}">${body}</g>` : `${pad}  ${body}`;
+  return [
+    `${pad}<svg x="${offX}" y="${offY}" width="${scaledW}" height="${scaledH}" viewBox="${vbAttr}"${styleAttr}${opacityAttr}>`,
+    inner,
+    `${pad}</svg>`
+  ].join("\n");
+}
+function buildIconTransform(t, cx, cy) {
+  if (t.rotate === 0 && !t.hFlip && !t.vFlip) return null;
+  const deg = t.rotate * 90;
+  const sf = t.hFlip ? -1 : 1;
+  const vf = t.vFlip ? -1 : 1;
+  const cxs = formatNum(cx);
+  const cys = formatNum(cy);
+  const parts = [];
+  parts.push(`translate(${cxs} ${cys})`);
+  if (t.hFlip || t.vFlip) parts.push(`scale(${sf} ${vf})`);
+  if (t.rotate !== 0) parts.push(`rotate(${deg})`);
+  parts.push(`translate(${formatNum(-cx)} ${formatNum(-cy)})`);
+  return parts.join(" ");
+}
+function namespaceIconIds(body, prefix) {
+  const idRe = /\bid="([^"]+)"/g;
+  const ids = /* @__PURE__ */ new Set();
+  let m;
+  while ((m = idRe.exec(body)) !== null) {
+    ids.add(m[1]);
+  }
+  if (ids.size === 0) return body;
+  let result = body;
+  for (const id of ids) {
+    const newId = `${prefix}-${id}`;
+    result = result.split(`id="${id}"`).join(`id="${newId}"`);
+    result = result.split(`url(#${id})`).join(`url(#${newId})`);
+    result = result.split(`href="#${id}"`).join(`href="#${newId}"`);
+    result = result.split(`href='#${id}'`).join(`href='#${newId}'`);
+  }
+  return result;
+}
 function parseDasharrayPeriod(dasharray) {
   return dasharray.trim().split(/[\s,]+/).map(Number).filter((n) => !isNaN(n) && n > 0).reduce((sum, n) => sum + n, 0);
+}
+function renderMotionCircle(path, fill, radius, opacity, dur, begin, pad) {
+  const opacityAttr = opacity != null ? ` opacity="${opacity}"` : "";
+  return `${pad}<circle r="${radius}" fill="${escapeAttr(fill)}"${opacityAttr}>
+${pad}  <animateMotion dur="${dur}" begin="${begin}" repeatCount="indefinite" rotate="auto" path="${escapeAttr(path)}"/>
+${pad}</circle>`;
+}
+var DEFAULT_MARKER_REF_X = 7;
+var MIN_MOTION_SEGMENT_LENGTH = 1;
+function trimMotionPathForArrowhead(path, clearance) {
+  if (clearance <= 0) return path;
+  const pts = pathPoints(path);
+  if (pts.length < 2) return path;
+  const end = pts[pts.length - 1];
+  const prev = pts[pts.length - 2];
+  const dx = end.x - prev.x;
+  const dy = end.y - prev.y;
+  const segmentLength = Math.hypot(dx, dy);
+  if (segmentLength === 0) return path;
+  const remainingLength = segmentLength > MIN_MOTION_SEGMENT_LENGTH ? Math.max(MIN_MOTION_SEGMENT_LENGTH, segmentLength - clearance) : segmentLength / 2;
+  const unitX = dx / segmentLength;
+  const unitY = dy / segmentLength;
+  const trimmedEnd = {
+    x: prev.x + unitX * remainingLength,
+    y: prev.y + unitY * remainingLength
+  };
+  const motionPts = [...pts.slice(0, -1), trimmedEnd];
+  return motionPts.map((pt, i) => `${i === 0 ? "M" : "L"} ${formatNum(pt.x)} ${formatNum(pt.y)}`).join(" ");
+}
+function motionArrowheadClearance(el, dotRadius, markerMetrics) {
+  if (el.markerEnd == null) return 0;
+  const marker = markerMetrics.get(el.markerEnd) ?? { refX: DEFAULT_MARKER_REF_X, markerUnits: "strokeWidth" };
+  const markerBackOffset = marker.markerUnits === "strokeWidth" ? marker.refX * el.strokeWidth : marker.refX;
+  return markerBackOffset + dotRadius;
+}
+function markerMetricsById(defs) {
+  const markers = /* @__PURE__ */ new Map();
+  for (const def of defs) {
+    for (const match of def.matchAll(/<marker\b[^>]*>/g)) {
+      const marker = match[0];
+      const id = attrValue(marker, "id");
+      const refX = attrNumber(marker, "refX");
+      if (id == null || refX == null) continue;
+      const markerUnits = attrValue(marker, "markerUnits") === "userSpaceOnUse" ? "userSpaceOnUse" : "strokeWidth";
+      markers.set(id, { refX, markerUnits });
+    }
+  }
+  return markers;
+}
+function attrValue(text, name) {
+  return text.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]+)"`))?.[1] ?? text.match(new RegExp(`\\b${name}\\s*=\\s*'([^']+)'`))?.[1];
+}
+function attrNumber(text, name) {
+  const value = attrValue(text, name);
+  if (value == null) return void 0;
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : void 0;
+}
+function renderFlowGradient(el, pad) {
+  const id = flowGradientId(el.d, el.stroke);
+  const { start, end } = pathEndpoints(el.d);
+  const base = escapeAttr(el.stroke);
+  return [
+    `${pad}<defs>`,
+    `${pad}  <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}">`,
+    `${pad}    <stop offset="0%" stop-color="${base}" stop-opacity="0.75"/>`,
+    `${pad}    <stop offset="20%" stop-color="${base}" stop-opacity="0.85">`,
+    `${pad}      <animate attributeName="offset" values="0%;60%;100%" dur="1.6s" repeatCount="indefinite"/>`,
+    `${pad}    </stop>`,
+    `${pad}    <stop offset="35%" stop-color="#FFFFFF" stop-opacity="1">`,
+    `${pad}      <animate attributeName="offset" values="10%;70%;100%" dur="1.6s" repeatCount="indefinite"/>`,
+    `${pad}    </stop>`,
+    `${pad}    <stop offset="50%" stop-color="${base}" stop-opacity="0.85">`,
+    `${pad}      <animate attributeName="offset" values="20%;80%;100%" dur="1.6s" repeatCount="indefinite"/>`,
+    `${pad}    </stop>`,
+    `${pad}    <stop offset="100%" stop-color="${base}" stop-opacity="0.75"/>`,
+    `${pad}  </linearGradient>`,
+    `${pad}</defs>`
+  ].join("\n");
+}
+function flowGradientId(path, stroke) {
+  return `triton-flow-${hashString(`${path}|${stroke}`)}`;
+}
+function pathLengthApprox(path) {
+  const pts = pathPoints(path);
+  if (pts.length < 2) return 1e3;
+  let length = 0;
+  for (let i = 1; i < pts.length; i++) {
+    length += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  return Math.max(1, Number(formatNum(length)));
+}
+function pathEndpoints(path) {
+  const pts = pathPoints(path);
+  const start = pts[0] ?? { x: 0, y: 0 };
+  const end = pts[pts.length - 1] ?? { x: 1, y: 0 };
+  if (start.x === end.x && start.y === end.y) {
+    return { start, end: { x: end.x + 1, y: end.y } };
+  }
+  return { start, end };
+}
+function pathPoints(path) {
+  const nums = [...path.matchAll(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi)].map((m) => Number(m[0]));
+  const pts = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = nums[i];
+    const y = nums[i + 1];
+    if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y });
+  }
+  return pts;
+}
+function formatNum(value) {
+  return Number.isFinite(value) ? String(Math.round(value * 1e3) / 1e3) : "0";
+}
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+function fillVal(fill) {
+  return fill != null && fill.trim() !== "" ? fill : "none";
 }
 function escapeXml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function escapeAttr(text) {
-  return text.replace(/"/g, "&quot;");
+  return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 var svgRenderer = {
   name: "svg",
@@ -41047,27 +44611,29 @@ registerRouter("straight", straightRouter);
 registerRouter("orthogonal", orthogonalRouter);
 registerRouter("bezier", bezierRouter);
 registerRouter("polyline", polylineRouter);
-function compileSync(input, themeInput) {
-  const { format, diagramType } = detect(input);
+function compileSync(input, themeInput, forcedThemeName, icons) {
+  const cleaned = stripComments(input);
+  const { format, diagramType } = detect(cleaned);
   const module = getModule(diagramType);
   if (!module) {
     return err("UNKNOWN_DIAGRAM", `No module registered for diagram type: ${diagramType}`);
   }
   try {
-    const ir = format === "yaml" ? module.parseYaml(input) : module.parseMermaid(input);
+    const ir = format === "yaml" ? module.parseYaml(cleaned) : module.parseMermaid(cleaned);
     const themeName = typeof ir.metadata?.theme === "string" ? ir.metadata.theme : void 0;
-    const base = resolveTheme(themeInput ?? {}, getThemePreset(themeName));
+    const base = resolveTheme(themeInput ?? {}, getThemePreset(forcedThemeName ?? themeName));
     const withModuleDefaults = module.defaultThemeOverride ? resolveTheme(module.defaultThemeOverride, base) : base;
     const finalTheme = ir.themeOverride ? resolveTheme(ir.themeOverride, withModuleDefaults) : withModuleDefaults;
-    const result = module.layout(ir, finalTheme);
+    const layoutOptions = icons !== void 0 ? { icons } : void 0;
+    const result = module.layout(ir, finalTheme, layoutOptions);
     return ok(result);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     return err("PARSE_ERROR", message, cause);
   }
 }
-function renderSync(input, themeInput, rendererName = "svg") {
-  const compileResult = compileSync(input, themeInput);
+function renderSync(input, themeInput, rendererName = "svg", forcedThemeName, icons) {
+  const compileResult = compileSync(input, themeInput, forcedThemeName, icons);
   if (!compileResult.ok) return compileResult;
   const renderer = getRenderer(rendererName);
   if (!renderer) {
