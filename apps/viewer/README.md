@@ -101,6 +101,31 @@ Output lands in `apps/viewer/dist/` — a fully static, single-page bundle.
    - Strict CSP headers
    - Correct MIME types for `.deck.md` / `.deck.yaml`
 
+#### Preview environment cleanup
+
+PR preview closes are handled by an unfiltered GitHub Actions workflow so every
+closed PR attempts to close its Azure SWA staging environment, even if the PR did
+not touch viewer files. Closing a missing preview is a safe no-op.
+
+A scheduled garbage collector workflow can also delete orphaned previews. It is
+guarded and skips successfully until this one-time Azure setup is completed:
+
+1. Create a service principal scoped to the Static Web App resource:
+
+   ```sh
+   az ad sp create-for-rbac \
+     --role contributor \
+     --scopes <SWA resource id> \
+     --sdk-auth
+   ```
+
+2. Add the JSON output as the `AZURE_CREDENTIALS` repository secret.
+3. Set repository variables `AZURE_SWA_NAME` and `AZURE_RESOURCE_GROUP`.
+
+The GC uses `azure/login`, `az staticwebapp environment list/delete`, and
+`gh pr list` to keep previews for open PRs and delete non-production previews
+whose PR is no longer open.
+
 ### GitHub Pages
 
 ```sh
