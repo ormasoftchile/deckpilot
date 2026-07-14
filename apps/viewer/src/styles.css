@@ -245,6 +245,13 @@ button { font-family: inherit; }
   min-height: 0;
 }
 .dp-viewer-stage .reveal { height: 100%; }
+.dp-viewer-stage .reveal.overview {
+  overflow: auto;
+  scrollbar-color: var(--dp-border) transparent;
+}
+.dp-viewer-stage .reveal.overview .slides > section {
+  display: block !important;
+}
 
 /* ---------- Action buttons (display only) ---------- */
 .dp-action {
