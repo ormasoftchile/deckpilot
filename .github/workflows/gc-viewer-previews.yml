@@ -1,0 +1,100 @@
+name: GC Viewer Preview Environments
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+  AZURE_SWA_NAME: ${{ vars.AZURE_SWA_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  gc_previews:
+    runs-on: ubuntu-latest
+    name: Delete orphaned SWA previews
+    steps:
+      - name: Check GC configuration
+        id: config
+        shell: bash
+        run: |
+          missing=()
+          [[ -n "${AZURE_CREDENTIALS}" ]] || missing+=("AZURE_CREDENTIALS secret")
+          [[ -n "${AZURE_SWA_NAME}" ]] || missing+=("AZURE_SWA_NAME repo variable")
+          [[ -n "${AZURE_RESOURCE_GROUP}" ]] || missing+=("AZURE_RESOURCE_GROUP repo variable")
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::notice title=SWA preview GC skipped::Missing ${missing[*]}. Configure these values to enable scheduled orphan cleanup."
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "ready=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to Azure
+        if: steps.config.outputs.ready == 'true'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Delete previews without an open PR
+        if: steps.config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          open_prs_json="$(gh pr list --state open --json number,headRefName --limit 1000)"
+          environments_json="$(az staticwebapp environment list \
+            --name "${AZURE_SWA_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --output json)"
+
+          jq -c '.[]' <<< "${environments_json}" | while read -r env_json; do
+            env_name="$(jq -r '.name // .environmentName // empty' <<< "${env_json}")"
+            source_branch="$(jq -r '.sourceBranch // .properties.sourceBranch // empty' <<< "${env_json}")"
+
+            # Never delete production/default. All other environments are SWA
+            # preview/staging environments and should correspond to an open PR.
+            case "${env_name}" in
+              ""|default|production)
+                echo "Keeping production/default environment: ${env_name:-<unknown>}"
+                continue
+                ;;
+            esac
+
+            pr_number=""
+            if [[ "${source_branch}" =~ refs/pull/([0-9]+)/(head|merge) ]]; then
+              pr_number="${BASH_REMATCH[1]}"
+            elif [[ "${env_name}" =~ ^([0-9]+)$ ]]; then
+              pr_number="${BASH_REMATCH[1]}"
+            fi
+
+            keep=false
+            if [[ -n "${pr_number}" ]]; then
+              if jq -e --argjson number "${pr_number}" '.[] | select(.number == $number)' <<< "${open_prs_json}" > /dev/null; then
+                keep=true
+              fi
+            elif [[ -n "${source_branch}" ]]; then
+              if jq -e --arg branch "${source_branch}" '.[] | select(.headRefName == $branch)' <<< "${open_prs_json}" > /dev/null; then
+                keep=true
+              fi
+            fi
+
+            if [[ "${keep}" == "true" ]]; then
+              echo "Keeping preview ${env_name} for open PR (${source_branch:-PR #${pr_number}})."
+              continue
+            fi
+
+            echo "Deleting orphaned preview environment: ${env_name} (sourceBranch=${source_branch:-unknown})"
+            az staticwebapp environment delete \
+              --name "${AZURE_SWA_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --environment-name "${env_name}" \
+              --yes
+          done
