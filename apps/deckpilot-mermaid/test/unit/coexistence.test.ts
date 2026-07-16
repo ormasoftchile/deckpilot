@@ -99,7 +99,7 @@ function makeBlock(language: string, source: string) {
 }
 
 describe('deckpilot-mermaid coexistence', () => {
-  it('wins over Triton fallback for supported mermaid diagrams', async () => {
+  it('routes standard mermaid diagrams to Triton for shared theming', async () => {
     const registry = new DiagramRendererRegistry();
     const mermaidRenderer = createMermaidRenderer();
     const tritonRenderer = createTritonRenderer(() => '<svg data-renderer="triton"></svg>');
@@ -107,12 +107,36 @@ describe('deckpilot-mermaid coexistence', () => {
     registry.register(tritonRenderer);
     registry.register(mermaidRenderer);
 
+    // Triton (priority 20) outranks the deckpilot-mermaid engine (priority 10)
+    // for standard mermaid diagrams so both fence types share Triton themes.
     assert.equal(
       registry.findRenderer('graph TD\n  A --> B\n', { language: 'mermaid' }),
-      mermaidRenderer,
+      tritonRenderer,
     );
 
     const result = await registry.renderBlock(makeBlock('mermaid', 'graph TD\n  A --> B\n'));
+
+    assert.equal(result.ok, true);
+    assert.equal(result.rendererId, 'triton');
+    assert.match(result.svg ?? '', /data-renderer="triton"/);
+  });
+
+  it('falls back to the deckpilot-mermaid engine for mermaid-native types Triton declines', async () => {
+    const registry = new DiagramRendererRegistry();
+    const mermaidRenderer = createMermaidRenderer();
+    const tritonRenderer = createTritonRenderer(() => '<svg data-renderer="triton"></svg>');
+
+    registry.register(tritonRenderer);
+    registry.register(mermaidRenderer);
+
+    // Triton.canRender() returns false for block-beta, so the real mermaid.js
+    // engine (priority 10) takes over even though it ranks lower than Triton.
+    assert.equal(
+      registry.findRenderer('block-beta\n  columns 2\n', { language: 'mermaid' }),
+      mermaidRenderer,
+    );
+
+    const result = await registry.renderBlock(makeBlock('mermaid', 'block-beta\n  columns 2\n'));
 
     assert.equal(result.ok, true);
     assert.equal(result.rendererId, 'mermaid');
@@ -180,7 +204,7 @@ describe('deckpilot-mermaid coexistence', () => {
     assert.match(result.svg ?? '', /data-renderer="triton-fallback"/);
   });
 
-  it('gracefully falls back to Triton when native Mermaid rejects invalid syntax', async () => {
+  it('renders invalid mermaid syntax through Triton when it is the primary renderer', async () => {
     const registry = new DiagramRendererRegistry();
     const mermaidRenderer = createMermaidRenderer({
       parse: async () => {
@@ -199,7 +223,7 @@ describe('deckpilot-mermaid coexistence', () => {
     assert.match(result.svg ?? '', /data-renderer="triton"/);
   });
 
-  it('returns the first failure when both Mermaid and Triton fail', async () => {
+  it('returns the first (Triton) failure when both Triton and Mermaid fail', async () => {
     const registry = new DiagramRendererRegistry();
     const mermaidRenderer = createMermaidRenderer({
       parse: async () => {
@@ -214,7 +238,7 @@ describe('deckpilot-mermaid coexistence', () => {
     const result = await registry.renderBlock(makeBlock('mermaid', 'not-a-valid-diagram\n  A -->\n'));
 
     assert.equal(result.ok, false);
-    assert.equal(result.rendererId, 'mermaid');
-    assert.match(result.errorMessage ?? '', /Mermaid syntax error: Parse error on line 2/);
+    assert.equal(result.rendererId, 'triton');
+    assert.match(result.errorMessage ?? '', /Triton render error/);
   });
 });
