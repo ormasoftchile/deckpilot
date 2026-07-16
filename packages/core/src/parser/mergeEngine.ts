@@ -145,6 +145,11 @@ export function mergeSidecarDeckMetadata(metadata: DeckMetadata, sidecar: Sideca
     if (sidecar.deck.slideBreak !== undefined && merged.slideBreak === undefined) {
       merged.slideBreak = sidecar.deck.slideBreak;
     }
+
+    // diagrams: field-by-field merge — sidecar as base, inline wins per field
+    if (sidecar.deck.diagrams !== undefined) {
+      merged.diagrams = { ...sidecar.deck.diagrams, ...(merged.diagrams ?? {}) };
+    }
   }
 
   // recording: field-by-field merge — sidecar as base, inline wins per field

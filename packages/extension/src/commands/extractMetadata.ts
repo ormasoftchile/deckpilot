@@ -25,13 +25,20 @@ export function buildSidecarContent(deck: Deck): string {
     const sidecar: SidecarFile = {};
 
     // Deck-level metadata
-    if (deck.metadata.title !== undefined || deck.metadata.theme !== undefined) {
+    if (
+        deck.metadata.title !== undefined ||
+        deck.metadata.theme !== undefined ||
+        deck.metadata.diagrams?.theme !== undefined
+    ) {
         sidecar.deck = {};
         if (deck.metadata.title !== undefined) {
             sidecar.deck.title = deck.metadata.title;
         }
         if (deck.metadata.theme !== undefined) {
             sidecar.deck.theme = deck.metadata.theme;
+        }
+        if (deck.metadata.diagrams?.theme !== undefined) {
+            sidecar.deck.diagrams = { theme: deck.metadata.diagrams.theme };
         }
     }
 

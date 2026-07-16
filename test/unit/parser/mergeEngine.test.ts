@@ -395,6 +395,22 @@ describe('mergeSidecarDeckMetadata', () => {
     });
   });
 
+  describe('diagrams theme merging', () => {
+    it('applies sidecar diagrams theme when metadata has none', () => {
+      const metadata: DeckMetadata = {};
+      const sidecar: SidecarFile = { deck: { diagrams: { theme: 'executive' } } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.diagrams?.theme).to.equal('executive');
+    });
+
+    it('lets inline diagrams theme win over sidecar', () => {
+      const metadata: DeckMetadata = { diagrams: { theme: 'consulting' } };
+      const sidecar: SidecarFile = { deck: { diagrams: { theme: 'executive' } } };
+      const result = mergeSidecarDeckMetadata(metadata, sidecar);
+      expect(result.diagrams?.theme).to.equal('consulting');
+    });
+  });
+
   describe('combined merging', () => {
     it('applies both title and theme from sidecar when neither is set inline', () => {
       const metadata: DeckMetadata = {};

@@ -40,6 +40,14 @@ export interface SidecarDeck {
   listFragmentMode?: 'all' | 'each';
   /** Slide break mode: 'blank', 'marker', 'heading', 'h1', 'h2', etc. */
   slideBreak?: string;
+  /** Deck-wide diagram defaults (mirrors DeckMetadata.diagrams). */
+  diagrams?: SidecarDiagrams;
+}
+
+/** Deck-wide diagram defaults in a sidecar (mirrors DiagramDeckOptions). */
+export interface SidecarDiagrams {
+  /** Default theme for diagram blocks; a per-fence `{theme: …}` wins over it. */
+  theme?: string;
 }
 
 /**

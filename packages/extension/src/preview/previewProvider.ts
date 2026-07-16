@@ -188,8 +188,9 @@ export class PreviewProvider implements vscode.Disposable {
     }
 
     const workspaceRoot = this.resolveBasePath(result.deck);
+    const diagramThemeDefault = result.deck.metadata.diagrams?.theme;
     for (const slide of result.deck.slides) {
-      slide.html = annotateDiagramPlaceholders(slide.html, workspaceRoot);
+      slide.html = annotateDiagramPlaceholders(slide.html, workspaceRoot, diagramThemeDefault);
     }
 
     this.panel.webview.html = renderPreviewHtml(result.deck, {

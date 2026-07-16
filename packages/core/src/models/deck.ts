@@ -40,6 +40,22 @@ export interface NavigationHistoryBreadcrumb {
 export type ToolbarButton = 'sidebar' | 'panel' | 'terminal' | 'activityBar' | 'zenMode';
 
 /**
+ * Deck-wide diagram defaults from frontmatter (or sidecar).
+ *
+ * Applied to every diagram block unless the block's own fence attributes
+ * override them. The nested shape leaves room for future per-deck diagram
+ * options (e.g. maxWidth, background) without adding more top-level fields.
+ */
+export interface DiagramDeckOptions {
+  /**
+   * Default theme for diagram blocks (e.g. a Triton preset like "executive").
+   * A per-fence `{theme: …}` attribute always wins over this default.
+   * Renderer-specific; treated as an opaque string by core.
+   */
+  theme?: string;
+}
+
+/**
  * Presentation display options from frontmatter
  */
 export interface PresentationOptions {
@@ -94,6 +110,8 @@ export interface DeckMetadata {
   slideBreak?: string;
   /** Theme override from sidecar (DA-05) */
   theme?: string;
+  /** Deck-wide defaults applied to diagram blocks (e.g. Triton diagrams). */
+  diagrams?: DiagramDeckOptions;
   /** Recording configuration from sidecar (DA-20) */
   recording?: {
     autoStart?: boolean;
