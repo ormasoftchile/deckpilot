@@ -316,6 +316,7 @@ export class Conductor implements vscode.Disposable {
     const resolvedHtml = annotateDiagramPlaceholders(
       this.resolveSlideRenderDirectives(slide),
       this.resolvedBasePath(),
+      this.deck.metadata.diagrams?.theme,
     );
 
     // Send slide changed to webview

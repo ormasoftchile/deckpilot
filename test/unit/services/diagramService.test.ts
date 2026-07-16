@@ -119,4 +119,77 @@ describe('DiagramService', () => {
     expect(updates[0].html).to.include('diagram-block--error');
     expect(updates[0].html).to.include('No diagram renderer registered for &quot;mermaid&quot;');
   });
+
+  it('applies the deck-wide diagram theme default when a fence has no theme', async () => {
+    const registry = new DiagramRendererRegistry();
+    const themes = captureThemeRenderer(registry);
+
+    const block: DiagramBlockRef = {
+      ...makeBlock(),
+      fence: { language: 'mermaid', attributes: {} },
+    };
+    const html = annotateDiagramPlaceholders(
+      injectDiagramPlaceholders('<!--DIAGRAM:diagram-0-0-->', [block]),
+      '/workspace/demo',
+      'executive',
+    );
+
+    await new DiagramService(registry).resolveSlideBlocks(html);
+
+    expect(themes[0]).to.equal('executive');
+  });
+
+  it('prefers a per-fence theme over the deck-wide default', async () => {
+    const registry = new DiagramRendererRegistry();
+    const themes = captureThemeRenderer(registry);
+
+    const block: DiagramBlockRef = {
+      ...makeBlock(),
+      fence: { language: 'mermaid', attributes: { theme: 'consulting' } },
+    };
+    const html = annotateDiagramPlaceholders(
+      injectDiagramPlaceholders('<!--DIAGRAM:diagram-0-0-->', [block]),
+      '/workspace/demo',
+      'executive',
+    );
+
+    await new DiagramService(registry).resolveSlideBlocks(html);
+
+    expect(themes[0]).to.equal('consulting');
+  });
+
+  it('lets an explicit per-fence theme:auto override the deck default with the editor fallback', async () => {
+    const registry = new DiagramRendererRegistry();
+    const themes = captureThemeRenderer(registry);
+
+    // makeBlock() uses { theme: 'auto' } — the deck default must not apply.
+    const html = annotateDiagramPlaceholders(
+      injectDiagramPlaceholders('<!--DIAGRAM:diagram-0-0-->', [makeBlock()]),
+      '/workspace/demo',
+      'executive',
+    );
+
+    await new DiagramService(registry).resolveSlideBlocks(html);
+
+    expect(themes[0]).to.equal('dark');
+  });
 });
+
+function captureThemeRenderer(registry: DiagramRendererRegistry): string[] {
+  const themes: string[] = [];
+  const renderer: IDiagramRenderer = {
+    id: 'test-renderer',
+    supportedFenceLanguages: ['mermaid'],
+    render: async (_source, _fence, options) => {
+      themes.push(options?.theme ?? '');
+      return {
+        ok: true,
+        format: 'svg',
+        svg: '<svg><text>ok</text></svg>',
+        rendererId: 'test-renderer',
+      };
+    },
+  };
+  registry.register(renderer);
+  return themes;
+}
