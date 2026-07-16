@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import * as vscode from 'vscode';
 import type {
   DiagramFenceInfo,
   DiagramRenderOptions,
@@ -325,7 +326,13 @@ function resolveRequestedTheme(
   fence: DiagramFenceInfo,
   options?: DiagramRenderOptions,
 ): MermaidThemeConfig {
-  return resolveMermaidTheme(fence, options?.theme);
+  // Mirror the core/Triton precedence: an explicit per-fence theme wins;
+  // otherwise use options.theme, which core already resolved from the
+  // deck-wide diagrams.theme default and the editor fallback. The actual
+  // editor color kind drives `auto`/dark-mode decisions.
+  const fenceTheme = fence.attributes?.theme;
+  const requestedTheme = fenceTheme && fenceTheme !== 'auto' ? fenceTheme : options?.theme;
+  return resolveMermaidTheme(requestedTheme, vscode.window.activeColorTheme?.kind);
 }
 
 function normalizeMermaidModule(module: Record<string, unknown>): MermaidModule {

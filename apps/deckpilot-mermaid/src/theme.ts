@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import type { DiagramFenceInfo } from '@deckpilot/core/renderer/diagramRenderer';
 
 export type MermaidTheme = 'default' | 'dark' | 'neutral';
 
@@ -61,10 +60,10 @@ const HIGH_CONTRAST_PALETTE: ThemePalette = {
 };
 
 export function resolveMermaidTheme(
-  diagramFence?: Pick<DiagramFenceInfo, 'attributes'>,
+  requestedTheme?: string,
   vscodeTheme?: VscodeThemeLike,
 ): MermaidThemeConfig {
-  const request = normalizeRequestedTheme(diagramFence?.attributes?.theme);
+  const request = normalizeRequestedTheme(requestedTheme);
   const themeKind = resolveThemeKind(vscodeTheme);
 
   switch (request) {
