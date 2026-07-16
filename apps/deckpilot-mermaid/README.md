@@ -4,7 +4,7 @@ Native Mermaid diagram support for [Deckpilot](https://marketplace.visualstudio.
 
 ## What it does
 
-`deckpilot-mermaid` is a companion VS Code extension for Deckpilot. It registers a native Mermaid renderer with priority `10`, so standard Mermaid diagrams render server-side as SVG while still coexisting with lower-priority fallbacks such as `deckpilot-triton`.
+`deckpilot-mermaid` is a companion VS Code extension for Deckpilot. It registers a native Mermaid renderer (priority `10`) that renders Mermaid diagrams server-side as SVG using Mermaid.js. When `deckpilot-triton` is also installed, its higher-priority renderer (priority `20`) handles standard `diagram:mermaid` fences so they share Triton's theme presets; this engine then covers the mermaid-native types Triton declines, and remains the primary renderer when Triton is not installed.
 
 When Mermaid cannot handle a diagram natively, Deckpilot can still fall back to other registered renderers or the webview fallback flow.
 
@@ -107,10 +107,11 @@ If Mermaid.js adds support for a new type and the bundled runtime can parse it, 
 ## Coexistence and fallback behavior
 
 - `deckpilot-mermaid` registers priority `10`
-- `deckpilot-triton` fallback registers priority `5`
-- `diagram:mermaid` prefers native Mermaid when Mermaid supports the source
-- Unsupported Mermaid-native types that Triton can handle keep flowing to Triton
-- Explicit `diagram:triton` fences stay on Triton even when Mermaid is installed
+- `deckpilot-triton`'s main renderer registers priority `20`; its built-in Mermaid fallback registers priority `5`
+- When Triton is installed, `diagram:mermaid` renders through Triton so it shares Triton's theme presets
+- Mermaid-native types Triton declines (`block-beta`, `kanban`, `packet-beta`, `xychart-beta`) fall back to the `deckpilot-mermaid` engine (`10`)
+- When Triton is not installed, `deckpilot-mermaid` is the primary renderer for `diagram:mermaid`
+- Explicit `diagram:triton` fences always stay on Triton
 - If native offline rendering times out or fails unexpectedly, the webview fallback can still render Mermaid.js in the presentation
 
 ## Known limitations
