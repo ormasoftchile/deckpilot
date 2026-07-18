@@ -40,6 +40,31 @@ deck render ./demo.deck.md
 
 ---
 
+## Triton diagrams render in the browser
+
+```diagram:triton {theme:executive caption:"Rendered by triton-core in @deckpilot/viewer"}
+list
+  title Viewer diagram pipeline
+  style tree
+  effect slide
+  Parse Deckpilot markdown
+  Render Triton SVG
+  Sanitize and inject into Reveal.js
+```
+
+---
+
+## Mermaid diagrams use Triton too
+
+```diagram:mermaid {theme:minimal}
+flowchart LR
+  A[Deck fence] --> B[Triton compiler]
+  B --> C[Sanitized SVG]
+  C --> D[Reveal slide]
+```
+
+---
+
 ## Action links are display-only
 
 This is the key safety property of the public viewer:

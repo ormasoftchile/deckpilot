@@ -449,6 +449,65 @@ button { font-family: inherit; }
 }
 .reveal a { color: var(--dp-accent); }
 
+/* ---------- Diagrams ---------- */
+.reveal .diagram-block {
+  width: min(100%, 980px);
+  margin: 0.9em auto;
+  padding: 0.35em;
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius);
+  background: rgba(10, 10, 14, 0.38);
+  text-align: center;
+}
+.reveal .diagram-block__viewport {
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+}
+.reveal .diagram-block svg {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 62vh;
+}
+.reveal .diagram-block__caption {
+  margin-top: 0.45em;
+  color: var(--dp-fg-muted);
+  font-size: 0.72em;
+}
+.reveal .diagram-block--loading {
+  text-align: left;
+  opacity: 0.8;
+}
+.reveal .diagram-block--loading::before {
+  content: "Rendering diagram…";
+  display: block;
+  margin-bottom: 0.4em;
+  color: var(--dp-fg-muted);
+  font-family: var(--dp-mono);
+  font-size: 0.72em;
+}
+.reveal .diagram-block--error {
+  border-color: rgba(255, 107, 107, 0.75);
+  background: rgba(255, 107, 107, 0.08);
+  text-align: left;
+}
+.reveal .diagram-block__error-header {
+  color: var(--dp-danger);
+  font-weight: 700;
+  margin-bottom: 0.35em;
+}
+.reveal .diagram-block__error-message {
+  white-space: pre-wrap;
+  color: var(--dp-fg);
+}
+.reveal .diagram-block__source summary {
+  cursor: pointer;
+  color: var(--dp-fg-muted);
+  font-size: 0.75em;
+}
+
 @media (max-width: 900px) {
   .dp-viewer-title { max-width: 38%; }
   .dp-viewer-nav-header { display: none; }

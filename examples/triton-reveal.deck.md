@@ -44,12 +44,24 @@ list
   title Q4 Roadmap
   style tree
   effect slide
-  group 1
+  group 4
   Ship progressive reveal mechanism
-  Launch the deck diagram family
-  Add stack and tree choreography
+    Launch the deck diagram family
+    Add stack and tree choreography
   Wire Deckpilot fragment stepping
-  Ship v1 to the team
-    Some nested item
+    Ship v1 to the team
+      Some nested item
+      Some other nested item
  ```
 
+## Diagrams Work
+ 
+ ```diagram:triton 
+list
+  title Q4 Roadmap
+  style cycle
+  effect grow
+  Ship
+  Launch
+  Add
+ ```
