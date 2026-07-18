@@ -1,4 +1,4 @@
-import { compileAndRenderSync, embedRevealManifest } from '@cristianormazabal/triton-core';
+import { compileAndRenderSync } from '@cristianormazabal/triton-core';
 import type { Deck } from '@deckpilot/core/models/deck';
 import type { DiagramBlockRef } from '@deckpilot/core/models/diagram';
 import type { Slide } from '@deckpilot/core/models/slide';
@@ -17,7 +17,6 @@ const TRITON_THEME_PRESETS = new Set([
   'our-timeline',
   'subject-timeline',
   'showcase',
-  'midnight',
 ]);
 
 const LOADING_BLOCK_PATTERN =
@@ -42,7 +41,7 @@ async function renderDiagramPlaceholders(html: string, slide: Slide, deck: Deck)
       if (!block) {
         return { fullMatch, html: fullMatch };
       }
-      return { fullMatch, html: renderBlock(block, deck) };
+      return { fullMatch, html: renderBlock(block, deck, attrs) };
     }),
   );
 
@@ -67,7 +66,7 @@ function renderBareTritonBlocks(html: string, deck: Deck): string {
   });
 }
 
-function renderBlock(block: DiagramBlockRef, deck: Deck): string {
+function renderBlock(block: DiagramBlockRef, deck: Deck, placeholderAttrs = ''): string {
   const language = block.fence.language.trim().toLowerCase();
   if (language !== 'triton' && language !== 'mermaid') {
     return buildErrorHtml(block, `No browser renderer is registered for diagram:${language}.`);
@@ -86,17 +85,17 @@ function renderBlock(block: DiagramBlockRef, deck: Deck): string {
     return buildErrorHtml(block, result.error.message);
   }
 
-  let svg = stripBackgroundRect(result.value.svg);
-  if (result.value.reveal) {
-    svg = embedRevealManifest(svg, result.value.reveal);
-  }
+  const svg = stripBackgroundRect(result.value.svg);
+  const revealAttr = result.value.reveal
+    ? ` data-triton-reveal="${escapeAttr(JSON.stringify(result.value.reveal))}"`
+    : '';
 
   const caption = block.fence.attributes?.caption?.trim();
   const captionHtml = caption
     ? `<figcaption class="diagram-block__caption">${escapeHtml(caption)}</figcaption>`
     : '';
 
-  return `<figure class="${buildDiagramClasses(language)}" data-render-id="${escapeAttr(block.id)}" data-diagram-renderer="triton" data-diagram-language="${escapeAttr(language)}"><div class="diagram-block__viewport">${svg}</div>${captionHtml}</figure>`;
+  return `<figure ${buildFigureAttrs(block, language, placeholderAttrs)} data-diagram-renderer="triton"${revealAttr}><div class="diagram-block__viewport">${svg}</div>${captionHtml}</figure>`;
 }
 
 function resolveDiagramTheme(block: DiagramBlockRef, deck: Deck): string | undefined {
@@ -116,7 +115,7 @@ function resolveDiagramTheme(block: DiagramBlockRef, deck: Deck): string | undef
 
 function resolveTritonTheme(theme?: string): string {
   if (!theme || theme === 'auto') {
-    return 'midnight';
+    return 'executive';
   }
 
   if (TRITON_THEME_PRESETS.has(theme)) {
@@ -124,12 +123,12 @@ function resolveTritonTheme(theme?: string): string {
   }
 
   switch (theme) {
-    case 'dark': return 'midnight';
+    case 'dark': return 'executive';
     case 'light': return 'default';
     case 'contrast': return 'showcase';
     case 'blueprint': return 'consulting';
     case 'editorial': return 'minimal';
-    default: return 'midnight';
+    default: return 'executive';
   }
 }
 
@@ -159,6 +158,28 @@ function buildErrorHtml(block: DiagramBlockRef, message: string): string {
 function buildDiagramClasses(language: string): string {
   const suffix = language.replace(/[^a-z0-9_-]+/g, '-');
   return suffix ? `diagram-block diagram-block--${suffix}` : 'diagram-block';
+}
+
+function buildFigureAttrs(block: DiagramBlockRef, language: string, placeholderAttrs: string): string {
+  const preserved = new Map<string, string>();
+  for (const name of ['data-fragment', 'data-fragment-index', 'data-fragment-animation']) {
+    const value = readAttr(placeholderAttrs, name);
+    if (value) {
+      preserved.set(name, value);
+    }
+  }
+
+  const existingClasses = (readAttr(placeholderAttrs, 'class') ?? '')
+    .split(/\s+/)
+    .filter((name) => name && name !== 'diagram-block--loading');
+  const classes = new Set([...existingClasses, ...buildDiagramClasses(language).split(/\s+/)]);
+  preserved.set('class', Array.from(classes).join(' '));
+  preserved.set('data-render-id', block.id);
+  preserved.set('data-diagram-language', language);
+
+  return Array.from(preserved.entries())
+    .map(([name, value]) => `${name}="${escapeAttr(value)}"`)
+    .join(' ');
 }
 
 function readAttr(attrs: string, name: string): string | undefined {

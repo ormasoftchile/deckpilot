@@ -7,6 +7,7 @@ import { sanitizeSlideHtml } from '../lib/sanitize';
 import { rewriteActionLinks } from '../lib/actionRenderer';
 import { readSlideFromHash, writeSlideToHash, onHashChange } from '../lib/hashRouter';
 import { renderSlideDiagrams } from '../lib/tritonDiagramRenderer';
+import { initializeTritonRevealFragments } from '../lib/tritonRevealRuntime';
 import { PresenterNotes } from './PresenterNotes';
 
 interface DeckViewerProps {
@@ -84,6 +85,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
+    initializeTritonRevealFragments(el);
     const reveal = new Reveal(el, {
       hash: false, // we manage the hash ourselves to keep ?url= intact
       controls: false,

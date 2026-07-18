@@ -267,7 +267,6 @@ function parseSlideContent(index: number, rawContent: string, options: ParseSlid
 
   // Step 2b: Parse diagram blocks (extracts blocks + cleans content)
   const diagramBlockResult = parseDiagramBlocks(cleanedContent, index);
-  console.log(`[DECK-DIAGRAM][slideParser] slide ${index} diagramBlocks:`, diagramBlockResult.blocks.length);
   const contentForRender = diagramBlockResult.cleanedContent;
 
   // Step 3: Render markdown to HTML (uses cleaned content — no action blocks or diagram fences)

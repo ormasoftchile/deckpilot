@@ -2,6 +2,8 @@
 title: Deckpilot Viewer — Sample Deck
 author: Deckpilot
 theme: dark
+diagrams:
+  theme: executive
 ---
 
 # Deckpilot Viewer
@@ -42,10 +44,13 @@ deck render ./demo.deck.md
 
 ## Triton diagrams render in the browser
 
-```diagram:triton {theme:executive caption:"Rendered by triton-core in @deckpilot/viewer"}
+The slide heading and this intro should appear before the themed progressive diagram.
+
+```diagram:triton {theme:minimal caption:"Theme + progressive reveal + source order test"}
 list
-  title Viewer diagram pipeline
+  title Viewer progressive diagram pipeline
   style tree
+  reveal sequence
   effect slide
   Parse Deckpilot markdown
   Render Triton SVG

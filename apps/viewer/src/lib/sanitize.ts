@@ -13,12 +13,18 @@ const PURIFY_CONFIG: PurifyConfig = {
   // Reveal.js fragment markers + slide data attrs
   ADD_ATTR: [
     'class',
+    'data-fragment',
     'data-fragment-index',
+    'data-fragment-animation',
     'data-id',
     'data-action',
     'data-action-type',
     'data-action-raw',
     'data-slide-index',
+    'data-triton-reveal',
+    'data-triton-expanded',
+    'data-triton-step',
+    'data-triton-step-key',
     'target',
     'rel',
   ],
