@@ -8,13 +8,13 @@ const LOADING_BLOCK_PATTERN = /<figure\b([^>]*\bclass="[^"]*\bdiagram-block--loa
 export class DiagramService {
   constructor(private diagramRegistry: DiagramRendererRegistry) {}
 
-  async resolveSlideBlocks(slideHtml: string, deckTheme?: string): Promise<Array<{ blockId: string; html: string }>> {
+  async resolveSlideBlocks(slideHtml: string): Promise<Array<{ blockId: string; html: string }>> {
     const blocks = this.extractBlocks(slideHtml);
     diagramLog(`[diagram-service] resolveSlideBlocks: blocks = ${blocks.length}`);
 
     return Promise.all(blocks.map(async (block) => ({
       blockId: block.id,
-      html: await this.renderBlock(block, deckTheme),
+      html: await this.renderBlock(block),
     })));
   }
 
@@ -34,6 +34,7 @@ export class DiagramService {
 
       const caption = decodeMaybe(readAttr(attrs, 'data-diagram-caption'));
       const theme = decodeMaybe(readAttr(attrs, 'data-diagram-theme'));
+      const themeDefault = decodeMaybe(readAttr(attrs, 'data-diagram-theme-default'));
       const workspaceRoot = decodeMaybe(readAttr(attrs, 'data-diagram-workspace-root'));
       blocks.push({
         id,
@@ -44,6 +45,7 @@ export class DiagramService {
           attributes: {
             ...(caption ? { caption } : {}),
             ...(theme ? { theme } : {}),
+            ...(themeDefault ? { themeDefault } : {}),
             ...(workspaceRoot ? { workspaceRoot } : {}),
           },
         },
@@ -54,17 +56,17 @@ export class DiagramService {
     return blocks;
   }
 
-  private async renderBlock(block: DiagramBlockRef, deckTheme?: string): Promise<string> {
+  private async renderBlock(block: DiagramBlockRef): Promise<string> {
     diagramLog(`[diagram-service] rendering block ${block.id} ${block.fence.language}`);
 
     const attrs = block.fence.attributes;
     const fenceTheme = attrs?.theme;
-    // Theme precedence: explicit fence `theme=` wins; otherwise follow the
-    // deck's own theme (from `diagrams.theme` frontmatter) so diagrams match
-    // the presentation; fall back to the VS Code editor theme only when the
-    // deck declares none.
+    const deckDefaultTheme = attrs?.themeDefault;
+    // Precedence: per-fence {theme:X} > deck-wide diagrams.theme default > VS Code color-theme fallback.
     const theme: DiagramRenderOptions['theme'] =
-      fenceTheme && fenceTheme !== 'auto' ? fenceTheme : (deckTheme || resolveTheme());
+      fenceTheme && fenceTheme !== 'auto' ? fenceTheme
+        : deckDefaultTheme && deckDefaultTheme !== 'auto' ? deckDefaultTheme
+          : resolveTheme();
     const workspaceRoot = attrs?.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     try {
@@ -91,16 +93,30 @@ export class DiagramService {
   }
 }
 
-export function annotateDiagramPlaceholders(slideHtml: string, workspaceRoot?: string): string {
-  if (!workspaceRoot) {
+export function annotateDiagramPlaceholders(
+  slideHtml: string,
+  workspaceRoot?: string,
+  diagramThemeDefault?: string,
+): string {
+  if (!workspaceRoot && !diagramThemeDefault) {
     return slideHtml;
   }
 
-  return slideHtml.replace(LOADING_BLOCK_PATTERN, (match, attrs: string, body: string) => {
-    if (/data-diagram-workspace-root=/.test(attrs)) {
-      return match;
+  return slideHtml.replace(LOADING_BLOCK_PATTERN, (_match, attrs: string, body: string) => {
+    let annotatedAttrs = attrs;
+    if (workspaceRoot && !/data-diagram-workspace-root=/.test(annotatedAttrs)) {
+      annotatedAttrs += ` data-diagram-workspace-root="${escapeAttr(workspaceRoot)}"`;
     }
-    return `<figure${attrs} data-diagram-workspace-root="${escapeAttr(workspaceRoot)}">${body}</figure>`;
+    // Only apply the deck default where the fence itself did not set a theme —
+    // a per-fence {theme:…} must always win.
+    if (
+      diagramThemeDefault &&
+      !/data-diagram-theme=/.test(annotatedAttrs) &&
+      !/data-diagram-theme-default=/.test(annotatedAttrs)
+    ) {
+      annotatedAttrs += ` data-diagram-theme-default="${escapeAttr(diagramThemeDefault)}"`;
+    }
+    return `<figure${annotatedAttrs}>${body}</figure>`;
   });
 }
 

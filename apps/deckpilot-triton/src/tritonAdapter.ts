@@ -52,7 +52,12 @@ const TRITON_UNSUPPORTED_MERMAID_TYPES = new Set([
  */
 export class TritonDiagramRenderer implements IDiagramRenderer {
   readonly id = 'triton';
-  readonly priority = 5;
+  // Outranks the deckpilot-mermaid engine (priority 10) so `diagram:mermaid`
+  // fences render through Triton and share its theme presets. Triton's
+  // canRender() still declines the mermaid-native types it can't handle
+  // (block-beta, kanban, packet-beta, xychart-beta); those fall back to the
+  // deckpilot-mermaid engine (10) or the built-in Mermaid fallback (5).
+  readonly priority = 20;
   readonly supportedFenceLanguages = ['mermaid', 'triton'] as const;
 
   private modulePromise: Promise<TritonModule> | undefined;

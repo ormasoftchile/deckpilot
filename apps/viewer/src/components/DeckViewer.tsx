@@ -60,9 +60,9 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     const el = containerRef.current;
     const reveal = new Reveal(el, {
       hash: false, // we manage the hash ourselves to keep ?url= intact
-      controls: true,
+      controls: false,
       progress: true,
-      slideNumber: 'c/t',
+      slideNumber: false,
       transition: 'slide',
       keyboard: true,
       touch: true,
@@ -101,7 +101,22 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     };
   }, [slides]);
 
-  const currentSlide = slides[currentIndex];
+  const totalSlides = slides.length;
+  const clampedIndex = Math.min(Math.max(currentIndex, 0), Math.max(totalSlides - 1, 0));
+  const currentSlide = slides[clampedIndex];
+  const canGoBack = clampedIndex > 0;
+  const canGoForward = clampedIndex < totalSlides - 1;
+
+  const goToSlide = (index: number): void => {
+    if (totalSlides === 0) return;
+    const next = Math.min(Math.max(index, 0), totalSlides - 1);
+    if (revealRef.current) {
+      revealRef.current.slide(next);
+    } else {
+      setCurrentIndex(next);
+      writeSlideToHash(next);
+    }
+  };
 
   return (
     <div className="dp-viewer">
@@ -129,6 +144,23 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         >
           {showNotes ? 'Hide notes' : 'Notes'}
         </button>
+        <div className="dp-viewer-nav dp-viewer-nav-header" aria-label="Slide navigation">
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(0)} disabled={!canGoBack} title="First slide">
+            ⏮
+          </button>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(clampedIndex - 1)} disabled={!canGoBack} title="Previous slide">
+            ◀
+          </button>
+          <span className="dp-nav-position" aria-live="polite">
+            {clampedIndex + 1} / {totalSlides}
+          </span>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(clampedIndex + 1)} disabled={!canGoForward} title="Next slide">
+            ▶
+          </button>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(totalSlides - 1)} disabled={!canGoForward} title="Last slide">
+            ⏭
+          </button>
+        </div>
         <a
           className="dp-icon-button dp-icon-button-link"
           href={loaded.sourceUrl}
@@ -148,11 +180,29 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
             ))}
           </div>
         </div>
+
+        <nav className="dp-viewer-nav dp-viewer-nav-overlay" aria-label="Slide navigation">
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(0)} disabled={!canGoBack} title="First slide">
+            ⏮
+          </button>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(clampedIndex - 1)} disabled={!canGoBack} title="Previous slide">
+            ◀
+          </button>
+          <span className="dp-nav-position" aria-live="polite">
+            {clampedIndex + 1} / {totalSlides}
+          </span>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(clampedIndex + 1)} disabled={!canGoForward} title="Next slide">
+            ▶
+          </button>
+          <button type="button" className="dp-nav-button" onClick={() => goToSlide(totalSlides - 1)} disabled={!canGoForward} title="Last slide">
+            ⏭
+          </button>
+        </nav>
       </div>
 
       {showNotes && currentSlide && (
         <PresenterNotes
-          slideIndex={currentIndex}
+          slideIndex={clampedIndex}
           total={slides.length}
           title={currentSlide.title}
           notes={currentSlide.notes}

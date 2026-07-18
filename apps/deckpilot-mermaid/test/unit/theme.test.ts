@@ -10,7 +10,7 @@ describe('resolveMermaidTheme', () => {
   });
 
   it('maps light VS Code themes to Mermaid default', () => {
-    const config = resolveMermaidTheme({ attributes: { theme: 'auto' } }, vscode.ColorThemeKind.Light);
+    const config = resolveMermaidTheme('auto', vscode.ColorThemeKind.Light);
 
     assert.equal(config.theme, 'default');
     assert.equal(config.darkMode, false);
@@ -24,14 +24,20 @@ describe('resolveMermaidTheme', () => {
     assert.equal(config.themeVariables.primaryBorderColor, '#ffff00');
   });
 
-  it('honors fence theme overrides over VS Code auto detection', () => {
-    const config = resolveMermaidTheme(
-      { attributes: { theme: 'dark' } },
-      vscode.ColorThemeKind.Light,
-    );
+  it('honors an explicit requested theme over VS Code auto detection', () => {
+    const config = resolveMermaidTheme('dark', vscode.ColorThemeKind.Light);
 
     assert.equal(config.theme, 'dark');
     assert.equal(config.darkMode, true);
+  });
+
+  it('maps a deck-wide default theme through the request normalizer', () => {
+    // A deck-level diagrams.theme default arrives as the resolved requested
+    // theme; recognized aliases must map even when the editor is dark.
+    const config = resolveMermaidTheme('editorial', vscode.ColorThemeKind.Dark);
+
+    assert.equal(config.theme, 'default');
+    assert.equal(config.darkMode, false);
   });
 
   it('falls back to the active VS Code theme when no override is passed', () => {
@@ -39,7 +45,7 @@ describe('resolveMermaidTheme', () => {
       kind: vscode.ColorThemeKind.Light,
     };
 
-    const config = resolveMermaidTheme({ attributes: { theme: 'auto' } });
+    const config = resolveMermaidTheme('auto');
 
     assert.equal(config.theme, 'default');
   });

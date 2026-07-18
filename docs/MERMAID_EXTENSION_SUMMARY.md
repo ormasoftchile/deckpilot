@@ -6,7 +6,7 @@
 
 ## Key decisions
 
-- **Renderer priority:** Mermaid registers at priority `10`, above Triton's Mermaid fallback priority `5`
+- **Renderer priority:** Mermaid registers at priority `10`. Triton's main `diagram:triton`/`diagram:mermaid` renderer registers at priority `20` (so `diagram:mermaid` shares Triton's theme presets when Triton is installed), while Triton's built-in Mermaid fallback stays at priority `5`. The Mermaid engine (`10`) renders the mermaid-native types Triton declines, and is the primary renderer when Triton is not installed.
 - **Fallback pattern:** the registry walks candidate renderers in priority order and falls through when a renderer returns `ok: false`
 - **Native JS rendering:** Mermaid uses Mermaid.js plus `jsdom` for server-side SVG generation, then falls back to webview rendering on timeout/runtime failures
 - **Companion extension design:** Deckpilot exports the renderer API; `deckpilot-mermaid` and `deckpilot-triton` register independently

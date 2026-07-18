@@ -36,6 +36,28 @@ Valid `theme` values:
 - `dark` — mapped to `midnight`
 - `light` — mapped to `default`
 
+### Deck-wide default theme
+
+To apply one theme to every diagram in a deck without repeating `{theme: …}` on
+each fence, set it in the deck frontmatter (or a `.deck.yaml` sidecar):
+
+```yaml
+---
+title: My Talk
+diagrams:
+  theme: executive
+---
+```
+
+Precedence, highest first:
+
+1. A per-fence `{theme: …}` attribute.
+2. The deck-wide `diagrams.theme` default.
+3. `auto` (or no theme anywhere) — follows the VS Code color theme.
+
+A per-fence `{theme: auto}` explicitly opts back into the VS Code fallback,
+overriding the deck-wide default for that one diagram.
+
 ## Development
 
 This extension lives inside the deckpilot monorepo at `apps/deckpilot-triton/`. Both extensions are loaded simultaneously in the VS Code Extension Development Host using the dual launch config.
