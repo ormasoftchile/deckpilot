@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Reveal from 'reveal.js';
 import 'reveal.js/dist/reveal.css';
 import 'reveal.js/dist/theme/black.css';
@@ -6,6 +6,7 @@ import type { LoadedDeck } from '../lib/deckLoader';
 import { sanitizeSlideHtml } from '../lib/sanitize';
 import { rewriteActionLinks } from '../lib/actionRenderer';
 import { readSlideFromHash, writeSlideToHash, onHashChange } from '../lib/hashRouter';
+import { renderSlideDiagrams } from '../lib/tritonDiagramRenderer';
 import { PresenterNotes } from './PresenterNotes';
 
 interface DeckViewerProps {
@@ -50,9 +51,34 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const revealRef = useRef<Reveal | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(() => readSlideFromHash());
+  const [slides, setSlides] = useState<RenderedSlide[]>(() => buildRenderedSlides(loaded));
 
-  const slides = useMemo(() => buildRenderedSlides(loaded), [loaded]);
   const deckTitle = loaded.deck.title ?? loaded.deck.metadata?.title ?? 'Untitled deck';
+
+  useEffect(() => {
+    let cancelled = false;
+    const initialSlides = buildRenderedSlides(loaded);
+    setSlides(initialSlides);
+
+    void Promise.all(
+      initialSlides.map(async (rendered) => {
+        const sourceSlide = loaded.deck.slides[rendered.index];
+        if (!sourceSlide) {
+          return rendered;
+        }
+        const html = await renderSlideDiagrams(rendered.html, sourceSlide, loaded.deck);
+        return { ...rendered, html };
+      }),
+    ).then((nextSlides) => {
+      if (!cancelled) {
+        setSlides(nextSlides);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded]);
 
   // Initialize reveal.js once per deck load.
   useEffect(() => {

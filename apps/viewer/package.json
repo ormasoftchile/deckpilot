@@ -11,6 +11,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@cristianormazabal/triton-core": "^0.1.30",
     "@deckpilot/core": "*",
     "dompurify": "^3.1.7",
     "gray-matter": "^4.0.3",
