@@ -47404,9 +47404,14 @@ var LIST_STYLES = [
   "process",
   "timeline",
   "pyramid",
-  "columns"
+  "columns",
+  "cycle",
+  "matrix",
+  "funnel",
+  "stepup",
+  "venn"
 ];
-var REVEAL_MODES = ["sequence", "subtree", "layer"];
+var REVEAL_MODES = ["sequence", "subtree", "layer", "none"];
 function asEffect(token) {
   const t = token.toLowerCase();
   return REVEAL_EFFECTS.includes(t) ? t : void 0;
@@ -47417,6 +47422,7 @@ function asStyle(token) {
 }
 function asMode(token) {
   const t = token.toLowerCase();
+  if (t === "none" || t === "all" || t === "off" || t === "static") return "none";
   return REVEAL_MODES.includes(t) ? t : void 0;
 }
 function indentWidth(line) {
@@ -47824,6 +47830,171 @@ function layoutList2(doc, theme) {
       });
     });
     height = rhu(top + headerH + gap + maxCells * (cellH + gap) + margin);
+  } else if (doc.style === "cycle") {
+    const pad = rhu(font * 0.9);
+    const nodeH = rhu(font * 2.2);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const nodeW = rhu(maxTextW + 2 * pad);
+    const chord = nodeW + rhu(font * 2.4);
+    const R = n > 1 ? rhu(Math.max(nodeH * 2.4, chord / (2 * Math.sin(Math.PI / n)))) : 0;
+    const cxC = rhu(margin + R + nodeW / 2);
+    const cyC = rhu(top + R + nodeH / 2);
+    const step = 2 * Math.PI / Math.max(n, 1);
+    const gapAng = R > 0 ? Math.min(step * 0.3, (nodeW / 2 + pad) / R) : 0;
+    doc.items.forEach((it, i) => {
+      const a = -Math.PI / 2 + i * step;
+      const ncx = rhu(cxC + R * Math.cos(a));
+      const ncy = rhu(cyC + R * Math.sin(a));
+      const x = rhu(ncx - nodeW / 2);
+      const y = rhu(ncy - nodeH / 2);
+      const children = [];
+      if (n > 1) {
+        const a0 = a + gapAng;
+        const a1 = a + step - gapAng;
+        if (a1 > a0) {
+          const sx = rhu(cxC + R * Math.cos(a0));
+          const sy = rhu(cyC + R * Math.sin(a0));
+          const ex = rhu(cxC + R * Math.cos(a1));
+          const ey = rhu(cyC + R * Math.sin(a1));
+          children.push(p.path(`M ${sx} ${sy} A ${R} ${R} 0 0 1 ${ex} ${ey}`, palette.primary, 2));
+          const pa = a1 - 0.12;
+          const px = cxC + R * Math.cos(pa);
+          const py = cyC + R * Math.sin(pa);
+          const dx = ex - px, dy = ey - py;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          const ah = Math.max(6, rhu(font * 0.6));
+          const bx = ex - ux * ah, by = ey - uy * ah;
+          const tri = `M ${rhu(bx - uy * ah * 0.6)} ${rhu(by + ux * ah * 0.6)} L ${ex} ${ey} L ${rhu(bx + uy * ah * 0.6)} ${rhu(by - ux * ah * 0.6)} Z`;
+          children.push(p.path(tri, palette.primary, 0, { fill: palette.primary }));
+        }
+      }
+      children.push(p.rect({ x, y, width: nodeW, height: nodeH }, palette.surface, palette.primary, 1.5, { rx: 8 }));
+      children.push(p.text(it.text, ncx, rhu(ncy + font * 0.34), font, palette.text, { anchor: "middle" }));
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: nodeW, height: nodeH } };
+      contentRight = Math.max(contentRight, x + nodeW);
+    });
+    height = rhu(top + 2 * R + nodeH + margin);
+  } else if (doc.style === "matrix") {
+    const quad = [palette.primary, palette.secondary, palette.success, palette.warning];
+    const cols = 2;
+    const rows = Math.ceil(n / cols);
+    const pad = rhu(font * 0.9);
+    const gap = rhu(font * 0.5);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const tileW = rhu(maxTextW + 2 * pad);
+    const tileH = rhu(font * 3.2);
+    doc.items.forEach((it, i) => {
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      const x = rhu(margin + c * (tileW + gap));
+      const y = rhu(top + r * (tileH + gap));
+      const fill = quad[i % quad.length];
+      const children = [
+        p.rect({ x, y, width: tileW, height: tileH }, fill, fill, 0, { rx: 6 }),
+        p.text(it.text, rhu(x + tileW / 2), rhu(y + tileH / 2 + font * 0.34), font, palette.background, { weight: "bold", anchor: "middle" })
+      ];
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: tileW, height: tileH } };
+      contentRight = Math.max(contentRight, x + tileW);
+    });
+    height = rhu(top + rows * (tileH + gap) - gap + margin);
+  } else if (doc.style === "funnel") {
+    const bandH = rhu(font * 2.8);
+    const vGap = rhu(font * 0.4);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const baseW = rhu(Math.max(maxTextW * 1.5, font * 14));
+    const apexW = rhu(baseW * 0.28);
+    const cxCenter = rhu(margin + baseW / 2);
+    const widthAt = (frac) => apexW + (baseW - apexW) * frac;
+    doc.items.forEach((it, i) => {
+      const y = top + i * (bandH + vGap);
+      const yTop = rhu(y);
+      const yBot = rhu(y + bandH);
+      const wTop = widthAt(n === 1 ? 1 : (n - i) / n);
+      const wBot = widthAt(n === 1 ? 1 : (n - i - 1) / n);
+      const tl = rhu(cxCenter - wTop / 2);
+      const tr = rhu(cxCenter + wTop / 2);
+      const bl = rhu(cxCenter - wBot / 2);
+      const br = rhu(cxCenter + wBot / 2);
+      const fill = i % 2 === 0 ? palette.primary : palette.secondary;
+      const d = `M ${tl} ${yTop} L ${tr} ${yTop} L ${br} ${yBot} L ${bl} ${yBot} Z`;
+      const children = [
+        p.path(d, fill, 0, { fill }),
+        p.text(it.text, cxCenter, rhu(y + bandH / 2 + font * 0.34), font, palette.background, { anchor: "middle" })
+      ];
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x: tl, y: yTop, width: rhu(tr - tl), height: bandH } };
+      contentRight = Math.max(contentRight, cxCenter + baseW / 2);
+    });
+    height = rhu(top + n * (bandH + vGap) - vGap + margin);
+  } else if (doc.style === "stepup") {
+    const boxH = rhu(font * 2.4);
+    const gapX = rhu(font * 0.8);
+    const stepUp = rhu(boxH * 0.7);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const boxW = rhu(maxTextW + 2 * rhu(font * 0.9));
+    const topmost = top;
+    const yOf = (i) => rhu(topmost + (n - 1 - i) * stepUp);
+    const xOf = (i) => rhu(margin + i * (boxW + gapX));
+    doc.items.forEach((it, i) => {
+      const x = xOf(i);
+      const y = yOf(i);
+      const children = [];
+      if (i > 0) {
+        const px = rhu(xOf(i - 1) + boxW);
+        const py = rhu(yOf(i - 1) + boxH / 2);
+        const cy = rhu(y + boxH / 2);
+        children.push(p.path(`M ${px} ${py} L ${rhu((px + x) / 2)} ${py} L ${rhu((px + x) / 2)} ${cy} L ${x} ${cy}`, palette.border, 1.5));
+      }
+      children.push(p.rect({ x, y, width: boxW, height: boxH }, palette.surface, palette.primary, 1.5, { rx: 6 }));
+      children.push(p.text(it.text, rhu(x + boxW / 2), rhu(y + boxH / 2 + font * 0.34), font, palette.text, { anchor: "middle" }));
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: boxW, height: boxH } };
+      contentRight = Math.max(contentRight, x + boxW);
+    });
+    height = rhu(top + (n - 1) * stepUp + boxH + margin);
+  } else if (doc.style === "venn") {
+    const tint = [palette.primary, palette.secondary, palette.success, palette.warning, palette.error];
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const r = rhu(Math.max(font * 3.4, maxTextW / 2 + font));
+    const d = n > 1 ? rhu(r * 0.72) : 0;
+    const start = n === 2 ? Math.PI : -Math.PI / 2;
+    const cxC = rhu(margin + d + r);
+    const cyC = rhu(top + d + r);
+    const labelR = d + rhu(r * 0.42);
+    doc.items.forEach((it, i) => {
+      const ang = start + i * 2 * Math.PI / n;
+      const cx = rhu(cxC + d * Math.cos(ang));
+      const cy = rhu(cyC + d * Math.sin(ang));
+      const lx = n === 1 ? cxC : rhu(cxC + labelR * Math.cos(ang));
+      const ly = n === 1 ? cyC : rhu(cyC + labelR * Math.sin(ang));
+      const fill = tint[i % tint.length];
+      const children = [
+        p.circle({ x: cx, y: cy }, r, fill, fill, 0, { opacity: 0.5 }),
+        p.text(it.text, lx, rhu(ly + font * 0.34), font, palette.text, { weight: "bold", anchor: "middle" })
+      ];
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x: rhu(cx - r), y: rhu(cy - r), width: rhu(2 * r), height: rhu(2 * r) } };
+      contentRight = Math.max(contentRight, cx + r);
+    });
+    height = rhu(top + 2 * (d + r) + margin);
   } else {
     const rowH = rhu(font * 1.9);
     doc.items.forEach((it, i) => {
@@ -47862,11 +48033,8 @@ function layoutList2(doc, theme) {
     background: palette.background,
     elements
   };
-  return {
-    scene,
-    anchors,
-    reveal: { steps: buildSteps(doc) }
-  };
+  const base = { scene, anchors };
+  return doc.reveal === "none" ? base : { ...base, reveal: { steps: buildSteps(doc) } };
 }
 var list = {
   parseMermaid(input) {
