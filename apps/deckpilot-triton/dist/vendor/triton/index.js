@@ -75,7 +75,7 @@ var MERMAID_PATTERNS = [
   [/^dsu\b/i, "unionfind"],
   [/^topology\b/i, "topology"],
   // Deck family — presentation-native, reveal-first objects.
-  [/^bullets\b/i, "bullets"]
+  [/^list\b/i, "list"]
 ];
 function matchMermaid(text) {
   for (const [pattern, type] of MERMAID_PATTERNS) {
@@ -25090,8 +25090,8 @@ function detectBackEdges(nodes, edges2) {
   const adj = /* @__PURE__ */ new Map();
   for (const n of nodes) adj.set(n.id, []);
   edges2.forEach((e, i) => {
-    const list = adj.get(e.from);
-    if (list) list.push({ to: e.to, edgeIdx: i });
+    const list2 = adj.get(e.from);
+    if (list2) list2.push({ to: e.to, edgeIdx: i });
   });
   const visited = /* @__PURE__ */ new Set();
   const onStack = /* @__PURE__ */ new Set();
@@ -35918,9 +35918,9 @@ function layoutGitgraph(ir, theme) {
   }, ir.overlays, theme);
   return { scene, anchors: {} };
 }
-function opts(list) {
+function opts(list2) {
   const o = {};
-  for (const it of list) o[it.k.toLowerCase()] = it.v;
+  for (const it of list2) o[it.k.toLowerCase()] = it.v;
   return o;
 }
 function peg$subclass19(child, parent) {
@@ -37278,9 +37278,9 @@ function peg$parse20(input, options) {
     const boundaries = [];
     const rels = [];
     let title;
-    const walk = (list, depth) => {
+    const walk = (list2, depth) => {
       const ids = [];
-      for (const s of list.filter(Boolean)) {
+      for (const s of list2.filter(Boolean)) {
         if (s.t === "title") title = s.v;
         else if (s.t === "node") {
           nodes.push({ id: s.id, label: s.label, kind: s.kind, ...s.descr ? { descr: s.descr } : {} });
@@ -47394,13 +47394,27 @@ var topology = {
   }
 };
 var REVEAL_EFFECTS = ["fade", "slide", "grow", "draw"];
+var LIST_STYLES = ["bullets", "numbered", "block", "box", "tree"];
+var REVEAL_MODES = ["sequence", "subtree", "layer"];
 function asEffect(token) {
   const t = token.toLowerCase();
   return REVEAL_EFFECTS.includes(t) ? t : void 0;
 }
+function asStyle(token) {
+  const t = token.toLowerCase();
+  return LIST_STYLES.includes(t) ? t : void 0;
+}
+function asMode(token) {
+  const t = token.toLowerCase();
+  return REVEAL_MODES.includes(t) ? t : void 0;
+}
+function indentWidth(line) {
+  const lead = line.match(/^[ \t]*/)?.[0] ?? "";
+  return lead.replace(/\t/g, "  ").length;
+}
 function sourceLines(input) {
   const body = input.replace(/^\s*---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
-  return body.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return body.split(/\r?\n/).filter((l) => l.trim().length > 0);
 }
 function frontmatterMeta(input) {
   const m = input.match(/^\s*---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
@@ -47415,30 +47429,40 @@ function frontmatterMeta(input) {
   }
   return meta;
 }
-function parseBullets(input) {
+function parseList(input) {
   let title;
+  let style = "bullets";
+  let reveal = "sequence";
   let effect;
   let group;
-  const items = [];
-  const joins = [];
-  const effects = [];
+  const raw = [];
   for (const line of sourceLines(input)) {
-    const lower = line.toLowerCase();
-    if (lower === "bullets") continue;
+    const trimmed = line.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower === "list") continue;
     if (lower.startsWith("title ")) {
-      title = line.slice(6).trim();
+      title = trimmed.slice(6).trim();
+      continue;
+    }
+    if (lower.startsWith("style ")) {
+      style = asStyle(trimmed.slice(6).trim()) ?? style;
+      continue;
+    }
+    if (lower.startsWith("reveal ")) {
+      reveal = asMode(trimmed.slice(7).trim()) ?? reveal;
       continue;
     }
     if (lower.startsWith("effect ")) {
-      effect = asEffect(line.slice(7).trim()) ?? effect;
+      effect = asEffect(trimmed.slice(7).trim()) ?? effect;
       continue;
     }
     if (lower.startsWith("group ")) {
-      const n = parseInt(line.slice(6).trim(), 10);
-      if (Number.isFinite(n) && n >= 1) group = n;
+      const num = parseInt(trimmed.slice(6).trim(), 10);
+      if (Number.isFinite(num) && num >= 1) group = num;
       continue;
     }
-    let text = line;
+    const indent = indentWidth(line);
+    let text = trimmed;
     const join = /^\+\s+/.test(text);
     if (join) text = text.replace(/^\+\s+/, "");
     text = text.replace(/^[-*]\s+/, "");
@@ -47451,75 +47475,227 @@ function parseBullets(input) {
         text = text.slice(0, m.index ?? 0).trimEnd();
       }
     }
-    items.push(text);
-    joins.push(join);
-    effects.push(itemEffect);
+    raw.push({ indent, text, join, ...itemEffect ? { effect: itemEffect } : {} });
   }
+  const items = assignTree(raw);
   return {
     ...title !== void 0 ? { title } : {},
+    style,
+    reveal,
     ...effect !== void 0 ? { effect } : {},
     ...group !== void 0 ? { group } : {},
     items,
-    joins,
-    effects,
     version: "1.0",
     metadata: frontmatterMeta(input)
   };
 }
-function layoutBullets(doc, theme) {
+function assignTree(raw) {
+  const stack2 = [];
+  const path = [];
+  const items = [];
+  for (const r of raw) {
+    while (stack2.length > 0 && r.indent < stack2[stack2.length - 1]) stack2.pop();
+    if (stack2.length === 0 || r.indent > stack2[stack2.length - 1]) {
+      stack2.push(r.indent);
+    }
+    const depth = stack2.length - 1;
+    if (path.length === depth) {
+      path.push(0);
+    } else {
+      path.length = depth + 1;
+      path[depth] = (path[depth] ?? -1) + 1;
+    }
+    items.push({
+      text: r.text,
+      depth,
+      id: `item-${path.join("-")}`,
+      numberLabel: path.map((num) => num + 1).join("."),
+      join: r.join,
+      ...r.effect ? { effect: r.effect } : {}
+    });
+  }
+  return items;
+}
+function buildSteps(doc) {
+  const out = [];
+  if (doc.reveal === "subtree") {
+    let cur = null;
+    for (const it of doc.items) {
+      if (it.depth === 0 || cur === null) {
+        cur = { enter: [it.id], effect: it.effect ?? doc.effect ?? "fade", label: it.text };
+        out.push(cur);
+      } else {
+        cur.enter.push(it.id);
+      }
+    }
+  } else if (doc.reveal === "layer") {
+    const byDepth = /* @__PURE__ */ new Map();
+    for (const it of doc.items) {
+      const arr = byDepth.get(it.depth) ?? [];
+      arr.push(it.id);
+      byDepth.set(it.depth, arr);
+    }
+    for (const depth of [...byDepth.keys()].sort((a, b) => a - b)) {
+      out.push({ enter: byDepth.get(depth), effect: doc.effect ?? "fade", label: `Level ${depth + 1}` });
+    }
+  } else {
+    const chunk = doc.group && doc.group >= 1 ? doc.group : 1;
+    let inStep = 0;
+    for (const it of doc.items) {
+      const startNew = out.length === 0 ? true : it.join ? false : inStep >= chunk;
+      if (startNew) {
+        out.push({ enter: [it.id], effect: it.effect ?? doc.effect ?? "fade", label: it.text });
+        inStep = 1;
+      } else {
+        out[out.length - 1].enter.push(it.id);
+        inStep++;
+      }
+    }
+  }
+  return out.map((s, i) => ({ index: i + 1, enter: s.enter, effect: s.effect, label: s.label }));
+}
+function markerColor(depth, palette) {
+  return depth === 0 ? palette.primary : depth === 1 ? palette.secondary : palette.textMuted;
+}
+function markerRadius(depth, font) {
+  return depth === 0 ? Math.max(3, rhu(font / 6)) : depth === 1 ? Math.max(2.5, rhu(font / 7)) : Math.max(2, rhu(font / 8));
+}
+function layoutList2(doc, theme) {
   const { palette, typography, spacing } = theme;
   const p = pen(theme);
   const margin = spacing.diagramMargin;
   const font = typography.baseFontSize;
-  const rowH = rhu(font * 1.9);
-  const markerR = Math.max(3, rhu(font / 6));
-  const markerCx = margin + markerR;
-  const textX = margin + markerR * 2 + 14;
+  const indentPx = rhu(font * 1.6);
   const titleH = doc.title ? typography.titleFontSize + 16 : 0;
   const top = margin + titleH;
+  const n = Math.max(doc.items.length, 1);
   const elements = [];
   const anchors = {};
-  let maxTextW = 0;
-  doc.items.forEach((item, i) => {
-    const w = measureText(item, font).width;
-    if (w > maxTextW) maxTextW = w;
-    const rowY = top + i * rowH;
-    const cy = rowY + rowH / 2;
-    const dot = p.circle({ x: markerCx, y: rhu(cy) }, markerR, palette.primary, palette.primary, 0);
-    const label = p.text(item, textX, rhu(cy + font * 0.34), font, palette.text, { anchor: "start" });
-    elements.push(p.group([dot, label], { id: `bullet-${i}` }));
-    anchors[`bullet-${i}`] = { bounds: { x: margin, y: rowY, width: rhu(textX - margin + w), height: rowH } };
-  });
-  const chunk = doc.group && doc.group >= 1 ? doc.group : 1;
-  const steps = [];
-  let inStep = 0;
-  doc.items.forEach((item, i) => {
-    const id = `bullet-${i}`;
-    let startNew;
-    if (steps.length === 0) startNew = true;
-    else if (doc.joins[i]) startNew = false;
-    else startNew = inStep >= chunk;
-    if (startNew) {
-      steps.push({
-        index: steps.length + 1,
-        enter: [id],
-        effect: doc.effects[i] ?? doc.effect ?? "fade",
-        label: item
-      });
-      inStep = 1;
-    } else {
-      const last = steps[steps.length - 1];
-      last.enter.push(id);
-      inStep++;
-    }
-  });
+  let contentRight = 0;
+  let height;
+  if (doc.style === "block" || doc.style === "box") {
+    const itemH = rhu(font * 2.2);
+    const gap = rhu(font * 0.6);
+    const pad = rhu(font * 0.8);
+    const barW = doc.style === "box" ? Math.max(3, rhu(font * 0.35)) : 0;
+    let maxRight2 = 0;
+    doc.items.forEach((it) => {
+      const x = margin + it.depth * indentPx;
+      const tw = measureText(it.text, font).width;
+      maxRight2 = Math.max(maxRight2, x + barW + pad + tw + pad);
+    });
+    contentRight = maxRight2;
+    doc.items.forEach((it, i) => {
+      const y = top + i * (itemH + gap);
+      const x = margin + it.depth * indentPx;
+      const w = rhu(contentRight - x);
+      const textY = rhu(y + itemH / 2 + font * 0.34);
+      const children = [
+        p.rect({ x, y, width: w, height: itemH }, palette.surface, palette.border, 1, { rx: doc.style === "block" ? 6 : 4 })
+      ];
+      if (doc.style === "box") {
+        const c = markerColor(it.depth, palette);
+        children.push(p.rect({ x, y, width: barW, height: itemH }, c, c, 0, { rx: 2 }));
+      }
+      children.push(p.text(it.text, x + barW + pad, textY, font, palette.text, { anchor: "start" }));
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: w, height: itemH } };
+    });
+    height = rhu(top + n * (itemH + gap) - gap + margin);
+  } else if (doc.style === "tree") {
+    const pad = rhu(font * 0.8);
+    const nodeH = rhu(font * 2.2);
+    const hGap = rhu(font * 1.2);
+    const vGap = rhu(font * 1.8);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const nodeW = rhu(maxTextW + 2 * pad);
+    const colStep = nodeW + hGap;
+    const parentOf = new Array(doc.items.length).fill(-1);
+    const childrenOf = /* @__PURE__ */ new Map();
+    const ancestor = [];
+    doc.items.forEach((it, i) => {
+      ancestor.length = it.depth;
+      const parent = it.depth === 0 ? -1 : ancestor[it.depth - 1];
+      parentOf[i] = parent;
+      const arr = childrenOf.get(parent) ?? [];
+      arr.push(i);
+      childrenOf.set(parent, arr);
+      ancestor[it.depth] = i;
+    });
+    const col = new Array(doc.items.length).fill(0);
+    let nextCol = 0;
+    const assign = (i) => {
+      const kids = childrenOf.get(i) ?? [];
+      if (kids.length === 0) {
+        col[i] = nextCol;
+        nextCol += 1;
+        return;
+      }
+      kids.forEach(assign);
+      col[i] = (col[kids[0]] + col[kids[kids.length - 1]]) / 2;
+    };
+    (childrenOf.get(-1) ?? []).forEach(assign);
+    const xOf = (i) => rhu(margin + col[i] * colStep);
+    const yOf = (i) => rhu(top + doc.items[i].depth * (nodeH + vGap));
+    let maxDepth2 = 0;
+    doc.items.forEach((it, i) => {
+      const x = xOf(i);
+      const y = yOf(i);
+      const cx = rhu(x + nodeW / 2);
+      contentRight = Math.max(contentRight, x + nodeW);
+      maxDepth2 = Math.max(maxDepth2, it.depth);
+      const children = [];
+      if (parentOf[i] >= 0) {
+        const pi = parentOf[i];
+        const px = rhu(xOf(pi) + nodeW / 2);
+        const py = rhu(yOf(pi) + nodeH);
+        const midY = rhu((py + y) / 2);
+        const d = `M ${px} ${py} L ${px} ${midY} L ${cx} ${midY} L ${cx} ${y}`;
+        children.push(p.path(d, palette.border, 1.5));
+      }
+      const stroke = it.depth === 0 ? palette.primary : palette.border;
+      children.push(p.rect({ x, y, width: nodeW, height: nodeH }, palette.surface, stroke, it.depth === 0 ? 2 : 1, { rx: 6 }));
+      children.push(p.text(it.text, cx, rhu(y + nodeH / 2 + font * 0.34), font, palette.text, { anchor: "middle" }));
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: nodeW, height: nodeH } };
+    });
+    height = rhu(top + maxDepth2 * (nodeH + vGap) + nodeH + margin);
+  } else {
+    const rowH = rhu(font * 1.9);
+    doc.items.forEach((it, i) => {
+      const rowY = top + i * rowH;
+      const cy = rowY + rowH / 2;
+      const x = margin + it.depth * indentPx;
+      const textBaseline = rhu(cy + font * 0.34);
+      const children = [];
+      let textX;
+      if (doc.style === "numbered") {
+        const label = `${it.numberLabel}.`;
+        children.push(p.text(label, x, textBaseline, font, palette.primary, { weight: "bold", anchor: "start" }));
+        textX = x + measureText(label, font).width + 10;
+      } else {
+        const r = markerRadius(it.depth, font);
+        const c = markerColor(it.depth, palette);
+        children.push(p.circle({ x: x + r, y: rhu(cy) }, r, c, c, 0));
+        textX = x + r * 2 + 12;
+      }
+      children.push(p.text(it.text, textX, textBaseline, font, palette.text, { anchor: "start" }));
+      const tw = measureText(it.text, font).width;
+      contentRight = Math.max(contentRight, textX + tw);
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y: rowY, width: rhu(textX - x + tw), height: rowH } };
+    });
+    height = rhu(top + n * rowH + margin);
+  }
   if (doc.title) {
     elements.unshift(
       p.text(doc.title, margin, rhu(margin + typography.titleFontSize), typography.titleFontSize, palette.text, { weight: "bold" })
     );
   }
-  const width = rhu(textX + maxTextW + margin);
-  const height = rhu(top + Math.max(doc.items.length, 1) * rowH + margin);
+  const width = rhu(contentRight + margin);
   const scene = {
     viewBox: { x: 0, y: 0, width, height },
     background: palette.background,
@@ -47528,18 +47704,18 @@ function layoutBullets(doc, theme) {
   return {
     scene,
     anchors,
-    reveal: { steps }
+    reveal: { steps: buildSteps(doc) }
   };
 }
-var bullets = {
+var list = {
   parseMermaid(input) {
-    return parseBullets(input);
+    return parseList(input);
   },
   parseYaml(input) {
     return JSON.parse(input);
   },
   layout(ir, theme) {
-    return layoutBullets(ir, theme);
+    return layoutList2(ir, theme);
   }
 };
 var ANIMATION_PERIOD_SECONDS = {
@@ -48022,7 +48198,7 @@ registerDiagram("trie", trie);
 registerDiagram("nodegraph", graph);
 registerDiagram("unionfind", unionfind);
 registerDiagram("topology", topology);
-registerDiagram("bullets", bullets);
+registerDiagram("list", list);
 registerRenderer(svgRenderer);
 registerRouter("straight", straightRouter);
 registerRouter("orthogonal", orthogonalRouter);
