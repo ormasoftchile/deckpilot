@@ -38,8 +38,6 @@ export function parseDiagramBlocks(
   content: string,
   slideIndex: number,
 ): DiagramBlockParseResult {
-  console.log(`[DECK-DIAGRAM][diagramBlockParser] parseDiagramBlocks called. slideIndex=${slideIndex}, contentLength=${content.length}`);
-  console.log(`[DECK-DIAGRAM][diagramBlockParser] content preview:`, content.substring(0, 200));
   const blocks: DiagramBlockRef[] = [];
   let counter = 0;
 
@@ -63,8 +61,6 @@ export function parseDiagramBlocks(
       return `<!--DIAGRAM:${id}-->`;
     },
   );
-
-  console.log(`[DECK-DIAGRAM][diagramBlockParser] found ${blocks.length} diagram blocks`);
 
   return { cleanedContent, blocks };
 }
