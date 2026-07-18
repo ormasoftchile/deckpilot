@@ -8,13 +8,13 @@ const LOADING_BLOCK_PATTERN = /<figure\b([^>]*\bclass="[^"]*\bdiagram-block--loa
 export class DiagramService {
   constructor(private diagramRegistry: DiagramRendererRegistry) {}
 
-  async resolveSlideBlocks(slideHtml: string): Promise<Array<{ blockId: string; html: string }>> {
+  async resolveSlideBlocks(slideHtml: string, deckTheme?: string): Promise<Array<{ blockId: string; html: string }>> {
     const blocks = this.extractBlocks(slideHtml);
     diagramLog(`[diagram-service] resolveSlideBlocks: blocks = ${blocks.length}`);
 
     return Promise.all(blocks.map(async (block) => ({
       blockId: block.id,
-      html: await this.renderBlock(block),
+      html: await this.renderBlock(block, deckTheme),
     })));
   }
 
@@ -54,13 +54,17 @@ export class DiagramService {
     return blocks;
   }
 
-  private async renderBlock(block: DiagramBlockRef): Promise<string> {
+  private async renderBlock(block: DiagramBlockRef, deckTheme?: string): Promise<string> {
     diagramLog(`[diagram-service] rendering block ${block.id} ${block.fence.language}`);
 
     const attrs = block.fence.attributes;
     const fenceTheme = attrs?.theme;
+    // Theme precedence: explicit fence `theme=` wins; otherwise follow the
+    // deck's own theme (from `diagrams.theme` frontmatter) so diagrams match
+    // the presentation; fall back to the VS Code editor theme only when the
+    // deck declares none.
     const theme: DiagramRenderOptions['theme'] =
-      !fenceTheme || fenceTheme === 'auto' ? resolveTheme() : fenceTheme;
+      fenceTheme && fenceTheme !== 'auto' ? fenceTheme : (deckTheme || resolveTheme());
     const workspaceRoot = attrs?.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     try {

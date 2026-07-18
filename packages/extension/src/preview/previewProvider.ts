@@ -197,7 +197,7 @@ export class PreviewProvider implements vscode.Disposable {
       warnings: result.warnings,
     });
     const refreshVersion = ++this.refreshVersion;
-    void this.resolvePreviewDiagrams(result.deck.slides.map((slide) => slide.html), refreshVersion);
+    void this.resolvePreviewDiagrams(result.deck.slides.map((slide) => slide.html), refreshVersion, result.deck.metadata?.diagrams?.theme ?? result.deck.metadata?.theme);
     const paths = new Set(collectWatchPaths(result.deck));
     for (const extra of this.extraWatchPathsFromRaw(raw)) {
       paths.add(extra);
@@ -327,9 +327,9 @@ export class PreviewProvider implements vscode.Disposable {
     };
   }
 
-  private async resolvePreviewDiagrams(slidesHtml: string[], refreshVersion: number): Promise<void> {
+  private async resolvePreviewDiagrams(slidesHtml: string[], refreshVersion: number, deckTheme?: string): Promise<void> {
     for (const slideHtml of slidesHtml) {
-      const updates = await this.diagramService.resolveSlideBlocks(slideHtml);
+      const updates = await this.diagramService.resolveSlideBlocks(slideHtml, deckTheme);
       for (const update of updates) {
         if (!this.panel || refreshVersion !== this.refreshVersion) {
           return;

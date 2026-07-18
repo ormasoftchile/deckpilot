@@ -32,6 +32,23 @@
       "preLaunchTask": "build extension host"
     },
     {
+      "name": "Debug Deckpilot + Triton (local Triton)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionDevelopmentPath=${workspaceFolder}/apps/deckpilot-triton"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js",
+        "${workspaceFolder}/out/**/*.js",
+        "${workspaceFolder}/apps/deckpilot-triton/dist/**/*.js",
+        "${workspaceFolder}/../triton/packages/core/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "preLaunchTask": "build all (local triton)"
+    },
+    {
       "name": "Extension Tests",
       "type": "extensionHost",
       "request": "launch",

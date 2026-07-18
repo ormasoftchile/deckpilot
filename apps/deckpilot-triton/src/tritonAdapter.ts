@@ -82,9 +82,19 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
     options?: DiagramRenderOptions,
   ): Promise<DiagramRenderResult> {
     const fenceTheme = fence.attributes?.theme;
-    const resolvedTheme = resolveTritonTheme(
-      fenceTheme && fenceTheme !== 'auto' ? fenceTheme : options?.theme,
-    );
+    // Theme resolution precedence: fence attribute (`{theme: minimal}`) >
+    // in-fence frontmatter (`---\ntheme: minimal\n---`) > deck theme
+    // (`options.theme`). `auto` means "follow the deck", so it defers to the
+    // deck theme and ignores any frontmatter theme.
+    let explicitTheme: string | undefined;
+    if (fenceTheme === 'auto') {
+      explicitTheme = undefined;
+    } else if (fenceTheme) {
+      explicitTheme = fenceTheme;
+    } else {
+      explicitTheme = extractFrontmatterTheme(source);
+    }
+    const resolvedTheme = resolveTritonTheme(explicitTheme ?? options?.theme);
     console.log(
       '[tritonAdapter] render called for',
       fence.language,
@@ -111,6 +121,10 @@ export class TritonDiagramRenderer implements IDiagramRenderer {
       return {
         ok: true,
         format: 'svg',
+        // Diagrams are frameless inside a deck: strip the baked theme
+        // background so the diagram inherits the slide. Pick a theme whose
+        // foreground contrasts with the slide (e.g. a high-contrast/dark theme
+        // on a dark deck) for readable frameless text.
         svg: stripBackgroundRect(result.svg),
         warnings: result.warnings,
         rendererId: this.id,
@@ -168,6 +182,30 @@ export function stripBackgroundRect(svg: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Extract a `theme:` value from a diagram source's leading YAML frontmatter,
+ * if present. Used so a theme declared in the diagram body is treated as an
+ * explicit choice — identical to a fence `{theme: ...}` attribute — for both
+ * theme resolution and the keep-background decision.
+ */
+export function extractFrontmatterTheme(source: string): string | undefined {
+  const normalized = source.replace(/^\uFEFF/, '');
+  const frontmatter = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!frontmatter) {
+    return undefined;
+  }
+
+  for (const line of frontmatter[1].split(/\r?\n/)) {
+    const match = line.match(/^\s*theme\s*:\s*(.+?)\s*$/);
+    if (match) {
+      const value = match[1].replace(/^["']|["']$/g, '').trim();
+      return value || undefined;
+    }
+  }
+
+  return undefined;
 }
 
 function extractDiagramType(source: string): string | undefined {

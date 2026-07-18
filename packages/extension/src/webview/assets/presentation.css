@@ -1310,6 +1310,15 @@ body.theme-light #slide-content code.action-preview {
   background-color: rgba(255, 255, 0, 0.2);
 }
 
+/* Triton reveal-step groups are SVG <g> elements. By default a CSS transform
+   on an SVG group pivots around the SVG user-space origin (0,0), so `zoom`
+   (grow) and `slide` would fly in from the top-left corner. Anchoring the
+   transform to each group's own bounding box makes the effect animate in place. */
+.triton-reveal-step {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 /* =========================================================================
  * Toast Notification System (per error-feedback contract, T032)
  * ========================================================================= */
@@ -2029,6 +2038,18 @@ body.theme-light #slide-content .diagram-block {
 
 #slide-content .diagram-block:not(.diagram-block--loading):not(.diagram-block--error) {
   padding: 0;
+}
+
+/* Triton diagrams render as native slide content — strip the block chrome
+   (border, rounded corners, panel background, shadow) so they blend into the
+   slide instead of sitting inside a rounded card. Mermaid/other renderers keep
+   their framed card. Loading/error states keep the frame as an affordance. */
+#slide-content .diagram-block[data-diagram-renderer="triton"]:not(.diagram-block--loading):not(.diagram-block--error),
+body.theme-light #slide-content .diagram-block[data-diagram-renderer="triton"]:not(.diagram-block--loading):not(.diagram-block--error) {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* SVG viewport — scrolls if diagram is wider than the slide */

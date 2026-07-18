@@ -94,6 +94,15 @@ export interface DeckMetadata {
   slideBreak?: string;
   /** Theme override from sidecar (DA-05) */
   theme?: string;
+  /** Deck-wide defaults for embedded diagrams. */
+  diagrams?: {
+    /**
+     * Default theme applied to every diagram in this deck. Treated as an
+     * explicit author choice (like a fence `{theme: ...}`), so themed diagrams
+     * keep their own background instead of being stripped to follow the slide.
+     */
+    theme?: string;
+  };
   /** Recording configuration from sidecar (DA-20) */
   recording?: {
     autoStart?: boolean;

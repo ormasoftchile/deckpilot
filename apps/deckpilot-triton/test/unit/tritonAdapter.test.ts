@@ -1,5 +1,5 @@
 import * as assert from 'node:assert/strict';
-import { applyTritonTheme, TritonDiagramRenderer, resolveTritonTheme, stripBackgroundRect } from '../../src/tritonAdapter';
+import { applyTritonTheme, TritonDiagramRenderer, resolveTritonTheme, stripBackgroundRect, extractFrontmatterTheme } from '../../src/tritonAdapter';
 
 /**
  * Unit tests for TritonDiagramRenderer.
@@ -154,6 +154,128 @@ describe('TritonDiagramRenderer — render()', () => {
     );
 
     assert.equal(capturedTheme, 'midnight');
+  });
+
+  const svgWithBg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" width="300" height="400">' +
+    '<rect x="0" y="0" width="300" height="400" fill="#0d1b2a" />' +
+    '<text>hi</text></svg>';
+
+  const bgAdapter = () => {
+    const adapter = new TritonDiagramRenderer({ fsPath: __dirname } as never);
+    (adapter as unknown as { modulePromise: Promise<unknown> }).modulePromise = Promise.resolve({
+      renderMermaid: () => ({ svg: svgWithBg, warnings: [], kind: 'known' }),
+    });
+    return adapter;
+  };
+
+  it('strips the background so diagrams are frameless (follow deck theme)', async () => {
+    const result = await bgAdapter().render(
+      'graph TD\n  A --> B\n',
+      { language: 'mermaid' },
+      { theme: 'dark' },
+    );
+    assert.equal(result.ok, true);
+    assert.ok(!result.svg?.includes('#0d1b2a'), 'follow-deck diagram should have its background stripped');
+  });
+
+  it('strips the background even when an explicit fence theme is set', async () => {
+    const result = await bgAdapter().render(
+      'graph TD\n  A --> B\n',
+      { language: 'mermaid', attributes: { theme: 'minimal' } },
+      { theme: 'dark' },
+    );
+    assert.equal(result.ok, true);
+    assert.ok(!result.svg?.includes('#0d1b2a'), 'explicitly themed diagram is still frameless');
+  });
+
+  it('strips the background even when the theme is set in the diagram frontmatter', async () => {
+    const result = await bgAdapter().render(
+      '---\ntheme: minimal\n---\nbullets\n  title Q3\n  Ship it\n',
+      { language: 'triton' },
+      { theme: 'dark' },
+    );
+    assert.equal(result.ok, true);
+    assert.ok(!result.svg?.includes('#0d1b2a'), 'frontmatter-themed diagram is still frameless');
+  });
+
+  it('resolves the frontmatter theme (not the deck default) when no fence theme is set', async () => {
+    const adapter = new TritonDiagramRenderer({ fsPath: __dirname } as never);
+    let capturedTheme: string | undefined;
+    (adapter as unknown as { modulePromise: Promise<unknown> }).modulePromise = Promise.resolve({
+      renderMermaid: (_text: string, options?: { theme?: string }) => {
+        capturedTheme = options?.theme;
+        return { svg: '<svg />', warnings: [], kind: 'known' };
+      },
+    });
+
+    await adapter.render(
+      '---\ntheme: minimal\n---\nbullets\n  title Q3\n',
+      { language: 'triton' },
+      { theme: 'dark' },
+    );
+
+    assert.equal(capturedTheme, 'minimal');
+  });
+
+  it('lets an explicit fence theme override the frontmatter theme', async () => {
+    const adapter = new TritonDiagramRenderer({ fsPath: __dirname } as never);
+    let capturedTheme: string | undefined;
+    (adapter as unknown as { modulePromise: Promise<unknown> }).modulePromise = Promise.resolve({
+      renderMermaid: (_text: string, options?: { theme?: string }) => {
+        capturedTheme = options?.theme;
+        return { svg: '<svg />', warnings: [], kind: 'known' };
+      },
+    });
+
+    await adapter.render(
+      '---\ntheme: minimal\n---\nbullets\n  title Q3\n',
+      { language: 'triton', attributes: { theme: 'executive' } },
+      { theme: 'dark' },
+    );
+
+    assert.equal(capturedTheme, 'executive');
+  });
+
+  it('resolves the deck theme when neither fence nor frontmatter set one', async () => {
+    const adapter = new TritonDiagramRenderer({ fsPath: __dirname } as never);
+    let capturedTheme: string | undefined;
+    (adapter as unknown as { modulePromise: Promise<unknown> }).modulePromise = Promise.resolve({
+      renderMermaid: (_text: string, options?: { theme?: string }) => {
+        capturedTheme = options?.theme;
+        return { svg: '<svg />', warnings: [], kind: 'known' };
+      },
+    });
+
+    await adapter.render(
+      'bullets\n  title Q3\n',
+      { language: 'triton' },
+      { theme: 'bytebytego' },
+    );
+
+    assert.equal(capturedTheme, 'bytebytego');
+  });
+});
+
+describe('extractFrontmatterTheme()', () => {
+  it('reads a theme from leading frontmatter', () => {
+    assert.equal(extractFrontmatterTheme('---\ntheme: minimal\n---\nbullets\n'), 'minimal');
+  });
+
+  it('strips surrounding quotes', () => {
+    assert.equal(extractFrontmatterTheme('---\ntheme: "showcase"\n---\nbullets\n'), 'showcase');
+  });
+
+  it('returns undefined when there is no frontmatter', () => {
+    assert.equal(extractFrontmatterTheme('bullets\n  title Q3\n'), undefined);
+  });
+
+  it('returns undefined when frontmatter has no theme key', () => {
+    assert.equal(extractFrontmatterTheme('---\ntype: poster\n---\nrow\n'), undefined);
+  });
+
+  it('picks up a theme among other frontmatter keys', () => {
+    assert.equal(extractFrontmatterTheme('---\ntype: poster\ntheme: consulting\n---\nrow\n'), 'consulting');
   });
 });
 

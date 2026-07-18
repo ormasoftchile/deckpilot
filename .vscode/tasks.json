@@ -61,6 +61,56 @@
       "problemMatcher": []
     },
     {
+      "label": "build local triton core",
+      "detail": "Build the sibling Triton checkout (grammars + core ESM) so its changes are vendorable.",
+      "type": "shell",
+      "command": "node esbuild-core.mjs",
+      "options": {
+        "cwd": "${workspaceFolder}/../triton"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "vendor local triton",
+      "detail": "Vendor the LOCAL Triton checkout into deckpilot-triton (TRITON_LOCAL=1).",
+      "type": "shell",
+      "command": "npm --prefix apps/deckpilot-triton run vendor-triton",
+      "options": {
+        "env": {
+          "TRITON_LOCAL": "1"
+        }
+      },
+      "dependsOn": [
+        "build local triton core"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "build all (local triton)",
+      "detail": "Full local-debug build: bundle deckpilot host, then bundle + vendor deckpilot-triton against the LOCAL Triton checkout.",
+      "type": "shell",
+      "command": "npm run bundle && npm --prefix apps/deckpilot-triton run bundle",
+      "options": {
+        "env": {
+          "TRITON_LOCAL": "1"
+        }
+      },
+      "dependsOn": [
+        "vendor local triton"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
       "type": "npm",
       "script": "lint",
       "problemMatcher": "$eslint-stylish",

@@ -2044,7 +2044,10 @@ export class Conductor implements vscode.Disposable {
    * Mirrors resolveDirectivesAsync but dispatches through DiagramRendererRegistry.
    */
   private async resolveSlideAsyncDiagrams(slideHtml: string): Promise<void> {
-    const updates = await this.diagramService.resolveSlideBlocks(slideHtml);
+    const updates = await this.diagramService.resolveSlideBlocks(
+      slideHtml,
+      this.deck?.metadata?.diagrams?.theme ?? this.deck?.metadata?.theme,
+    );
     diagramLog(`[conductor] resolveSlideAsyncDiagrams: blocks = ${updates.length}`);
 
     for (const update of updates) {
