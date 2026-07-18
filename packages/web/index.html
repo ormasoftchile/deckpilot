@@ -98,6 +98,85 @@
       position: relative;
       width: 100%;
       height: 100%;
+      min-height: 0;
+    }
+
+    /*
+      Web viewer overrides:
+      presentation.css is optimized for the extension's fullscreen panel.  The
+      browser viewer has a persistent deck sidebar, so keep the same DOM and
+      controller while adapting the visible surface for a smaller viewport.
+    */
+    body.web-viewer #presentation-wrapper,
+    body.web-viewer #presentation-container,
+    body.web-viewer #slide-container {
+      min-height: 0;
+    }
+
+    body.web-viewer #slide-container {
+      align-items: stretch;
+      padding: clamp(1rem, 3vw, 2rem) clamp(1.25rem, 4vw, 3rem);
+    }
+
+    body.web-viewer #slide-content {
+      align-self: center;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+      scrollbar-gutter: stable;
+    }
+
+    body.web-viewer.font-small #slide-content {
+      font-size: 12px;
+    }
+
+    body.web-viewer.font-medium #slide-content {
+      font-size: 14px;
+    }
+
+    body.web-viewer.font-large #slide-content {
+      font-size: 16px;
+    }
+
+    body.web-viewer.mode-presentation #slide-content h1 {
+      font-size: clamp(2em, 4.2vw, 2.7em);
+    }
+
+    body.web-viewer.mode-presentation #slide-content h2 {
+      font-size: clamp(1.55em, 3.1vw, 2.05em);
+    }
+
+    body.web-viewer.mode-presentation #slide-content h3 {
+      font-size: clamp(1.2em, 2.2vw, 1.45em);
+    }
+
+    body.web-viewer.mode-presentation #slide-content p,
+    body.web-viewer.mode-presentation #slide-content ul,
+    body.web-viewer.mode-presentation #slide-content ol {
+      font-size: 1.1em;
+    }
+
+    body.web-viewer.mode-presentation #slide-content li {
+      font-size: inherit;
+    }
+
+    body.web-viewer.mode-presentation #slide-content table {
+      font-size: 1em;
+    }
+
+    body.web-viewer.mode-presentation #slide-content pre code {
+      font-size: 0.95em;
+    }
+
+    body.web-viewer #navigation {
+      opacity: 1;
+      flex-shrink: 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    body.web-viewer #navigation button {
+      padding: 0.4rem 0.85rem;
+      font-size: 1rem;
     }
   </style>
 </head>
@@ -105,7 +184,7 @@
   theme-dark font-medium: defaults matching the VS Code dark theme fallbacks in presentation.css.
   These match what the extension uses by default.
 -->
-<body class="theme-dark font-medium mode-presentation">
+<body class="theme-dark font-medium mode-presentation web-viewer">
 
   <!-- ── Deck picker sidebar ─────────────────────────────────────────── -->
   <aside id="deck-sidebar">
