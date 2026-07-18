@@ -47394,7 +47394,18 @@ var topology = {
   }
 };
 var REVEAL_EFFECTS = ["fade", "slide", "grow", "draw"];
-var LIST_STYLES = ["bullets", "numbered", "block", "box", "tree"];
+var LIST_STYLES = [
+  "bullets",
+  "numbered",
+  "block",
+  "box",
+  "tree",
+  "chevron",
+  "process",
+  "timeline",
+  "pyramid",
+  "columns"
+];
 var REVEAL_MODES = ["sequence", "subtree", "layer"];
 function asEffect(token) {
   const t = token.toLowerCase();
@@ -47663,6 +47674,156 @@ function layoutList2(doc, theme) {
       anchors[it.id] = { bounds: { x, y, width: nodeW, height: nodeH } };
     });
     height = rhu(top + maxDepth2 * (nodeH + vGap) + nodeH + margin);
+  } else if (doc.style === "chevron" || doc.style === "process") {
+    const isChevron = doc.style === "chevron";
+    const boxH = rhu(font * 2.8);
+    const padX = rhu(font * 1);
+    const notch = isChevron ? rhu(boxH * 0.3) : 0;
+    const arrowGap = isChevron ? 0 : rhu(font * 1.8);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const boxW = rhu(maxTextW + 2 * padX + (isChevron ? 2 * notch : 0));
+    const stepX = isChevron ? rhu(boxW - notch) : rhu(boxW + arrowGap);
+    const y = top;
+    const cy = rhu(y + boxH / 2);
+    const yb = rhu(y + boxH);
+    doc.items.forEach((it, i) => {
+      const x = rhu(margin + i * stepX);
+      const cx = rhu(x + boxW / 2);
+      const textY = rhu(cy + font * 0.34);
+      const children = [];
+      if (isChevron) {
+        const fill = i % 2 === 0 ? palette.primary : palette.secondary;
+        const k = notch;
+        const tipR = rhu(x + boxW);
+        const innerR = rhu(x + boxW - k);
+        const d = i === 0 ? `M ${x} ${y} L ${innerR} ${y} L ${tipR} ${cy} L ${innerR} ${yb} L ${x} ${yb} Z` : `M ${x} ${y} L ${innerR} ${y} L ${tipR} ${cy} L ${innerR} ${yb} L ${x} ${yb} L ${rhu(x + k)} ${cy} Z`;
+        children.push(p.path(d, fill, 0, { fill }));
+        children.push(p.text(it.text, rhu(cx + k / 2), textY, font, palette.background, { anchor: "middle" }));
+      } else {
+        if (i > 0) {
+          const ax1 = rhu(x);
+          const ax0 = rhu(x - arrowGap);
+          const ah = Math.max(4, rhu(font * 0.42));
+          children.push(p.path(`M ${ax0} ${cy} L ${rhu(ax1 - ah)} ${cy}`, palette.textMuted, 2));
+          const tri = `M ${rhu(ax1 - ah)} ${rhu(cy - ah)} L ${ax1} ${cy} L ${rhu(ax1 - ah)} ${rhu(cy + ah)} Z`;
+          children.push(p.path(tri, palette.textMuted, 0, { fill: palette.textMuted }));
+        }
+        children.push(p.rect({ x, y, width: boxW, height: boxH }, palette.surface, palette.primary, 1.5, { rx: 6 }));
+        children.push(p.text(it.text, cx, textY, font, palette.text, { anchor: "middle" }));
+      }
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x, y, width: boxW, height: boxH } };
+      contentRight = Math.max(contentRight, x + boxW);
+    });
+    height = rhu(top + boxH + margin);
+  } else if (doc.style === "timeline") {
+    const dotR = Math.max(5, rhu(font * 0.5));
+    const labelH = rhu(font * 1.8);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const stepX = rhu(maxTextW + font * 2.4);
+    const axisY = rhu(top + labelH);
+    doc.items.forEach((it, i) => {
+      const cx = rhu(margin + stepX / 2 + i * stepX);
+      const children = [];
+      if (i > 0) {
+        const px = rhu(margin + stepX / 2 + (i - 1) * stepX);
+        children.push(p.path(`M ${px} ${axisY} L ${cx} ${axisY}`, palette.border, 2));
+      }
+      children.push(p.circle({ x: cx, y: axisY }, dotR, palette.primary, palette.background, 2));
+      const above = i % 2 === 0;
+      const ly = above ? rhu(axisY - dotR - 8) : rhu(axisY + dotR + font + 4);
+      children.push(p.text(it.text, cx, ly, font, palette.text, { anchor: "middle" }));
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x: rhu(cx - stepX / 2), y: top, width: stepX, height: rhu(labelH * 2 + dotR * 2) } };
+      contentRight = Math.max(contentRight, cx + stepX / 2);
+    });
+    height = rhu(axisY + dotR + font + labelH + margin);
+  } else if (doc.style === "pyramid") {
+    const bandH = rhu(font * 2.8);
+    const vGap = rhu(font * 0.4);
+    let maxTextW = 0;
+    doc.items.forEach((it) => {
+      maxTextW = Math.max(maxTextW, measureText(it.text, font).width);
+    });
+    const baseW = rhu(Math.max(maxTextW * 1.5, font * 14));
+    const apexW = rhu(baseW * 0.28);
+    const cxCenter = rhu(margin + baseW / 2);
+    const widthAt = (frac) => apexW + (baseW - apexW) * frac;
+    doc.items.forEach((it, i) => {
+      const y = top + i * (bandH + vGap);
+      const yTop = rhu(y);
+      const yBot = rhu(y + bandH);
+      const wTop = widthAt(n === 1 ? 1 : i / n);
+      const wBot = widthAt(n === 1 ? 1 : (i + 1) / n);
+      const tl = rhu(cxCenter - wTop / 2);
+      const tr = rhu(cxCenter + wTop / 2);
+      const bl = rhu(cxCenter - wBot / 2);
+      const br = rhu(cxCenter + wBot / 2);
+      const fill = i % 2 === 0 ? palette.primary : palette.secondary;
+      const d = `M ${tl} ${yTop} L ${tr} ${yTop} L ${br} ${yBot} L ${bl} ${yBot} Z`;
+      const children = [
+        p.path(d, fill, 0, { fill }),
+        p.text(it.text, cxCenter, rhu(y + bandH / 2 + font * 0.34), font, palette.background, { anchor: "middle" })
+      ];
+      elements.push(p.group(children, { id: it.id }));
+      anchors[it.id] = { bounds: { x: bl, y: yTop, width: rhu(br - bl), height: bandH } };
+      contentRight = Math.max(contentRight, cxCenter + baseW / 2);
+    });
+    height = rhu(top + n * (bandH + vGap) - vGap + margin);
+  } else if (doc.style === "columns") {
+    const cols = [];
+    for (const it of doc.items) {
+      if (it.depth === 0 || cols.length === 0) cols.push({ header: it, cells: [] });
+      else cols[cols.length - 1].cells.push(it);
+    }
+    const headerH = rhu(font * 2.4);
+    const cellH = rhu(font * 2);
+    const gap = rhu(font * 0.5);
+    const colGap = rhu(font * 1.2);
+    const padX = rhu(font * 0.9);
+    let x = margin;
+    let maxCells = 0;
+    const colX = [];
+    const colW = [];
+    cols.forEach((c) => {
+      let w = measureText(c.header.text, font).width;
+      c.cells.forEach((ce) => {
+        w = Math.max(w, measureText(ce.text, font).width);
+      });
+      const cw = rhu(w + 2 * padX);
+      colX.push(rhu(x));
+      colW.push(cw);
+      x += cw + colGap;
+      maxCells = Math.max(maxCells, c.cells.length);
+    });
+    contentRight = rhu(x - colGap);
+    cols.forEach((c, ci) => {
+      const cx0 = colX[ci];
+      const cw = colW[ci];
+      const cxc = rhu(cx0 + cw / 2);
+      const hchildren = [
+        p.rect({ x: cx0, y: top, width: cw, height: headerH }, palette.primary, palette.primary, 0, { rx: 6 }),
+        p.text(c.header.text, cxc, rhu(top + headerH / 2 + font * 0.34), font, palette.background, { weight: "bold", anchor: "middle" })
+      ];
+      elements.push(p.group(hchildren, { id: c.header.id }));
+      anchors[c.header.id] = { bounds: { x: cx0, y: top, width: cw, height: headerH } };
+      c.cells.forEach((ce, ri) => {
+        const cy0 = rhu(top + headerH + gap + ri * (cellH + gap));
+        const cch = [
+          p.rect({ x: cx0, y: cy0, width: cw, height: cellH }, palette.surface, palette.border, 1, { rx: 4 }),
+          p.text(ce.text, cxc, rhu(cy0 + cellH / 2 + font * 0.34), font, palette.text, { anchor: "middle" })
+        ];
+        elements.push(p.group(cch, { id: ce.id }));
+        anchors[ce.id] = { bounds: { x: cx0, y: cy0, width: cw, height: cellH } };
+      });
+    });
+    height = rhu(top + headerH + gap + maxCells * (cellH + gap) + margin);
   } else {
     const rowH = rhu(font * 1.9);
     doc.items.forEach((it, i) => {
