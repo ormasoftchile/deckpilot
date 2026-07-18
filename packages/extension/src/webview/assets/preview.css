@@ -303,6 +303,19 @@ body.theme-light .preview-slide-body .diagram-block {
   padding: 0;
 }
 
+/* Triton diagrams render frameless in the side preview too — strip the block
+   chrome (border, rounded corners, panel background) so they match the
+   fullscreen presentation. Mermaid/other renderers keep their framed card;
+   loading/error states keep the frame as an affordance. */
+.preview-slide-body .diagram-block[data-diagram-renderer="triton"]:not(.diagram-block--loading):not(.diagram-block--error),
+body.theme-light .preview-slide-body .diagram-block[data-diagram-renderer="triton"]:not(.diagram-block--loading):not(.diagram-block--error) {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 0;
+}
+
 /* SVG viewport — scrolls if diagram is wider than available space */
 .preview-slide-body .diagram-block__viewport {
   width: 100%;

@@ -425,10 +425,8 @@
     if (currentFragment >= totalFragments) return;
     
     currentFragment++;
-    const fragment = slideContent.querySelector(`[data-fragment="${currentFragment}"]`);
-    if (fragment) {
-      fragment.classList.add('visible');
-    }
+    const frags = slideContent.querySelectorAll(`[data-fragment="${currentFragment}"]`);
+    frags.forEach(function(f) { f.classList.add('visible'); });
     // Notify extension host for recording timeline.
     // Delay by the fragment fade-in duration (400 ms) so the recorded
     // timestamp reflects when the element is fully visible on screen,
@@ -448,10 +446,8 @@
   function hideLastFragment() {
     if (currentFragment <= 0) return;
     
-    const fragment = slideContent.querySelector(`[data-fragment="${currentFragment}"]`);
-    if (fragment) {
-      fragment.classList.remove('visible');
-    }
+    const frags = slideContent.querySelectorAll(`[data-fragment="${currentFragment}"]`);
+    frags.forEach(function(f) { f.classList.remove('visible'); });
     currentFragment--;
     updateNavigationButtons();
   }
@@ -475,11 +471,134 @@
   }
 
   function updateFragmentState() {
-    // Count fragments in current slide
-    const fragments = slideContent.querySelectorAll('.fragment');
-    totalFragments = fragments.length;
+    // Expand any Triton progressive-reveal diagrams into per-step fragments,
+    // then (re)assign sequential indices across ALL fragments in document order.
+    expandTritonRevealFragments(slideContent);
+    totalFragments = renumberFragments();
     currentFragment = 0;
     console.log('[Fragments] Found', totalFragments, 'fragments in slide', currentSlide);
+  }
+
+  /**
+   * Assign 1-based data-fragment indices to every `.fragment` in the current
+   * slide, in document order. Triton reveal steps that span multiple `<g>`
+   * groups (via `group N` or `+` joins) carry a shared `data-triton-step-key`;
+   * consecutive fragments with the same key share ONE index so the whole group
+   * reveals on a single Space press. Non-triton fragments (no step key) always
+   * get their own sequential index, reproducing the parse-time numbering.
+   * Returns the number of distinct reveal steps.
+   */
+  function renumberFragments() {
+    const fragments = slideContent.querySelectorAll('.fragment');
+    let index = 0;
+    let prevKey = null;
+    for (let i = 0; i < fragments.length; i++) {
+      const key = fragments[i].getAttribute('data-triton-step-key');
+      if (!(key && key === prevKey)) {
+        index++;
+      }
+      fragments[i].setAttribute('data-fragment', String(index));
+      prevKey = key;
+    }
+    return index;
+  }
+
+  /**
+   * Triton diagrams that opt into progressive reveal embed an inert manifest
+   * (`<script type="application/json" id="triton-reveal">`) alongside stable
+   * `<g id="…">` groups in their SVG. This turns each reveal step into a
+   * deckpilot fragment so the normal Space-stepping machinery drives it.
+   *
+   * The diagram frame (title, axes, base geometry) stays visible from the
+   * start — only the per-step groups are hidden until their step is reached.
+   * Idempotent and gated by a `data-triton-expanded` marker.
+   */
+  function expandTritonRevealFragments(root) {
+    if (!root || !root.querySelectorAll) return;
+    const svgs = root.querySelectorAll('svg');
+    for (let s = 0; s < svgs.length; s++) {
+      const svg = svgs[s];
+      if (svg.getAttribute('data-triton-expanded')) continue;
+
+      const manifestEl = svg.querySelector('script#triton-reveal');
+      if (!manifestEl) continue;
+
+      let track;
+      try {
+        track = JSON.parse(manifestEl.textContent || '{}');
+      } catch (e) {
+        console.warn('[Triton] Failed to parse reveal manifest:', e);
+        svg.setAttribute('data-triton-expanded', 'error');
+        continue;
+      }
+
+      const steps = (track && track.steps) || [];
+      if (!steps.length) { svg.setAttribute('data-triton-expanded', 'empty'); continue; }
+
+      const effectToAnim = function (effect) {
+        // Map Triton's suggested effect onto deckpilot's fragment animations.
+        // `draw` has no dedicated animation yet → falls back to fade.
+        return effect === 'slide' ? 'slide-up'
+          : effect === 'grow' ? 'zoom'
+          : 'fade';
+      };
+
+      // The diagram frame (title, base geometry) reveals in NATURAL DOCUMENT
+      // ORDER, not at load. We keep the containing figure/render-block as a
+      // fragment and give it the SAME step key as the FIRST reveal step, so the
+      // frame + first group appear together on one press — after any preceding
+      // narrative (e.g. the slide heading). Without this, de-fragmenting the
+      // figure made the diagram's own title show before the slide title.
+      const firstKey = s + ':' + (steps[0] && steps[0].index);
+      const container = svg.closest ? svg.closest('[data-render-id], figure') : null;
+      if (container) {
+        container.classList.add('fragment', 'triton-reveal-step');
+        container.classList.remove('visible', 'current-fragment');
+        container.setAttribute('data-fragment-animation', effectToAnim(steps[0] && steps[0].effect));
+        container.setAttribute('data-triton-step-key', firstKey);
+      }
+
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i] || {};
+        const ids = step.enter || [];
+        const anim = effectToAnim(step.effect);
+        // Every group in this step shares one key so renumberFragments assigns
+        // them a single fragment index (grouped reveal on one Space press). The
+        // first step shares its key with the figure frame (see above).
+        const stepKey = s + ':' + step.index;
+        for (let j = 0; j < ids.length; j++) {
+          const id = String(ids[j]).replace(/"/g, '');
+          const g = svg.querySelector('[id="' + id + '"]');
+          if (!g) continue;
+          g.classList.add('fragment', 'triton-reveal-step');
+          g.setAttribute('data-fragment-animation', anim);
+          g.setAttribute('data-triton-step', String(step.index));
+          g.setAttribute('data-triton-step-key', stepKey);
+        }
+      }
+      svg.setAttribute('data-triton-expanded', 'true');
+    }
+  }
+
+  /**
+   * Re-expand and recount fragments after an async diagram swaps in, WITHOUT
+   * losing the presenter's current position. Fixes the timing gap where the
+   * diagram resolves after the slide (and its fragment count) was first shown.
+   */
+  function recountFragmentsPreservingPosition() {
+    const prev = currentFragment;
+    expandTritonRevealFragments(slideContent);
+    totalFragments = renumberFragments();
+    const fragments = slideContent.querySelectorAll('.fragment');
+    for (let i = 0; i < fragments.length; i++) {
+      // Toggle by the (possibly grouped) fragment INDEX, not raw DOM position —
+      // grouped triton steps share one index across several elements.
+      const idx = parseInt(fragments[i].getAttribute('data-fragment') || '0', 10);
+      if (idx <= prev) fragments[i].classList.add('visible');
+      else fragments[i].classList.remove('visible');
+    }
+    currentFragment = Math.min(prev, totalFragments);
+    updateNavigationButtons();
   }
 
   /**
@@ -889,6 +1008,16 @@
           if (newBlock) {
             const resolvedBlock = preserveRenderBlockState(block, newBlock, blockId);
             renderMermaidFallbacks(resolvedBlock);
+            // A Triton reveal diagram may have just swapped in AFTER the slide's
+            // fragment count was established — expand its steps and recount.
+            if (
+              status === 'success' &&
+              resolvedBlock &&
+              resolvedBlock.querySelector &&
+              resolvedBlock.querySelector('script#triton-reveal')
+            ) {
+              recountFragmentsPreservingPosition();
+            }
           }
         }
         break;

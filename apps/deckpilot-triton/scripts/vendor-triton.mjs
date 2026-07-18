@@ -38,8 +38,25 @@ const installedSources = installedPackageNames.flatMap(([scope, name]) => ([
 ]));
 const siblingSource = resolve(__dirname, '..', '..', '..', '..', 'triton', 'packages', 'core', 'dist');
 
-const candidateSources = [...installedSources, siblingSource];
+// Local-development override. When debugging Triton changes end-to-end we must
+// vendor from the local Triton checkout, NOT the published npm package.
+//   TRITON_CORE_DIST=/abs/path/to/triton/packages/core/dist  → explicit source
+//   TRITON_LOCAL=1                                            → prefer sibling checkout
+// Both move the local source to the FRONT of the candidate list so it wins over
+// any installed @cristianormazabal/triton-core. Normal builds/CI are unaffected.
+const explicitLocal = process.env.TRITON_CORE_DIST
+  ? [resolve(process.env.TRITON_CORE_DIST)]
+  : [];
+const preferLocal = process.env.TRITON_LOCAL === '1' || process.env.TRITON_LOCAL === 'true';
+
+const candidateSources = preferLocal || explicitLocal.length > 0
+  ? [...explicitLocal, siblingSource, ...installedSources]
+  : [...installedSources, siblingSource];
 const source = candidateSources.find((candidate) => existsSync(candidate));
+
+if (source && (preferLocal || explicitLocal.length > 0)) {
+  console.log('[vendor-triton] LOCAL mode — vendoring Triton from', source);
+}
 
 if (!source) {
   console.error('[vendor-triton] Could not find Triton dist at:');
@@ -82,7 +99,7 @@ await mkdir(dest, { recursive: true });
 await build({
   stdin: {
     contents: `
-      import { compileSync, renderSync } from ${JSON.stringify(entryPoint)};
+      import { compileSync, renderSync, compileAndRenderSync, embedRevealManifest } from ${JSON.stringify(entryPoint)};
 
       const THEME_ALIASES = {
         dark: 'midnight',
@@ -132,14 +149,23 @@ await build({
 
       function renderMermaid(text, options = {}) {
         const themedText = injectTheme(text, options.theme ?? 'midnight');
-        const result = renderSync(themedText, undefined, options.format ?? 'svg');
+        // Interactive render path: also surfaces a progressive-reveal track when
+        // the diagram opts into one (e.g. the deck/bullets family). The reveal
+        // manifest is embedded into the SVG ONLY here — the plain renderSync path
+        // (used for non-Deckpilot Triton) never emits it.
+        const result = compileAndRenderSync(themedText, undefined, options.format ?? 'svg');
         if (!result.ok) {
           return { svg: undefined, warnings: [result.error.message], kind: 'unknown' };
         }
-        return { svg: result.value, warnings: [], kind: 'known' };
+        let svg = result.value.svg;
+        const reveal = result.value.reveal;
+        if (reveal) {
+          svg = embedRevealManifest(svg, reveal);
+        }
+        return { svg, warnings: [], kind: 'known', reveal };
       }
 
-      export { compileSync, renderSync, detectDiagramType, renderMermaid };
+      export { compileSync, renderSync, compileAndRenderSync, detectDiagramType, renderMermaid };
     `,
     resolveDir: resolve(__dirname, '..'),
     sourcefile: 'vendor-triton-entry.mjs',
