@@ -195,9 +195,11 @@ button { font-family: inherit; }
 /* ---------- Viewer ---------- */
 .dp-viewer {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--dp-bg);
+  overflow: hidden;
 }
 .dp-viewer-bar {
   display: flex;
@@ -229,6 +231,59 @@ button { font-family: inherit; }
 }
 .dp-icon-button:hover { background: var(--dp-bg); }
 .dp-icon-button-link { display: inline-flex; align-items: center; }
+.dp-viewer-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--dp-border);
+  border-radius: 999px;
+  background: rgba(22, 24, 29, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.dp-viewer-nav-header {
+  flex: 0 0 auto;
+}
+.dp-viewer-nav-overlay {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 8;
+  display: none;
+}
+.dp-nav-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dp-fg);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.dp-nav-button:hover:not(:disabled),
+.dp-nav-button:focus-visible:not(:disabled) {
+  background: var(--dp-bg-input);
+  outline: none;
+}
+.dp-nav-button:disabled {
+  color: var(--dp-fg-dim);
+  cursor: default;
+  opacity: 0.42;
+}
+.dp-nav-position {
+  min-width: 54px;
+  padding: 0 6px;
+  color: var(--dp-fg-muted);
+  font-family: var(--dp-mono);
+  font-size: 0.78rem;
+  text-align: center;
+  white-space: nowrap;
+}
 .dp-badge {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -243,8 +298,20 @@ button { font-family: inherit; }
   flex: 1 1 auto;
   position: relative;
   min-height: 0;
+  overflow: hidden;
 }
-.dp-viewer-stage .reveal { height: 100%; }
+.dp-viewer-stage .reveal {
+  height: 100%;
+  min-height: 0;
+  --r-main-font-size: clamp(19px, 2.1vw, 28px);
+  --r-block-margin: 0.65em;
+  --r-heading-margin: 0 0 0.45em 0;
+  --r-heading1-size: clamp(2em, 4.2vw, 2.7em);
+  --r-heading2-size: clamp(1.55em, 3.2vw, 2em);
+  --r-heading3-size: clamp(1.25em, 2.5vw, 1.55em);
+  --r-heading4-size: 1.08em;
+  --r-heading-text-transform: none;
+}
 .dp-viewer-stage .reveal.overview {
   overflow: auto;
   scrollbar-color: var(--dp-border) transparent;
@@ -351,8 +418,20 @@ button { font-family: inherit; }
 /* ---------- Slide content typography ---------- */
 .reveal .slides section {
   text-align: left;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  padding: 0 0.35em 1.3em;
 }
 .reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: -0.01em; }
+.reveal p,
+.reveal li {
+  font-size: 1em;
+}
 .reveal pre {
   width: 100%;
   font-size: 0.55em;
@@ -369,3 +448,9 @@ button { font-family: inherit; }
   font-family: var(--dp-mono);
 }
 .reveal a { color: var(--dp-accent); }
+
+@media (max-width: 900px) {
+  .dp-viewer-title { max-width: 38%; }
+  .dp-viewer-nav-header { display: none; }
+  .dp-viewer-nav-overlay { display: inline-flex; }
+}
