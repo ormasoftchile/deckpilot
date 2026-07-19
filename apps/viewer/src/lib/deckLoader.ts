@@ -67,6 +67,39 @@ function mergeSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   return c.signal;
 }
 
+/**
+ * A slide is "visible" when it has any raw content (ignoring HTML comments),
+ * any rendered text, or at least one diagram block. Purely-empty chunks are
+ * dropped so the viewer never opens on a blank slide.
+ */
+function slideHasVisibleContent(slide: Slide): boolean {
+  const rawText = (slide.content ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
+  if (rawText.length > 0) return true;
+  const htmlText = (slide.html ?? '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+  if (htmlText.length > 0) return true;
+  return (slide.diagramBlocks?.length ?? 0) > 0;
+}
+
+/**
+ * Bug A: in `heading` split mode (the viewer's default) core keeps the empty
+ * leading chunk formed by the blank line between the deck frontmatter fence and
+ * the first heading, so the viewer opens on a completely empty `section`.
+ *
+ * Drop every content-less slide (empty content + empty HTML + no diagram
+ * blocks) and re-index the survivors contiguously, so Reveal DOM order and
+ * `#slide=N` deep links stay aligned. Core split behavior is untouched (the VS
+ * Code extension is unaffected). If every slide were empty we keep the original
+ * list so `createDeck` still gets at least one slide.
+ */
+function dropEmptyLeadingSlides(slides: Slide[]): Slide[] {
+  const visible = slides.filter(slideHasVisibleContent);
+  if (visible.length === 0 || visible.length === slides.length) return slides;
+  return visible.map((slide, i) => ({ ...slide, index: i }));
+}
+
 export interface LoadDeckOptions {
   /**
    * Slide-break mode override (from the viewer URL, e.g. `?split=heading`).
@@ -178,7 +211,7 @@ export async function loadDeckFromUrl(
 
   // 5. Build Deck DTO via core's `createDeck` so all required fields (state,
   //    currentSlideIndex, etc.) are populated. The viewer identifies decks by URL.
-  const deck = createDeck(deckUrl.toString(), slides, metadata);
+  const deck = createDeck(deckUrl.toString(), dropEmptyLeadingSlides(slides), metadata);
 
   return {
     deck,

@@ -3,7 +3,7 @@ import Reveal from 'reveal.js';
 import 'reveal.js/dist/reveal.css';
 import 'reveal.js/dist/theme/black.css';
 import type { LoadedDeck } from '../lib/deckLoader';
-import { sanitizeSlideHtml } from '../lib/sanitize';
+import { sanitizeSlideHtml, unfragmentLeadingBlock } from '../lib/sanitize';
 import { rewriteActionLinks } from '../lib/actionRenderer';
 import { readSlideFromHash, writeSlideToHash, onHashChange } from '../lib/hashRouter';
 import { renderSlideDiagrams } from '../lib/tritonDiagramRenderer';
@@ -26,7 +26,10 @@ interface RenderedSlide {
 function buildRenderedSlides(loaded: LoadedDeck): RenderedSlide[] {
   return loaded.deck.slides.map((slide) => {
     const transformed = rewriteActionLinks(slide.html ?? '');
-    const safe = sanitizeSlideHtml(transformed);
+    // Un-fragment the leading block so the slide's title/first block is visible
+    // on entry (core auto-fragments every block; Reveal hides fragments until
+    // stepped). Every other block keeps its fragment markup for step-through.
+    const safe = unfragmentLeadingBlock(sanitizeSlideHtml(transformed));
     const title =
       slide.frontmatter?.title?.toString().trim() ||
       extractFirstHeading(slide.content) ||
@@ -187,6 +190,14 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           touch: true,
           center: false,
           embedded: true,
+          // Reveal 5 auto-activates its "scroll view" below scrollActivationWidth
+          // (default 435px). That scroll mode is incompatible with the viewer's
+          // custom chrome + React-managed sections and triggers infinite
+          // recursion (layout → syncScrollPosition → activatePage) on narrow /
+          // mobile viewports. Force classic slide view and disable the auto
+          // scroll-mode threshold so the deck stays stable at every width.
+          view: 'slide',
+          scrollActivationWidth: 0,
         });
         setPhase('constructed');
         setPhase('initialize-called');
