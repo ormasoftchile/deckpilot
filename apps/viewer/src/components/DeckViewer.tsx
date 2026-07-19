@@ -85,30 +85,103 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
-    initializeTritonRevealFragments(el);
-    const reveal = new Reveal(el, {
-      hash: false, // we manage the hash ourselves to keep ?url= intact
-      controls: false,
-      progress: true,
-      slideNumber: false,
-      transition: 'slide',
-      keyboard: true,
-      touch: true,
-      center: false,
-      embedded: false,
-    });
-    revealRef.current = reveal;
-    void reveal.initialize().then(() => {
+
+    // Fail-soft: a throw here must not unmount the whole tree (blank screen).
+    // Worst case the fragment runtime is skipped but slide content still shows.
+    try {
+      initializeTritonRevealFragments(el);
+    } catch (err) {
+      console.error('[viewer] initializeTritonRevealFragments failed', err);
+    }
+
+    let reveal: Reveal | null = null;
+    let cancelled = false;
+    let initFrame = 0;
+    let layoutFrame = 0;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const safeLayout = (): void => {
+      if (cancelled || !revealRef.current) return;
+      try {
+        revealRef.current.layout();
+      } catch (err) {
+        console.error('[viewer] reveal.layout failed', err);
+      }
+    };
+
+    const wireEvents = (instance: Reveal): void => {
       const target = Math.min(Math.max(readSlideFromHash(), 0), slides.length - 1);
-      if (target > 0) reveal.slide(target);
+      if (target > 0) instance.slide(target);
       const handleChange = (): void => {
-        const idx = reveal.getIndices().h;
+        const idx = instance.getIndices().h;
         setCurrentIndex(idx);
         writeSlideToHash(idx);
       };
-      reveal.on('slidechanged', handleChange);
+      instance.on('slidechanged', handleChange);
       handleChange();
-    });
+      // iOS Safari frequently reports a settled layout only after the first
+      // frame (dynamic toolbar / viewport not stable during initialize()).
+      // Kick a layout on the next frame so slides are scaled to real height.
+      layoutFrame = requestAnimationFrame(safeLayout);
+    };
+
+    const startReveal = (): void => {
+      if (cancelled) return;
+      try {
+        reveal = new Reveal(el, {
+          hash: false, // we manage the hash ourselves to keep ?url= intact
+          controls: false,
+          progress: true,
+          slideNumber: false,
+          transition: 'slide',
+          keyboard: true,
+          touch: true,
+          center: false,
+          embedded: false,
+        });
+        revealRef.current = reveal;
+        void reveal
+          .initialize()
+          .then(() => {
+            if (cancelled || !reveal) return;
+            wireEvents(reveal);
+          })
+          .catch((err) => {
+            console.error('[viewer] reveal.initialize failed', err);
+          });
+      } catch (err) {
+        console.error('[viewer] Reveal setup failed', err);
+      }
+    };
+
+    // Guard against 0-height init: on iOS the flex stage can measure 0px at the
+    // instant Reveal reads clientHeight, which scales every slide into a
+    // 0-height box (universal blank, no thrown error). Defer until the stage
+    // reports a real height.
+    if (el.clientHeight > 0) {
+      startReveal();
+    } else if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.height > 0) {
+            resizeObserver?.disconnect();
+            resizeObserver = null;
+            startReveal();
+            break;
+          }
+        }
+      });
+      resizeObserver.observe(el);
+      // Fallback in case the observer never fires with a non-zero height.
+      initFrame = requestAnimationFrame(() => {
+        if (cancelled || revealRef.current) return;
+        resizeObserver?.disconnect();
+        resizeObserver = null;
+        startReveal();
+      });
+    } else {
+      initFrame = requestAnimationFrame(startReveal);
+    }
 
     // External hash changes (deep link refresh, manual edits) drive reveal.
     const unsubscribeHash = onHashChange((idx) => {
@@ -118,10 +191,25 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       }
     });
 
+    // Re-layout on viewport changes — iOS toolbar show/hide, rotation, and
+    // visual-viewport resizes all change the usable height after init.
+    window.addEventListener('resize', safeLayout);
+    window.addEventListener('orientationchange', safeLayout);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener('resize', safeLayout);
+
     return () => {
+      cancelled = true;
+      if (initFrame) cancelAnimationFrame(initFrame);
+      if (layoutFrame) cancelAnimationFrame(layoutFrame);
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      window.removeEventListener('resize', safeLayout);
+      window.removeEventListener('orientationchange', safeLayout);
+      visualViewport?.removeEventListener('resize', safeLayout);
       unsubscribeHash();
       try {
-        reveal.destroy();
+        reveal?.destroy();
       } catch {
         // ignore double-destroy in StrictMode
       }
