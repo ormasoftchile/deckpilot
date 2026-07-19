@@ -30,6 +30,27 @@ export async function renderSlideDiagrams(html: string, slide: Slide, deck: Deck
   return sanitizeSlideHtml(renderedHtml);
 }
 
+/**
+ * Render a standalone diagram source (e.g. the whole body of a `.mmd` file)
+ * to a raw SVG string via Triton. Used by the dedicated diagram view. The
+ * caller is responsible for sanitizing the SVG before injecting it.
+ */
+export function renderDiagramSourceToSvg(
+  source: string,
+  theme?: string,
+): { ok: true; svg: string } | { ok: false; error: string } {
+  let result: ReturnType<typeof compileAndRenderSync>;
+  try {
+    result = compileAndRenderSync(source, undefined, 'svg', resolveTritonTheme(theme));
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  if (!result.ok) {
+    return { ok: false, error: result.error.message };
+  }
+  return { ok: true, svg: stripBackgroundRect(result.value.svg) };
+}
+
 async function renderDiagramPlaceholders(html: string, slide: Slide, deck: Deck): Promise<string> {
   const blocksById = new Map((slide.diagramBlocks ?? []).map((block) => [block.id, block]));
   const replacements = await Promise.all(

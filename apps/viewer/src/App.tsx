@@ -1,8 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Landing } from './components/Landing';
 import { DeckViewer } from './components/DeckViewer';
+import { DiagramView } from './components/DiagramView';
 import { ErrorView } from './components/ErrorView';
-import { loadDeckFromUrl, DeckLoadError, type LoadedDeck } from './lib/deckLoader';
+import {
+  loadDeckFromUrl,
+  loadMermaidFromUrl,
+  isMermaidUrl,
+  DeckLoadError,
+  type LoadedDeck,
+} from './lib/deckLoader';
 
 const RECENT_KEY = 'deckpilot.viewer.recent';
 const RECENT_LIMIT = 8;
@@ -37,6 +44,7 @@ type State =
   | { kind: 'landing' }
   | { kind: 'loading'; url: string }
   | { kind: 'ready'; deck: LoadedDeck }
+  | { kind: 'diagram'; sourceUrl: string; source: string }
   | { kind: 'error'; url: string; message: string };
 
 export function App(): JSX.Element {
@@ -49,6 +57,14 @@ export function App(): JSX.Element {
   const load = useCallback(async (url: string, controller: AbortController) => {
     setState({ kind: 'loading', url });
     try {
+      if (isMermaidUrl(url)) {
+        const { sourceUrl, source } = await loadMermaidFromUrl(url, controller.signal);
+        if (controller.signal.aborted) return;
+        saveRecent(url);
+        setRecent(loadRecent());
+        setState({ kind: 'diagram', sourceUrl, source });
+        return;
+      }
       const params = new URLSearchParams(window.location.search);
       const split = params.get('split') ?? params.get('slideBreak') ?? undefined;
       const deck = await loadDeckFromUrl(url, controller.signal, split ? { slideBreak: split } : undefined);
@@ -97,6 +113,9 @@ export function App(): JSX.Element {
   }
   if (state.kind === 'error') {
     return <ErrorView url={state.url} message={state.message} onRetry={() => handleOpen(state.url)} onHome={handleReset} />;
+  }
+  if (state.kind === 'diagram') {
+    return <DiagramView sourceUrl={state.sourceUrl} source={state.source} onClose={handleReset} />;
   }
   return <DeckViewer loaded={state.deck} onClose={handleReset} />;
 }

@@ -589,3 +589,62 @@ button { font-family: inherit; }
   .dp-viewer-nav-header { display: none; }
   .dp-viewer-nav-overlay { display: inline-flex; }
 }
+
+/* ---------- Standalone diagram view (.mmd) ---------- */
+.dp-diagram {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.dp-diagram-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background:
+    radial-gradient(circle at 1px 1px, var(--dp-border) 1px, transparent 0) 0 0 / 24px 24px,
+    var(--dp-bg);
+}
+.dp-diagram-viewport:active {
+  cursor: grabbing;
+}
+.dp-diagram-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.dp-diagram-content svg {
+  display: block;
+}
+.dp-diagram-error {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.5rem;
+}
+.dp-diagram-error-header {
+  color: var(--dp-danger);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.dp-diagram-error-message {
+  white-space: pre-wrap;
+  color: var(--dp-fg);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  border-radius: var(--dp-radius);
+  padding: 0.75rem 1rem;
+}
+.dp-diagram-source {
+  white-space: pre-wrap;
+  color: var(--dp-fg-muted);
+  font-family: var(--dp-mono);
+  font-size: 0.8em;
+}

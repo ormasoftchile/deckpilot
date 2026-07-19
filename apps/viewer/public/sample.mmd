@@ -1,0 +1,7 @@
+flowchart TD
+  A[Paste a .mmd URL] --> B{Deckpilot Viewer}
+  B -->|.mmd / .mermaid| C[Render via Triton]
+  B -->|.deck.md| D[Parse as slides]
+  C --> E[Full-bleed SVG]
+  E --> F[Fit · zoom · pan · download]
+  D --> G[Reveal.js deck]

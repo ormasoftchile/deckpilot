@@ -220,3 +220,77 @@ export async function loadDeckFromUrl(
     warnings,
   };
 }
+
+/**
+ * Standalone Mermaid (`.mmd`) file loaded for the dedicated diagram view.
+ */
+export interface LoadedMermaid {
+  sourceUrl: string;
+  source: string;
+}
+
+const MERMAID_KEYWORDS = [
+  'flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'stateDiagram-v2',
+  'erDiagram', 'gantt', 'journey', 'mindmap', 'timeline', 'gitGraph', 'pie', 'quadrantChart',
+  'requirementDiagram', 'c4context', 'c4container', 'c4component', 'sankey-beta', 'xychart-beta',
+  'block-beta', 'packet-beta', 'architecture-beta', 'kanban', 'radar-beta', 'treemap',
+];
+
+/**
+ * True when the URL's path ends in `.mmd`/`.mermaid` (case-insensitive). This
+ * is the primary signal for routing to the diagram view instead of the deck
+ * pipeline.
+ */
+export function isMermaidUrl(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl, window.location.href);
+    return /\.(mmd|mermaid)$/i.test(u.pathname);
+  } catch {
+    return /\.(mmd|mermaid)(?:$|[?#])/i.test(rawUrl);
+  }
+}
+
+/**
+ * Content-sniff fallback for extensionless sources (raw/gist URLs): the first
+ * non-empty, non-`%%comment` line starts with a Mermaid diagram keyword.
+ */
+export function looksLikeMermaid(text: string): boolean {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith('%%'));
+  if (!firstLine) return false;
+  const head = firstLine.toLowerCase();
+  return MERMAID_KEYWORDS.some((kw) => {
+    const k = kw.toLowerCase();
+    return head === k || head.startsWith(`${k} `) || head.startsWith(`${k}\t`) || head.startsWith(`${k};`);
+  });
+}
+
+/**
+ * Fetch a standalone `.mmd` file's raw text (validated + CORS-safe, same
+ * transport as decks). The diagram view renders it via Triton.
+ */
+export async function loadMermaidFromUrl(rawUrl: string, signal?: AbortSignal): Promise<LoadedMermaid> {
+  const validation = validateDeckUrl(rawUrl);
+  if (!validation.ok || !validation.url) {
+    throw new DeckLoadError(validation.error ?? 'Invalid URL.');
+  }
+  const url = validation.url;
+  let text: string;
+  try {
+    const res = await fetchText(url, signal);
+    if (res.status === 0 || (res.text === '' && res.status >= 400)) {
+      throw new DeckLoadError(`Failed to fetch diagram (HTTP ${res.status}).`);
+    }
+    text = res.text;
+  } catch (err) {
+    if (err instanceof DeckLoadError) throw err;
+    const msg = err instanceof Error ? err.message : 'Unknown fetch error';
+    throw new DeckLoadError(`Could not download diagram: ${msg}`, err);
+  }
+  if (!text.trim()) {
+    throw new DeckLoadError('Diagram file is empty.');
+  }
+  return { sourceUrl: url.toString(), source: text };
+}

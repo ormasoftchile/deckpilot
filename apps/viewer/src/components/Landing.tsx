@@ -6,6 +6,7 @@ interface LandingProps {
 }
 
 const SAMPLE_URL = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}/sample.deck.md`;
+const SAMPLE_MMD_URL = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}/sample.mmd`;
 
 export function Landing({ recent, onOpen }: LandingProps): JSX.Element {
   const [value, setValue] = useState('');
@@ -58,6 +59,13 @@ export function Landing({ recent, onOpen }: LandingProps): JSX.Element {
         <button type="button" className="dp-landing-link" onClick={() => onOpen(SAMPLE_URL)}>
           {SAMPLE_URL}
         </button>
+        <button type="button" className="dp-landing-link" onClick={() => onOpen(SAMPLE_MMD_URL)}>
+          {SAMPLE_MMD_URL}
+        </button>
+        <p className="dp-landing-hint">
+          A <code>.mmd</code> (or <code>.mermaid</code>) URL renders as a single full-bleed diagram
+          via Triton — fit, zoom, pan, and download as SVG.
+        </p>
       </section>
 
       {recent.length > 0 && (
