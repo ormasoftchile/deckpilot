@@ -56,13 +56,24 @@ function formatRevealError(err: unknown): string {
 
 export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<Reveal | null>(null);
+  const revealReadyRef = useRef(false);
+  const initPhaseRef = useRef('mount');
   const [showNotes, setShowNotes] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(() => readSlideFromHash());
   const [slides, setSlides] = useState<RenderedSlide[]>(() => buildRenderedSlides(loaded));
   const [revealError, setRevealError] = useState<string | null>(null);
+  const [revealReady, setRevealReady] = useState(false);
+  const [initPhase, setInitPhase] = useState('mount');
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagDismissed, setDiagDismissed] = useState(false);
 
   const deckTitle = loaded.deck.title ?? loaded.deck.metadata?.title ?? 'Untitled deck';
+  const setPhase = (phase: string): void => {
+    initPhaseRef.current = phase;
+    setInitPhase(phase);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +104,12 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
+    revealReadyRef.current = false;
+    setRevealReady(false);
     setRevealError(null);
+    setPhase('mount');
+    setShowDiag(false);
+    setDiagDismissed(false);
 
     // Fail-soft: a throw here must not unmount the whole tree (blank screen).
     // Worst case the fragment runtime is skipped but slide content still shows.
@@ -107,6 +123,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     let cancelled = false;
     let initFrame = 0;
     let layoutFrame = 0;
+    let watchdogTimeout = 0;
     let resizeObserver: ResizeObserver | null = null;
 
     const safeLayout = (): void => {
@@ -136,6 +153,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
 
     const startReveal = (): void => {
       if (cancelled) return;
+      setPhase('startReveal');
       try {
         reveal = new Reveal(el, {
           hash: false, // we manage the hash ourselves to keep ?url= intact
@@ -148,26 +166,52 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           center: false,
           embedded: true,
         });
-        revealRef.current = reveal;
+        setPhase('constructed');
+        setPhase('initialize-called');
         void reveal
           .initialize()
           .then(() => {
             if (cancelled || !reveal) return;
+            revealRef.current = reveal;
+            revealReadyRef.current = true;
+            setRevealReady(true);
+            setPhase('ready');
+            if (watchdogTimeout) {
+              window.clearTimeout(watchdogTimeout);
+              watchdogTimeout = 0;
+            }
+            setShowDiag(false);
             wireEvents(reveal);
           })
           .catch((err) => {
             console.error('[viewer] reveal.initialize failed', err);
             if (!cancelled) {
-              setRevealError(formatRevealError(err));
+              const message = formatRevealError(err);
+              revealReadyRef.current = false;
+              setRevealReady(false);
+              setPhase(`initialize-error: ${message}`);
+              setRevealError(message);
+              setDiagDismissed(false);
             }
           });
       } catch (err) {
         console.error('[viewer] Reveal setup failed', err);
         if (!cancelled) {
-          setRevealError(formatRevealError(err));
+          const message = formatRevealError(err);
+          revealReadyRef.current = false;
+          setRevealReady(false);
+          setPhase(`setup-error: ${message}`);
+          setRevealError(message);
+          setDiagDismissed(false);
         }
       }
     };
+
+    watchdogTimeout = window.setTimeout(() => {
+      if (!revealReadyRef.current) {
+        setShowDiag(true);
+      }
+    }, 1800);
 
     // Guard against 0-height init: on iOS the flex stage can measure 0px at the
     // instant Reveal reads clientHeight, which scales every slide into a
@@ -189,7 +233,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       resizeObserver.observe(el);
       // Fallback in case the observer never fires with a non-zero height.
       initFrame = requestAnimationFrame(() => {
-        if (cancelled || revealRef.current) return;
+        if (cancelled || revealReadyRef.current) return;
         resizeObserver?.disconnect();
         resizeObserver = null;
         startReveal();
@@ -201,7 +245,8 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     // External hash changes (deep link refresh, manual edits) drive reveal.
     const unsubscribeHash = onHashChange((idx) => {
       const clamped = Math.min(Math.max(idx, 0), slides.length - 1);
-      if (revealRef.current && revealRef.current.getIndices().h !== clamped) {
+      setCurrentIndex(clamped);
+      if (revealReadyRef.current && revealRef.current && revealRef.current.getIndices().h !== clamped) {
         revealRef.current.slide(clamped);
       }
     });
@@ -217,6 +262,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       cancelled = true;
       if (initFrame) cancelAnimationFrame(initFrame);
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
+      if (watchdogTimeout) window.clearTimeout(watchdogTimeout);
       resizeObserver?.disconnect();
       resizeObserver = null;
       window.removeEventListener('resize', safeLayout);
@@ -229,6 +275,8 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         // ignore double-destroy in StrictMode
       }
       revealRef.current = null;
+      revealReadyRef.current = false;
+      setRevealReady(false);
     };
   }, [slides]);
 
@@ -241,13 +289,31 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const goToSlide = (index: number): void => {
     if (totalSlides === 0) return;
     const next = Math.min(Math.max(index, 0), totalSlides - 1);
-    if (revealRef.current) {
+    setCurrentIndex(next);
+    writeSlideToHash(next);
+    if (revealReadyRef.current && revealRef.current) {
       revealRef.current.slide(next);
-    } else {
-      setCurrentIndex(next);
-      writeSlideToHash(next);
     }
   };
+
+  const buildDiagnosticLines = (): string[] => [
+    `phase: ${initPhase}`,
+    `revealReady: ${revealReady}`,
+    `revealError: ${revealError ?? 'none'}`,
+    `slides: ${slides.length}`,
+    `currentIndex / clampedIndex: ${currentIndex} / ${clampedIndex}`,
+    `container (.reveal) WxH: ${containerRef.current?.clientWidth ?? 'n/a'} x ${containerRef.current?.clientHeight ?? 'n/a'}`,
+    `stage WxH: ${stageRef.current?.clientWidth ?? 'n/a'} x ${stageRef.current?.clientHeight ?? 'n/a'}`,
+    `window.innerHeight: ${typeof window !== 'undefined' ? window.innerHeight : 'n/a'}`,
+    `visualViewport.height: ${typeof window !== 'undefined' ? window.visualViewport?.height ?? 'n/a' : 'n/a'}`,
+    `100dvh supported: ${typeof CSS !== 'undefined' && CSS.supports?.('height', '100dvh') ? 'true' : 'false'}`,
+    `.slides section count in DOM: ${containerRef.current?.querySelectorAll('.slides > section').length ?? 'n/a'}`,
+    `reveal totalSlides (if ready): ${
+      revealReadyRef.current
+        ? (revealRef.current as unknown as { getTotalSlides?: () => number } | null)?.getTotalSlides?.() ?? 'n/a'
+        : 'n/a'
+    }`,
+  ];
 
   return (
     <div className="dp-viewer">
@@ -303,7 +369,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         </a>
       </header>
 
-      <div className="dp-viewer-stage">
+      <div className="dp-viewer-stage" ref={stageRef}>
         <div className="reveal" ref={containerRef}>
           <div className="slides">
             {slides.map((s) => (
@@ -335,6 +401,52 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
             }}
           >
             {revealError}
+          </div>
+        )}
+
+        {(showDiag || (revealError && !diagDismissed)) && (
+          <div
+            role="status"
+            style={{
+              position: 'absolute',
+              zIndex: 30,
+              left: '1rem',
+              right: '1rem',
+              top: '1rem',
+              maxHeight: '70vh',
+              overflow: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              background: 'rgba(3, 7, 18, 0.96)',
+              color: '#e5e7eb',
+              border: '1px solid rgba(148, 163, 184, 0.45)',
+              borderRadius: '0.5rem',
+              boxShadow: '0 1rem 2rem rgba(0, 0, 0, 0.35)',
+              padding: '0.75rem 1rem',
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              font: '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setShowDiag(false);
+                setDiagDismissed(true);
+              }}
+              style={{
+                float: 'right',
+                marginLeft: '0.75rem',
+                border: '1px solid rgba(229, 231, 235, 0.45)',
+                borderRadius: '0.25rem',
+                background: 'rgba(15, 23, 42, 0.9)',
+                color: '#e5e7eb',
+                font: 'inherit',
+                padding: '0.125rem 0.4rem',
+              }}
+            >
+              close
+            </button>
+            {buildDiagnosticLines().join('\n')}
           </div>
         )}
 
