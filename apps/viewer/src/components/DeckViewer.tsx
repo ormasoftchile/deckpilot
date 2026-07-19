@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import Reveal from 'reveal.js';
 import 'reveal.js/dist/reveal.css';
 import 'reveal.js/dist/theme/black.css';
@@ -124,6 +124,10 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     let initFrame = 0;
     let layoutFrame = 0;
     let watchdogTimeout = 0;
+    let forceStartTimeout = 0;
+    let contentDiagTimeout = 0;
+    let startCalled = false;
+    const layoutTimeouts: number[] = [];
     let resizeObserver: ResizeObserver | null = null;
 
     const safeLayout = (): void => {
@@ -135,6 +139,23 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       }
     };
 
+    const scheduleSettleLayouts = (): void => {
+      layoutFrame = requestAnimationFrame(safeLayout);
+      for (const delay of [150, 400, 900]) {
+        layoutTimeouts.push(window.setTimeout(safeLayout, delay));
+      }
+    };
+
+    const checkForZeroSizeContent = (): void => {
+      if (cancelled || !revealReadyRef.current) return;
+      const presentRect = containerRef.current?.querySelector('.slides section.present')?.getBoundingClientRect();
+      const slidesRect = containerRef.current?.querySelector('.slides')?.getBoundingClientRect();
+      const rect = presentRect ?? slidesRect;
+      if (rect && (rect.width < 4 || rect.height < 4)) {
+        setShowDiag(true);
+      }
+    };
+
     const wireEvents = (instance: Reveal): void => {
       const target = Math.min(Math.max(readSlideFromHash(), 0), slides.length - 1);
       if (target > 0) instance.slide(target);
@@ -143,16 +164,17 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         setCurrentIndex(idx);
         writeSlideToHash(idx);
       };
-      instance.on('slidechanged', handleChange);
+      instance.on('ready', safeLayout);
+      instance.on('slidechanged', () => {
+        handleChange();
+        safeLayout();
+      });
       handleChange();
-      // iOS Safari frequently reports a settled layout only after the first
-      // frame (dynamic toolbar / viewport not stable during initialize()).
-      // Kick a layout on the next frame so slides are scaled to real height.
-      layoutFrame = requestAnimationFrame(safeLayout);
     };
 
     const startReveal = (): void => {
-      if (cancelled) return;
+      if (cancelled || startCalled) return;
+      startCalled = true;
       setPhase('startReveal');
       try {
         reveal = new Reveal(el, {
@@ -182,6 +204,11 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
             }
             setShowDiag(false);
             wireEvents(reveal);
+            // iOS Safari can keep changing the usable viewport height for a
+            // short period after Reveal reports ready. Re-layout through the
+            // settle window so the computed scale catches up to real height.
+            scheduleSettleLayouts();
+            contentDiagTimeout = window.setTimeout(checkForZeroSizeContent, 1000);
           })
           .catch((err) => {
             console.error('[viewer] reveal.initialize failed', err);
@@ -205,6 +232,13 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           setDiagDismissed(false);
         }
       }
+    };
+
+    const forceStartReveal = (): void => {
+      if (cancelled || startCalled || revealReadyRef.current) return;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      startReveal();
     };
 
     watchdogTimeout = window.setTimeout(() => {
@@ -234,12 +268,21 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
       // Fallback in case the observer never fires with a non-zero height.
       initFrame = requestAnimationFrame(() => {
         if (cancelled || revealReadyRef.current) return;
-        resizeObserver?.disconnect();
-        resizeObserver = null;
-        startReveal();
+        if (el.clientHeight > 0) {
+          resizeObserver?.disconnect();
+          resizeObserver = null;
+          startReveal();
+        }
       });
+      forceStartTimeout = window.setTimeout(forceStartReveal, 1500);
     } else {
-      initFrame = requestAnimationFrame(startReveal);
+      initFrame = requestAnimationFrame(() => {
+        if (cancelled || revealReadyRef.current) return;
+        if (el.clientHeight > 0) {
+          startReveal();
+        }
+      });
+      forceStartTimeout = window.setTimeout(forceStartReveal, 1500);
     }
 
     // External hash changes (deep link refresh, manual edits) drive reveal.
@@ -257,17 +300,23 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     window.addEventListener('orientationchange', safeLayout);
     const visualViewport = window.visualViewport;
     visualViewport?.addEventListener('resize', safeLayout);
+    const stage = stageRef.current;
+    stage?.addEventListener('touchend', safeLayout, { once: true, passive: true });
 
     return () => {
       cancelled = true;
       if (initFrame) cancelAnimationFrame(initFrame);
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
       if (watchdogTimeout) window.clearTimeout(watchdogTimeout);
+      if (forceStartTimeout) window.clearTimeout(forceStartTimeout);
+      if (contentDiagTimeout) window.clearTimeout(contentDiagTimeout);
+      for (const timeout of layoutTimeouts) window.clearTimeout(timeout);
       resizeObserver?.disconnect();
       resizeObserver = null;
       window.removeEventListener('resize', safeLayout);
       window.removeEventListener('orientationchange', safeLayout);
       visualViewport?.removeEventListener('resize', safeLayout);
+      stage?.removeEventListener('touchend', safeLayout);
       unsubscribeHash();
       try {
         reveal?.destroy();
@@ -296,24 +345,45 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     }
   };
 
-  const buildDiagnosticLines = (): string[] => [
-    `phase: ${initPhase}`,
-    `revealReady: ${revealReady}`,
-    `revealError: ${revealError ?? 'none'}`,
-    `slides: ${slides.length}`,
-    `currentIndex / clampedIndex: ${currentIndex} / ${clampedIndex}`,
-    `container (.reveal) WxH: ${containerRef.current?.clientWidth ?? 'n/a'} x ${containerRef.current?.clientHeight ?? 'n/a'}`,
-    `stage WxH: ${stageRef.current?.clientWidth ?? 'n/a'} x ${stageRef.current?.clientHeight ?? 'n/a'}`,
-    `window.innerHeight: ${typeof window !== 'undefined' ? window.innerHeight : 'n/a'}`,
-    `visualViewport.height: ${typeof window !== 'undefined' ? window.visualViewport?.height ?? 'n/a' : 'n/a'}`,
-    `100dvh supported: ${typeof CSS !== 'undefined' && CSS.supports?.('height', '100dvh') ? 'true' : 'false'}`,
-    `.slides section count in DOM: ${containerRef.current?.querySelectorAll('.slides > section').length ?? 'n/a'}`,
-    `reveal totalSlides (if ready): ${
-      revealReadyRef.current
-        ? (revealRef.current as unknown as { getTotalSlides?: () => number } | null)?.getTotalSlides?.() ?? 'n/a'
-        : 'n/a'
-    }`,
-  ];
+  const handleStageClick = (event: MouseEvent<HTMLDivElement>): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('a,button,.dp-action,[data-action]')) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const previousZone = event.clientX - rect.left < rect.width * 0.25;
+    goToSlide(previousZone ? clampedIndex - 1 : clampedIndex + 1);
+  };
+
+  const buildDiagnosticLines = (): string[] => {
+    const slidesRect = containerRef.current?.querySelector('.slides')?.getBoundingClientRect();
+    const presentRect = containerRef.current?.querySelector('.slides section.present')?.getBoundingClientRect();
+    const computedRevealHeight =
+      containerRef.current && typeof window !== 'undefined'
+        ? window.getComputedStyle(containerRef.current).height
+        : 'n/a';
+    return [
+      `phase: ${initPhase}`,
+      `revealReady: ${revealReady}`,
+      `revealError: ${revealError ?? 'none'}`,
+      `slides: ${slides.length}`,
+      `currentIndex / clampedIndex: ${currentIndex} / ${clampedIndex}`,
+      `container (.reveal) WxH: ${containerRef.current?.clientWidth ?? 'n/a'} x ${containerRef.current?.clientHeight ?? 'n/a'}`,
+      `stage WxH: ${stageRef.current?.clientWidth ?? 'n/a'} x ${stageRef.current?.clientHeight ?? 'n/a'}`,
+      `window.innerHeight: ${typeof window !== 'undefined' ? window.innerHeight : 'n/a'}`,
+      `visualViewport.height: ${typeof window !== 'undefined' ? window.visualViewport?.height ?? 'n/a' : 'n/a'}`,
+      `100dvh supported: ${typeof CSS !== 'undefined' && CSS.supports?.('height', '100dvh') ? 'true' : 'false'}`,
+      `.slides section count in DOM: ${containerRef.current?.querySelectorAll('.slides > section').length ?? 'n/a'}`,
+      `reveal totalSlides (if ready): ${
+        revealReadyRef.current
+          ? (revealRef.current as unknown as { getTotalSlides?: () => number } | null)?.getTotalSlides?.() ?? 'n/a'
+          : 'n/a'
+      }`,
+      `reveal scale: ${(revealRef.current as unknown as { getScale?: () => number } | null)?.getScale?.() ?? 'n/a'}`,
+      `.slides rect WxH: ${slidesRect ? `${slidesRect.width} x ${slidesRect.height}` : 'n/a'}`,
+      `present section rect WxH: ${presentRect ? `${presentRect.width} x ${presentRect.height}` : 'none'}`,
+      `.reveal computed height: ${computedRevealHeight}`,
+    ];
+  };
 
   return (
     <div className="dp-viewer">
@@ -367,9 +437,32 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         >
           Raw
         </a>
+        <button
+          type="button"
+          onClick={() => {
+            setDiagDismissed(false);
+            setShowDiag((v) => !v);
+          }}
+          title="Diagnostics"
+          aria-pressed={showDiag}
+          style={{
+            border: '1px solid rgba(148, 163, 184, 0.45)',
+            borderRadius: '999px',
+            background: showDiag ? 'rgba(59, 130, 246, 0.28)' : 'rgba(15, 23, 42, 0.78)',
+            color: '#e5e7eb',
+            cursor: 'pointer',
+            font: '600 0.8rem system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            lineHeight: 1,
+            minHeight: '1.8rem',
+            minWidth: '1.8rem',
+            padding: '0.35rem 0.5rem',
+          }}
+        >
+          ⓘ
+        </button>
       </header>
 
-      <div className="dp-viewer-stage" ref={stageRef}>
+      <div className="dp-viewer-stage" ref={stageRef} onClick={handleStageClick}>
         <div className="reveal" ref={containerRef}>
           <div className="slides">
             {slides.map((s) => (
