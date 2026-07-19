@@ -47,12 +47,20 @@ function extractFirstHeading(content: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+function formatRevealError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack || err.message;
+  }
+  return String(err);
+}
+
 export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<Reveal | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(() => readSlideFromHash());
   const [slides, setSlides] = useState<RenderedSlide[]>(() => buildRenderedSlides(loaded));
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   const deckTitle = loaded.deck.title ?? loaded.deck.metadata?.title ?? 'Untitled deck';
 
@@ -85,6 +93,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
+    setRevealError(null);
 
     // Fail-soft: a throw here must not unmount the whole tree (blank screen).
     // Worst case the fragment runtime is skipped but slide content still shows.
@@ -137,7 +146,7 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           keyboard: true,
           touch: true,
           center: false,
-          embedded: false,
+          embedded: true,
         });
         revealRef.current = reveal;
         void reveal
@@ -148,9 +157,15 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           })
           .catch((err) => {
             console.error('[viewer] reveal.initialize failed', err);
+            if (!cancelled) {
+              setRevealError(formatRevealError(err));
+            }
           });
       } catch (err) {
         console.error('[viewer] Reveal setup failed', err);
+        if (!cancelled) {
+          setRevealError(formatRevealError(err));
+        }
       }
     };
 
@@ -296,6 +311,32 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
             ))}
           </div>
         </div>
+
+        {revealError && (
+          <div
+            role="alert"
+            style={{
+              position: 'absolute',
+              zIndex: 20,
+              left: '1rem',
+              right: '1rem',
+              top: '1rem',
+              maxHeight: '60vh',
+              overflow: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              background: 'rgba(17, 24, 39, 0.96)',
+              color: '#fecaca',
+              borderLeft: '4px solid #ef4444',
+              borderRadius: '0.5rem',
+              boxShadow: '0 1rem 2rem rgba(0, 0, 0, 0.35)',
+              padding: '0.75rem 1rem',
+              whiteSpace: 'pre-wrap',
+              font: '12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            }}
+          >
+            {revealError}
+          </div>
+        )}
 
         <nav className="dp-viewer-nav dp-viewer-nav-overlay" aria-label="Slide navigation">
           <button type="button" className="dp-nav-button" onClick={() => goToSlide(0)} disabled={!canGoBack} title="First slide">
