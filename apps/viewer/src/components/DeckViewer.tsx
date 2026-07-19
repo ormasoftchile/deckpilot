@@ -351,6 +351,15 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     if (target.closest('a,button,.dp-action,[data-action]')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const previousZone = event.clientX - rect.left < rect.width * 0.25;
+    if (revealReadyRef.current && revealRef.current) {
+      const reveal = revealRef.current as Reveal & { prev: () => void; next: () => void };
+      if (previousZone) {
+        reveal.prev();
+      } else {
+        reveal.next();
+      }
+      return;
+    }
     goToSlide(previousZone ? clampedIndex - 1 : clampedIndex + 1);
   };
 
