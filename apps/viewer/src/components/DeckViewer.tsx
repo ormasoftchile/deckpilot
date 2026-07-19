@@ -338,12 +338,15 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const goToSlide = (index: number): void => {
     if (totalSlides === 0) return;
     const next = Math.min(Math.max(index, 0), totalSlides - 1);
+    // Eagerly update React index so the counter + button enabled-state stay
+    // responsive even if Reveal's slidechanged event is delayed (iOS Safari).
+    setCurrentIndex(next);
     if (revealReadyRef.current && revealRef.current) {
-      // Reveal is authoritative: slidechanged handler syncs currentIndex + hash.
+      // Navigate; slidechanged reconciles currentIndex and writes the hash once
+      // (no eager hash write here — that re-triggered onHashChange -> double nav).
       revealRef.current.slide(next);
       return;
     }
-    setCurrentIndex(next);
     writeSlideToHash(next);
   };
 
