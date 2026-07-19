@@ -198,6 +198,10 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
           // scroll-mode threshold so the deck stays stable at every width.
           view: 'slide',
           scrollActivationWidth: 0,
+          // Read-only viewer: disable the Esc/'o' slide-grid overview. It's a
+          // presenter feature (tiny tiles, hidden fragments) that renders
+          // broken inside the viewer's custom chrome.
+          overview: false,
         });
         setPhase('constructed');
         setPhase('initialize-called');
