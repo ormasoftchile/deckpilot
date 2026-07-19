@@ -22,10 +22,13 @@ html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
-  min-height: 100vh;
-  /* dvh tracks the *dynamic* iOS viewport (toolbar show/hide) so the mount
-     point never collapses to 0 height mid-layout. vh is the fallback. */
-  min-height: 100dvh;
+  /* Lock the app shell to the *dynamic* viewport (vh fallback first, then dvh
+     for iOS toolbar show/hide). Fixed height + overflow:hidden stops iOS Safari
+     from producing page-level scrollbars behind the fixed viewer and prevents
+     rubber-band scroll. Inner views (landing/error/crash/notes) own scrolling. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--dp-bg);
   color: var(--dp-fg);
   font-family: var(--dp-sans);
@@ -40,6 +43,10 @@ button { font-family: inherit; }
   max-width: 760px;
   margin: 0 auto;
   padding: 64px 24px 96px;
+  /* The app shell is overflow:hidden, so long landing content scrolls here. */
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .dp-landing-hero h1 {
   font-size: 2.4rem;
@@ -162,6 +169,10 @@ button { font-family: inherit; }
   max-width: 640px;
   margin: 0 auto;
   padding: 80px 24px;
+  /* The app shell is overflow:hidden, so a long error scrolls within it. */
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .dp-error h1 { margin: 0 0 12px; color: var(--dp-danger); }
 .dp-error-message {
@@ -198,9 +209,8 @@ button { font-family: inherit; }
 
 /* ---------- Crash / ErrorBoundary ---------- */
 .dp-crash {
+  /* Bound to the shell frame and scroll internally (inner scroll panel). */
   height: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--dp-bg);

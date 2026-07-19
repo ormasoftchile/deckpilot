@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import Reveal from 'reveal.js';
 import 'reveal.js/dist/reveal.css';
 import 'reveal.js/dist/theme/black.css';
@@ -63,6 +63,16 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const revealRef = useRef<Reveal | null>(null);
   const revealReadyRef = useRef(false);
   const initPhaseRef = useRef('mount');
+  // Pointer-gesture tracker so tap-to-advance only fires on a DELIBERATE TAP,
+  // never on a swipe/drag/scroll. On touch, a swipe ends in a synthetic click;
+  // without this the deck would advance while the user is just sliding a finger.
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    startTime: number;
+    moved: boolean;
+    multiTouch: boolean;
+  } | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(() => readSlideFromHash());
   const [slides, setSlides] = useState<RenderedSlide[]>(() => buildRenderedSlides(loaded));
@@ -365,10 +375,80 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
     writeSlideToHash(next);
   };
 
+  // Tap discrimination thresholds. A tap advances only if the pointer barely
+  // moved and lifted quickly; anything larger/slower is a swipe/drag/scroll.
+  const TAP_MOVE_THRESHOLD = 10; // px of movement allowed for a tap
+  const TAP_MAX_DURATION = 500; // ms between pointer down and up for a tap
+
+  const handleStagePointerDown = (event: PointerEvent<HTMLDivElement>): void => {
+    // Ignore non-left mouse buttons; touch/pen always report button 0.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const active = gestureRef.current;
+    if (active) {
+      // A second concurrent pointer means a pinch/zoom/multi-touch gesture —
+      // never a tap. Disqualify the in-flight gesture.
+      active.multiTouch = true;
+      active.moved = true;
+      return;
+    }
+    gestureRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: event.timeStamp,
+      moved: false,
+      multiTouch: false,
+    };
+  };
+
+  const handleStagePointerMove = (event: PointerEvent<HTMLDivElement>): void => {
+    const g = gestureRef.current;
+    if (!g || g.moved) return;
+    const dx = event.clientX - g.startX;
+    const dy = event.clientY - g.startY;
+    if (dx * dx + dy * dy > TAP_MOVE_THRESHOLD * TAP_MOVE_THRESHOLD) {
+      // Moved past the tap threshold: this is a swipe/drag, not a tap.
+      g.moved = true;
+    }
+  };
+
+  const handleStagePointerCancel = (): void => {
+    // Scroll / gesture takeover cancels the pointer — never treat as a tap.
+    const g = gestureRef.current;
+    if (g) g.moved = true;
+  };
+
   const handleStageClick = (event: MouseEvent<HTMLDivElement>): void => {
+    // Consume the gesture recorded by the preceding pointer sequence. The
+    // synthetic click that trails a touch swipe is suppressed here because the
+    // gesture is flagged `moved` (so we return before advancing).
+    const g = gestureRef.current;
+    gestureRef.current = null;
+
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('a,button,.dp-action,[data-action]')) return;
+    if (
+      target.closest(
+        'a,button,.dp-action,[data-action],.dp-viewer-bar,.dp-viewer-nav,.dp-notes',
+      )
+    ) {
+      return;
+    }
+
+    // Only a deliberate tap advances. If a pointer gesture was tracked, require
+    // it to be a clean single-pointer tap: little movement AND short duration.
+    if (g) {
+      if (g.moved || g.multiTouch) return;
+      const duration = event.timeStamp - g.startTime;
+      if (duration > TAP_MAX_DURATION) return;
+      // Backstop distance check against the click coordinates, in case a mouse
+      // drag produced no intermediate pointermove between down and click.
+      const dx = event.clientX - g.startX;
+      const dy = event.clientY - g.startY;
+      if (dx * dx + dy * dy > TAP_MOVE_THRESHOLD * TAP_MOVE_THRESHOLD) return;
+    }
+    // If g is null (e.g. a click with no preceding pointerdown), treat it as a
+    // benign tap and fall through — desktop mouse clicks land here with g set.
+
     const rect = event.currentTarget.getBoundingClientRect();
     const previousZone = event.clientX - rect.left < rect.width * 0.25;
     if (revealReadyRef.current && revealRef.current) {
@@ -491,7 +571,15 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
         </button>
       </header>
 
-      <div className="dp-viewer-stage" ref={stageRef} onClick={handleStageClick}>
+      <div
+        className="dp-viewer-stage"
+        ref={stageRef}
+        onPointerDown={handleStagePointerDown}
+        onPointerMove={handleStagePointerMove}
+        onPointerUp={handleStagePointerMove}
+        onPointerCancel={handleStagePointerCancel}
+        onClick={handleStageClick}
+      >
         <div className="reveal" ref={containerRef}>
           <div className="slides">
             {slides.map((s) => (

@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Full-screen slide viewer: lock scale so an accidental pinch/double-tap
+         on iOS Safari cannot get stuck zoomed-in (which strands scrollbars).
+         viewport-fit=cover lets the shell own the safe-area / notch region. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="dark light" />
     <meta name="description" content="Deckpilot Viewer — public, read-only renderer for .deck.md presentations. Open any public deck URL in your browser." />
     <meta name="theme-color" content="#191919" />
