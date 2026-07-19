@@ -338,11 +338,13 @@ export function DeckViewer({ loaded, onClose }: DeckViewerProps): JSX.Element {
   const goToSlide = (index: number): void => {
     if (totalSlides === 0) return;
     const next = Math.min(Math.max(index, 0), totalSlides - 1);
+    if (revealReadyRef.current && revealRef.current) {
+      // Reveal is authoritative: slidechanged handler syncs currentIndex + hash.
+      revealRef.current.slide(next);
+      return;
+    }
     setCurrentIndex(next);
     writeSlideToHash(next);
-    if (revealReadyRef.current && revealRef.current) {
-      revealRef.current.slide(next);
-    }
   };
 
   const handleStageClick = (event: MouseEvent<HTMLDivElement>): void => {
