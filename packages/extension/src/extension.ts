@@ -4,9 +4,12 @@ import * as fs from 'fs';
 import { Conductor } from './conductor';
 import { parseDeck, readDeckContentImport } from '@deckpilot/core/parser';
 import { registerAllExecutors } from './actions';
-import { ActionCompletionProvider } from './providers/actionCompletionProvider';
-import { ActionHoverProvider } from './providers/actionHoverProvider';
-import { ActionDiagnosticProvider } from './providers/actionDiagnosticProvider';
+import {
+    ActionCompletionProvider,
+    ActionHoverProvider,
+    ActionDiagnosticProvider,
+} from '@deckpilot/language';
+import { EnvRuleValidator } from './validation/envRuleValidator';
 import { DeckModelContentProvider, showResolvedDeckModel } from './commands/showResolvedModel';
 import { extractMetadataToSidecar } from './commands/extractMetadata';
 import {
@@ -673,7 +676,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
         },
     );
 
-    const diagnosticProvider = new ActionDiagnosticProvider();
+    const diagnosticProvider = new ActionDiagnosticProvider(new EnvRuleValidator());
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('deckPilotActions');
 
     function updateDiagnostics(document: vscode.TextDocument): void {
