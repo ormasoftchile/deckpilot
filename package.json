@@ -295,6 +295,7 @@
   },
   "dependencies": {
     "@deckpilot/core": "*",
+    "@deckpilot/language": "*",
     "js-yaml": "^4.1.1",
     "markdown-it": "^14.0.0"
   }

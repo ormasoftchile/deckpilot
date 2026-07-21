@@ -23,11 +23,14 @@
     "baseUrl": ".",
     "paths": {
       "@deckpilot/core": ["packages/core/src/index.ts"],
-      "@deckpilot/core/*": ["packages/core/src/*"]
+      "@deckpilot/core/*": ["packages/core/src/*"],
+      "@deckpilot/language": ["packages/language/src/index.ts"],
+      "@deckpilot/language/*": ["packages/language/src/*"]
     }
   },
   "references": [
-    { "path": "packages/core" }
+    { "path": "packages/core" },
+    { "path": "packages/language" }
   ],
   "include": [
     "packages/extension/src/**/*",
@@ -37,6 +40,7 @@
     "node_modules",
     "out",
     "packages/core",
+    "packages/language",
     "packages/web"
   ]
 }
