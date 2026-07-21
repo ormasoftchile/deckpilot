@@ -2,38 +2,8 @@
 
 declare const __DECKPILOT_VERSION__: string;
 
-declare module 'reveal.js' {
-  interface RevealConfig {
-    hash?: boolean;
-    embedded?: boolean;
-    controls?: boolean;
-    progress?: boolean;
-    slideNumber?: boolean | string;
-    transition?: string;
-    history?: boolean;
-    keyboard?: boolean;
-    touch?: boolean;
-    center?: boolean;
-    width?: number | string;
-    height?: number | string;
-    margin?: number;
-    minScale?: number;
-    maxScale?: number;
-    [key: string]: unknown;
-  }
+// NOTE: the `reveal.js` module + reveal CSS ambient declarations now live in
+// @deckpilot/preview (packages/preview/src/reveal.d.ts). <DeckPreview> pulls
+// them into this program via a triple-slash reference, so redeclaring
+// `reveal.js` here would create a duplicate default export. Do not re-add.
 
-  export default class Reveal {
-    constructor(element: HTMLElement, config?: RevealConfig);
-    initialize(config?: RevealConfig): Promise<void>;
-    destroy(): void;
-    slide(h: number, v?: number, f?: number): void;
-    getIndices(): { h: number; v: number; f?: number };
-    on(event: string, listener: (event: unknown) => void): void;
-    off(event: string, listener: (event: unknown) => void): void;
-    layout(): void;
-    sync(): void;
-  }
-}
-
-declare module 'reveal.js/dist/reveal.css';
-declare module 'reveal.js/dist/theme/black.css';

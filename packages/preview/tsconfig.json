@@ -15,14 +15,11 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@deckpilot/core": ["../../packages/core/src/index.ts"],
-      "@deckpilot/core/*": ["../../packages/core/src/*"],
-      "@deckpilot/preview": ["../../packages/preview/src/index.ts"],
-      "@deckpilot/preview/*": ["../../packages/preview/src/*"]
+      "@deckpilot/core": ["../core/src/index.ts"],
+      "@deckpilot/core/*": ["../core/src/*"]
     }
   },
-  "include": ["src", "src/vite-env.d.ts"]
+  "include": ["src/**/*"]
 }
