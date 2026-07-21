@@ -1,0 +1,35 @@
+{
+  "name": "@deckpilot/editor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Phase 0 spike: browser-based .deck.md authoring surface (Monaco + live preview). Throwaway — proves the stack + Monaco bundle budget.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b --noEmit && vite build",
+    "preview": "vite preview --port 4174",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@cristianormazabal/triton-core": "^0.1.30",
+    "@deckpilot/core": "*",
+    "dompurify": "^3.1.7",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
+    "markdown-it": "^14.0.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "reveal.js": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/js-yaml": "^4.0.9",
+    "@types/markdown-it": "^14.1.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.3.2",
+    "vite": "^5.4.10"
+  }
+}
