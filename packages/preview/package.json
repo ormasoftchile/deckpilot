@@ -1,0 +1,36 @@
+{
+  "name": "@deckpilot/preview",
+  "version": "0.0.1",
+  "private": true,
+  "description": "React deck-rendering surface for Deckpilot: the pure buildSlides transform plus a persistent Reveal.js instance with the hardened mobile lifecycle and in-place content sync. Browser-only — consumed as source by the public web viewer and the online editor. Never imports vscode / fs / child_process.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cristianormazabal/triton-core": "^0.1.30",
+    "@deckpilot/core": "*",
+    "dompurify": "^3.1.7"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "reveal.js": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/react": "^18.3.12",
+    "react": "^18.3.1",
+    "reveal.js": "^5.1.0",
+    "typescript": "^5.3.2"
+  }
+}

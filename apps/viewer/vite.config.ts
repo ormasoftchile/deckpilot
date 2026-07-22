@@ -19,6 +19,8 @@ export default defineConfig({
     alias: {
       // Workspace package — resolve to source for HMR/typecheck
       '@deckpilot/core': path.resolve(__dirname, '../../packages/core/src'),
+      // Deck-rendering surface — resolve to source for HMR/typecheck
+      '@deckpilot/preview': path.resolve(__dirname, '../../packages/preview/src'),
       // Node built-ins used transitively by @deckpilot/core (sidecarLoader, envFileLoader).
       // In the browser these are stubbed to no-op — sidecars are fetched over HTTP instead.
       fs: path.resolve(__dirname, 'src/stubs/fs.ts'),

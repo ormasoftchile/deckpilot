@@ -368,61 +368,11 @@ button { font-family: inherit; }
   border: 1px solid var(--dp-border);
   color: var(--dp-fg-muted);
 }
-.dp-viewer-stage {
-  flex: 1 1 auto;
-  position: relative;
-  min-height: 0;
-  overflow: hidden;
-}
-.dp-viewer-stage .reveal {
-  height: 100%;
-  min-height: 0;
-  --r-main-font-size: clamp(19px, 2.1vw, 28px);
-  --r-block-margin: 0.65em;
-  --r-heading-margin: 0 0 0.45em 0;
-  --r-heading1-size: clamp(2em, 4.2vw, 2.7em);
-  --r-heading2-size: clamp(1.55em, 3.2vw, 2em);
-  --r-heading3-size: clamp(1.25em, 2.5vw, 1.55em);
-  --r-heading4-size: 1.08em;
-  --r-heading-text-transform: none;
-}
-.dp-viewer-stage .reveal.overview {
-  overflow: auto;
-  scrollbar-color: var(--dp-border) transparent;
-}
-.dp-viewer-stage .reveal.overview .slides > section {
-  display: block !important;
-}
 
-/* ---------- Action buttons (display only) ---------- */
-.dp-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  margin: 2px 0;
-  background: var(--dp-bg-elevated);
-  border: 1px solid var(--dp-border);
-  color: var(--dp-fg);
-  border-radius: var(--dp-radius);
-  font-family: var(--dp-sans);
-  font-size: 0.85rem;
-  cursor: not-allowed;
-  opacity: 0.92;
-}
-.dp-action:hover {
-  border-color: var(--dp-accent);
-}
-.dp-action-icon { color: var(--dp-accent); font-size: 0.7em; }
-.dp-action-type {
-  margin-left: 6px;
-  padding: 1px 6px;
-  background: var(--dp-bg);
-  border-radius: 3px;
-  color: var(--dp-fg-muted);
-  font-family: var(--dp-mono);
-  font-size: 0.75em;
-}
+/* NOTE: `.dp-viewer-stage`, the embedded `.reveal` layout/typography, the
+   display-only `.dp-action*` buttons, and the `.reveal .diagram-block*` rules
+   now ship with @deckpilot/preview (imported by <DeckPreview>). The viewer only
+   keeps its app-shell chrome (below) and the standalone `.dp-diagram*` view. */
 
 /* ---------- Presenter notes ---------- */
 .dp-notes {
@@ -489,100 +439,8 @@ button { font-family: inherit; }
 .dp-warnings summary { cursor: pointer; color: var(--dp-warning); }
 .dp-warnings ul { margin: 8px 0 0; padding-left: 20px; color: var(--dp-fg-muted); }
 
-/* ---------- Slide content typography ---------- */
-.reveal .slides section {
-  text-align: left;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-  overscroll-behavior: contain;
-  padding: 0 0.35em 1.3em;
-}
-.reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: -0.01em; }
-.reveal p,
-.reveal li {
-  font-size: 1em;
-}
-.reveal pre {
-  width: 100%;
-  font-size: 0.55em;
-  box-shadow: none;
-  background: #0a0a0e;
-  border: 1px solid var(--dp-border);
-  border-radius: var(--dp-radius);
-}
-.reveal pre code {
-  padding: 16px;
-  max-height: 60vh;
-}
-.reveal code {
-  font-family: var(--dp-mono);
-}
-.reveal a { color: var(--dp-accent); }
-
-/* ---------- Diagrams ---------- */
-.reveal .diagram-block {
-  width: min(100%, 980px);
-  margin: 0.9em auto;
-  padding: 0.35em;
-  border: 1px solid var(--dp-border);
-  border-radius: var(--dp-radius);
-  background: rgba(10, 10, 14, 0.38);
-  text-align: center;
-}
-.reveal .diagram-block__viewport {
-  display: flex;
-  justify-content: center;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.reveal .diagram-block svg {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 62vh;
-}
-.reveal .diagram-block__caption {
-  margin-top: 0.45em;
-  color: var(--dp-fg-muted);
-  font-size: 0.72em;
-}
-.reveal .diagram-block--loading {
-  text-align: left;
-  opacity: 0.8;
-}
-.reveal .diagram-block--loading::before {
-  content: "Rendering diagram…";
-  display: block;
-  margin-bottom: 0.4em;
-  color: var(--dp-fg-muted);
-  font-family: var(--dp-mono);
-  font-size: 0.72em;
-}
-.reveal .diagram-block--error {
-  border-color: rgba(255, 107, 107, 0.75);
-  background: rgba(255, 107, 107, 0.08);
-  text-align: left;
-}
-.reveal .diagram-block__error-header {
-  color: var(--dp-danger);
-  font-weight: 700;
-  margin-bottom: 0.35em;
-}
-.reveal .diagram-block__error-message {
-  white-space: pre-wrap;
-  color: var(--dp-fg);
-}
-.reveal .diagram-block__source summary {
-  cursor: pointer;
-  color: var(--dp-fg-muted);
-  font-size: 0.75em;
-}
+/* NOTE: slide-content typography (`.reveal ...`) and diagram-block styling
+   (`.reveal .diagram-block*`) now ship with @deckpilot/preview. */
 
 @media (max-width: 900px) {
   .dp-viewer-title { max-width: 38%; }

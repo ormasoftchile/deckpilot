@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { renderDiagramSourceToSvg } from '../lib/tritonDiagramRenderer';
-import { sanitizeSlideHtml } from '../lib/sanitize';
+import { renderDiagramSourceToSvg, sanitizeSlideHtml } from '@deckpilot/preview';
 
 interface DiagramViewProps {
   sourceUrl: string;
