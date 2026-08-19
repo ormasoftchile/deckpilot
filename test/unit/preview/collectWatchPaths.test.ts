@@ -44,6 +44,14 @@ describe('collectWatchPaths', () => {
     expect(paths).to.include(path.join(deckDir, 'demo.deck.env'));
   });
 
+  it('includes sibling sidecar (.deck.yaml) and env (.deck.env) for a plain .md file', () => {
+    const plainDeckPath = path.join(deckDir, 'notes.md');
+    const deck = makeDeck(plainDeckPath, []);
+    const paths = collectWatchPaths(deck);
+    expect(paths).to.include(path.join(deckDir, 'notes.deck.yaml'));
+    expect(paths).to.include(path.join(deckDir, 'notes.deck.env'));
+  });
+
   it('resolves a relative content: import to an absolute path', () => {
     const deck = makeDeck(deckPath, [], { content: './imported.deck.md' });
     const paths = collectWatchPaths(deck);

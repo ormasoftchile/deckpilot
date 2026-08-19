@@ -58,21 +58,23 @@ export async function showResolvedDeckModel(provider: DeckModelContentProvider):
 
     let filePath = editor.document.uri.fsPath;
 
-    // If triggered from a .deck.yaml sidecar, derive the .deck.md path
+    // If triggered from a .deck.yaml sidecar, derive the companion markdown path
     if (filePath.endsWith('.deck.yaml')) {
         const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        const plainMdPath = filePath.replace(/\.deck\.yaml$/, '.md');
         
-        // Use the .deck.md path for parsing (which will also load the sidecar)
-        if (!fs.existsSync(deckMdPath)) {
+        if (fs.existsSync(deckMdPath)) {
+            filePath = deckMdPath;
+        } else if (fs.existsSync(plainMdPath)) {
+            filePath = plainMdPath;
+        } else {
             void vscode.window.showErrorMessage(
-                'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                'No paired .deck.md or .md file found alongside this sidecar.'
             );
             return;
         }
-        
-        filePath = deckMdPath;
-    } else if (!filePath.endsWith('.deck.md')) {
-        void vscode.window.showErrorMessage('Active file is not a .deck.md or .deck.yaml file.');
+    } else if (!filePath.endsWith('.md')) {
+        void vscode.window.showErrorMessage('Active file is not a Markdown (.md, .deck.md) or .deck.yaml file.');
         return;
     }
 

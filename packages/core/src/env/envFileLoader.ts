@@ -20,7 +20,11 @@ export class EnvFileLoader {
    * @returns EnvFile with parsed values and any parse errors
    */
   async loadEnvFile(deckFilePath: string): Promise<EnvFile> {
-    const envFilePath = deckFilePath.replace(/\.deck\.md$/, '.deck.env');
+    const envFilePath = deckFilePath.endsWith('.deck.md')
+      ? deckFilePath.replace(/\.deck\.md$/, '.deck.env')
+      : deckFilePath.endsWith('.md')
+        ? deckFilePath.replace(/\.md$/, '.deck.env')
+        : deckFilePath.replace(/\.[^.]+$/, '.deck.env');
 
     // Check if file exists
     if (!fs.existsSync(envFilePath)) {

@@ -113,23 +113,29 @@ export async function extractMetadataToSidecar(): Promise<void> {
 
     let filePath = editor.document.uri.fsPath;
 
-    // If triggered from a .deck.yaml sidecar, derive the .deck.md path
+    // If triggered from a .deck.yaml sidecar, derive the companion markdown path
     if (filePath.endsWith('.deck.yaml')) {
-        filePath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
+        const plainMdPath = filePath.replace(/\.deck\.yaml$/, '.md');
         
-        // Verify the .deck.md file exists
-        if (!fs.existsSync(filePath)) {
+        if (fs.existsSync(deckMdPath)) {
+            filePath = deckMdPath;
+        } else if (fs.existsSync(plainMdPath)) {
+            filePath = plainMdPath;
+        } else {
             void vscode.window.showErrorMessage(
-                'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                'No paired .deck.md or .md file found alongside this sidecar.'
             );
             return;
         }
-    } else if (!filePath.endsWith('.deck.md')) {
-        void vscode.window.showErrorMessage('Active file is not a .deck.md or .deck.yaml file.');
+    } else if (!filePath.endsWith('.md')) {
+        void vscode.window.showErrorMessage('Active file is not a Markdown (.md, .deck.md) or .deck.yaml file.');
         return;
     }
 
-    const sidecarPath = filePath.replace(/\.deck\.md$/, '.deck.yaml');
+    const sidecarPath = filePath.endsWith('.deck.md')
+        ? filePath.replace(/\.deck\.md$/, '.deck.yaml')
+        : filePath.replace(/\.md$/, '.deck.yaml');
 
     // Confirm overwrite if sidecar already exists
     if (fs.existsSync(sidecarPath)) {

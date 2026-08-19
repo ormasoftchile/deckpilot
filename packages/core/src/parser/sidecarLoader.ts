@@ -25,12 +25,15 @@ import type { SidecarFile } from '../models/sidecar';
  * // → '/projects/demo.deck.yaml'
  */
 export function resolveSidecarPath(deckMdPath: string): string {
-  if (!deckMdPath.endsWith('.deck.md')) {
-    throw new Error(
-      `resolveSidecarPath: expected a .deck.md file path, got '${path.basename(deckMdPath)}'`
-    );
+  if (deckMdPath.endsWith('.deck.md')) {
+    return deckMdPath.replace(/\.deck\.md$/, '.deck.yaml');
   }
-  return deckMdPath.replace(/\.deck\.md$/, '.deck.yaml');
+  if (deckMdPath.endsWith('.md')) {
+    return deckMdPath.replace(/\.md$/, '.deck.yaml');
+  }
+  throw new Error(
+    `resolveSidecarPath: expected a .md or .deck.md file path, got '${path.basename(deckMdPath)}'`
+  );
 }
 
 /**

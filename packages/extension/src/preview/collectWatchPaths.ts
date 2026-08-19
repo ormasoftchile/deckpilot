@@ -17,10 +17,13 @@ export function collectWatchPaths(deck: Deck): string[] {
   const deckDir = path.dirname(deckPath);
   const out = new Set<string>();
 
-  // Sidecar + env file follow the deck.md naming convention.
+  // Sidecar + env file follow the deck.md / .md naming convention.
   if (deckPath.endsWith('.deck.md')) {
     out.add(deckPath.replace(/\.deck\.md$/, '.deck.yaml'));
     out.add(deckPath.replace(/\.deck\.md$/, '.deck.env'));
+  } else if (deckPath.endsWith('.md')) {
+    out.add(deckPath.replace(/\.md$/, '.deck.yaml'));
+    out.add(deckPath.replace(/\.md$/, '.deck.env'));
   }
 
   // content: import — wrapper's body is replaced by the imported file's body.

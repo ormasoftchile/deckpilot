@@ -49,6 +49,10 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
         if (fs.existsSync(deckMdPath)) {
             return vscode.Uri.file(deckMdPath); // sidecar → its .deck.md
         }
+        const plainMdPath = filePath.replace(/\.deck\.yaml$/, '.md');
+        if (fs.existsSync(plainMdPath)) {
+            return vscode.Uri.file(plainMdPath); // sidecar → its .md
+        }
         // Standalone YAML-primary deck: valid when it declares `content:`.
         if (readDeckContentImport(editor.document.getText(), filePath)) {
             return editor.document.uri;
@@ -60,12 +64,10 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
     if (importer) {
         return importer;
     }
-    // Self-present: when enabled, a markdown document with at least one heading
-    // is treated as its own deck.
+    // Any markdown document can be presented directly as a deck
     if (
-        editor.document.languageId === 'markdown' &&
-        treatAllMarkdownAsDeck(editor.document.uri) &&
-        hasHeading(editor.document.getText())
+        editor.document.languageId === 'markdown' ||
+        filePath.endsWith('.md')
     ) {
         return editor.document.uri;
     }
@@ -114,8 +116,8 @@ async function resolveDeckUriFromArg(resource: vscode.Uri | undefined): Promise<
 /**
  * Resolve a deck URI from a concrete file URI (open or on disk):
  *  - `.deck.md` → itself.
- *  - `.deck.yaml` → sibling `.deck.md`, else itself when it declares `content:`.
- *  - any other file → the deck whose `content:` imports it.
+ *  - `.deck.yaml` → sibling `.deck.md` or `.md`, else itself when it declares `content:`.
+ *  - any other file → the deck whose `content:` imports it, or itself if `.md`.
  */
 async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
     const filePath = uri.fsPath;
@@ -126,6 +128,10 @@ async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | 
         const deckMdPath = filePath.replace(/\.deck\.yaml$/, '.deck.md');
         if (fs.existsSync(deckMdPath)) {
             return vscode.Uri.file(deckMdPath);
+        }
+        const plainMdPath = filePath.replace(/\.deck\.yaml$/, '.md');
+        if (fs.existsSync(plainMdPath)) {
+            return vscode.Uri.file(plainMdPath);
         }
         let raw: string | undefined;
         try {
@@ -140,20 +146,8 @@ async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | 
     if (importer) {
         return importer;
     }
-    // Self-present: when enabled, a `.md` file with at least one heading is
-    // treated as its own deck. Explorer-invoked resources may not be open, so
-    // read from the open document if present, else from disk.
-    if (filePath.endsWith('.md') && treatAllMarkdownAsDeck(uri)) {
-        let raw: string | undefined;
-        try {
-            const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === filePath);
-            raw = openDoc ? openDoc.getText() : await fs.promises.readFile(filePath, 'utf-8');
-        } catch {
-            raw = undefined;
-        }
-        if (raw && hasHeading(raw)) {
-            return uri;
-        }
+    if (filePath.endsWith('.md')) {
+        return uri;
     }
     return undefined;
 }
@@ -306,10 +300,10 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const activeFile = editor?.document.fileName;
                 if (activeFile?.endsWith('.deck.yaml')) {
                     void vscode.window.showWarningMessage(
-                        'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                        'No paired .deck.md or .md file found. Create a markdown file alongside this sidecar.'
                     );
                 } else {
-                    void vscode.window.showWarningMessage('No active editor. Open a .deck.md file (or a markdown file imported by one) first, or enable "Deckpilot: Treat all Markdown as deck".');
+                    void vscode.window.showWarningMessage('No active editor. Open a markdown (.md, .deck.md) file first.');
                 }
                 return;
             }
@@ -400,7 +394,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
         async (resource?: vscode.Uri) => {
             const deckUri = await resolveDeckUriFromArg(resource);
             if (!deckUri) {
-                void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to preview, or enable "Deckpilot: Treat all Markdown as deck".');
+                void vscode.window.showWarningMessage('Open a markdown (.md, .deck.md) file first to preview.');
                 return;
             }
             if (!previewProvider) {
@@ -423,10 +417,10 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const activeFile = editor?.document.fileName;
                 if (activeFile?.endsWith('.deck.yaml')) {
                     void vscode.window.showWarningMessage(
-                        'No paired .deck.md file found. Create a .deck.md file alongside this sidecar.'
+                        'No paired .deck.md or .md file found. Create a markdown file alongside this sidecar.'
                     );
                 } else {
-                    void vscode.window.showWarningMessage('Open a .deck.md file (or a markdown file imported by one) first to validate.');
+                    void vscode.window.showWarningMessage('Open a markdown (.md, .deck.md) file first to validate.');
                 }
                 return;
             }
