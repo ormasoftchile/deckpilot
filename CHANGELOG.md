@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Universal Markdown Presentation & Preview**: Direct presentation and live preview support over any `.md` file in addition to `.deck.md`.
+  - Automatic companion sidecar discovery (`[name].deck.yaml`) and env file discovery (`[name].deck.env`) for both `.md` and `.deck.md` files.
+  - Explorer context menu entries ("Deckpilot: Start Presentation", "Deckpilot: Open Live Preview") now available on all Markdown files.
+  - Deck commands (`Show Resolved Deck Model`, `Extract Metadata to Sidecar`, `Validate Deck`) support plain `.md` files seamlessly.
+  - Public Deckpilot Viewer (`apps/viewer`) automatically discovers companion `.deck.yaml` sidecars for any `.md` URL.
+
 ## [0.9.36] - 2026-05-24
 
 ## [0.9.35] - 2026-05-24

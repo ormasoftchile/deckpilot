@@ -244,12 +244,12 @@
       "explorer/context": [
         {
           "command": "deckPilot.openPresentation",
-          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || (config.deckPilot.treatAllMarkdownAsDeck && resourceExtname == .md)",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || resourceExtname == .md",
           "group": "deckpilot@1"
         },
         {
           "command": "deckPilot.openPreview",
-          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || (config.deckPilot.treatAllMarkdownAsDeck && resourceExtname == .md)",
+          "when": "resourceFilename =~ /\\.deck\\.(md|yaml)$/ || resourceExtname == .md",
           "group": "deckpilot@2"
         }
       ]

@@ -1,6 +1,6 @@
 import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);
 
-// ../../../triton/packages/core/dist/index.js
+// ../../node_modules/@cristianormazabal/triton-core/dist/index.js
 var CONNECTOR_ANIMATIONS = [
   "march",
   "particle",

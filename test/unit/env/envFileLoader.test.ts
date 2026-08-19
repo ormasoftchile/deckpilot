@@ -51,6 +51,17 @@ describe('EnvFileLoader', () => {
       expect(result.errors).to.have.length(0);
     });
 
+    it('should resolve .deck.env for a plain .md file', async () => {
+      const mdPath = path.join(tmpDir, 'notes.md');
+      fs.writeFileSync(mdPath, '# Notes');
+      const envPath = path.join(tmpDir, 'notes.deck.env');
+      fs.writeFileSync(envPath, 'API_KEY=secret123');
+
+      const result = await loader.loadEnvFile(mdPath);
+      expect(result.exists).to.be.true;
+      expect(result.values.get('API_KEY')).to.equal('secret123');
+    });
+
     it('should strip double quotes from values', async () => {
       const deckPath = writeDeckFile('KEY="hello world"');
       const result = await loader.loadEnvFile(deckPath);

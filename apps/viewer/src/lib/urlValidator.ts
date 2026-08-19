@@ -52,14 +52,20 @@ export function validateDeckUrl(raw: string): UrlValidationResult {
 }
 
 /**
- * Derive the sidecar `.deck.yaml` URL for a given `.deck.md` URL, if applicable.
- * Returns null if the path does not end with `.deck.md`.
+ * Derive the sidecar `.deck.yaml` URL for a given `.deck.md` or `.md` URL, if applicable.
+ * Returns null if the path does not end with `.deck.md` or `.md`.
  */
 export function deriveSidecarUrl(deckUrl: URL): URL | null {
-  if (!deckUrl.pathname.endsWith('.deck.md')) {
-    return null;
+  const pathname = deckUrl.pathname;
+  if (pathname.endsWith('.deck.md')) {
+    const sidecar = new URL(deckUrl.toString());
+    sidecar.pathname = pathname.replace(/\.deck\.md$/, '.deck.yaml');
+    return sidecar;
   }
-  const sidecar = new URL(deckUrl.toString());
-  sidecar.pathname = sidecar.pathname.replace(/\.deck\.md$/, '.deck.yaml');
-  return sidecar;
+  if (pathname.endsWith('.md')) {
+    const sidecar = new URL(deckUrl.toString());
+    sidecar.pathname = pathname.replace(/\.md$/, '.deck.yaml');
+    return sidecar;
+  }
+  return null;
 }
