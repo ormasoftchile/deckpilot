@@ -42,4 +42,55 @@ describe('parseSlides — sourceRange', () => {
     expect(slides[1].sourceRange?.start).to.equal(3);
     expect(slides[1].sourceRange?.end).to.equal(6);
   });
+
+  it('applies lineOffset to sourceRange when specified', () => {
+    const deck = [
+      '# Slide A',         // line 0 (offset by 4 -> 4)
+      'body of A',          // line 1 (offset by 4 -> 5)
+      '---',                // line 2
+      '# Slide B',          // line 3 (offset by 4 -> 7)
+      'body of B',          // line 4 (offset by 4 -> 8)
+    ].join('\n');
+
+    const slides = parseSlides(deck, { lineOffset: 4 });
+    expect(slides).to.have.length(2);
+    expect(slides[0].sourceRange).to.deep.equal({ start: 4, end: 5 });
+    expect(slides[1].sourceRange).to.deep.equal({ start: 7, end: 8 });
+  });
+
+  it('correctly calculates sourceRange with frontmatter and diagrams in parseDeck', async () => {
+    const { parseDeck } = await import('../../../packages/core/src/parser/deckParser');
+    const content = [
+      '---',
+      'title: Test Deck',
+      'theme: default',
+      '---',
+      '# Slide 1',
+      '',
+      'Introductory paragraph.',
+      '',
+      '```triton',
+      'flowchart TD',
+      '  A --> B',
+      '  B --> C',
+      '```',
+      '',
+      'Paragraph following the diagram.',
+      '',
+      '# Slide 2',
+      '',
+      'Next slide content.',
+    ].join('\n');
+
+    const result = await parseDeck(content, '/mock/test.md');
+    expect(result.deck).to.exist;
+    const slides = result.deck!.slides;
+    expect(slides).to.have.length(2);
+    // Slide 1 starts at line 4 (after 4 lines of frontmatter: lines 0..3) and ends before Slide 2 (line 16)
+    expect(slides[0].sourceRange?.start).to.equal(4);
+    expect(slides[0].sourceRange?.end).to.equal(15);
+    // Slide 2 starts at line 16
+    expect(slides[1].sourceRange?.start).to.equal(16);
+    expect(slides[1].sourceRange?.end).to.equal(18);
+  });
 });

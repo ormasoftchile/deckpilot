@@ -74,10 +74,10 @@ export class PreviewProvider implements vscode.Disposable {
       if (e.contentChanges.length === 0) {
         return;
       }
-      const changedPath = e.document.uri.fsPath;
+      const changedUri = e.document.uri;
       if (
-        (this.deckUri && changedPath === this.deckUri.fsPath) ||
-        this.watched.has(changedPath)
+        (this.deckUri && (changedUri.toString() === this.deckUri.toString() || changedUri.fsPath === this.deckUri.fsPath)) ||
+        this.watched.has(changedUri.fsPath)
       ) {
         this.scheduleRefresh();
       }
@@ -91,19 +91,37 @@ export class PreviewProvider implements vscode.Disposable {
       if (!this.panel || !this.sourceUri) {
         return;
       }
-      if (e.textEditor.document.uri.fsPath !== this.sourceUri.fsPath) {
+      const docUri = e.textEditor.document.uri;
+      if (docUri.toString() !== this.sourceUri.toString() && docUri.fsPath !== this.sourceUri.fsPath) {
         return;
       }
       const line = e.selections[0]?.active.line;
       if (typeof line !== 'number') {
         return;
       }
-      const slide = this.slideRanges.find((r) => line >= r.start && line <= r.end);
+      const slide = this.getSlideForLine(line);
       if (slide) {
         void this.panel.webview.postMessage({ type: 'scrollToSlide', slideIndex: slide.index });
       }
     });
     this.disposables.push(d);
+  }
+
+  /** Find the slide corresponding to a line number, handling gaps between slide boundaries. */
+  private getSlideForLine(line: number): { index: number; start: number; end: number } | undefined {
+    if (this.slideRanges.length === 0) {
+      return undefined;
+    }
+    const exact = this.slideRanges.find((r) => line >= r.start && line <= r.end);
+    if (exact) {
+      return exact;
+    }
+    for (let i = this.slideRanges.length - 1; i >= 0; i--) {
+      if (line >= this.slideRanges[i].start) {
+        return this.slideRanges[i];
+      }
+    }
+    return this.slideRanges[0];
   }
 
   /** Reverse sync: webview click on a slide → reveal source line in editor. */
@@ -159,7 +177,7 @@ export class PreviewProvider implements vscode.Disposable {
     const renderOpts = this.buildRenderOptions();
     let raw: string;
     try {
-      raw = await this.readLive(this.deckUri.fsPath);
+      raw = await this.readLive(this.deckUri);
     } catch (err) {
       this.panel.webview.html = renderPreviewError(
         `Failed to read deck file: ${(err as Error).message}`,
@@ -244,14 +262,18 @@ export class PreviewProvider implements vscode.Disposable {
     return vscode.workspace.textDocuments.find((d) => d.uri.fsPath === fsPath)?.getText();
   }
 
-  private async readLive(fsPath: string): Promise<string> {
+  private async readLive(docUri: vscode.Uri): Promise<string> {
     const openDoc = vscode.workspace.textDocuments.find(
-      (d) => d.uri.fsPath === fsPath,
+      (d) => d.uri.toString() === docUri.toString() || (docUri.scheme !== 'untitled' && d.uri.fsPath === docUri.fsPath),
     );
     if (openDoc) {
       return openDoc.getText();
     }
-    return fs.promises.readFile(fsPath, 'utf-8');
+    if (docUri.scheme === 'untitled') {
+      const doc = await vscode.workspace.openTextDocument(docUri);
+      return doc.getText();
+    }
+    return fs.promises.readFile(docUri.fsPath, 'utf-8');
   }
 
   /**
@@ -357,7 +379,7 @@ export class PreviewProvider implements vscode.Disposable {
         roots.push(f.uri);
       }
     }
-    if (this.deckUri) {
+    if (this.deckUri && this.deckUri.scheme !== 'untitled') {
       roots.push(vscode.Uri.file(path.dirname(this.deckUri.fsPath)));
     }
     return roots;
@@ -384,7 +406,8 @@ export class PreviewProvider implements vscode.Disposable {
 }
 
 function previewTitle(deckUri: vscode.Uri): string {
-  return `Preview: ${path.basename(deckUri.fsPath)}`;
+  const name = deckUri.scheme === 'untitled' ? (deckUri.path || 'Untitled') : path.basename(deckUri.fsPath);
+  return `Preview: ${name}`;
 }
 
 function generateNonce(): string {

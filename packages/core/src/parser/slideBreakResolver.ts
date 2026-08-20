@@ -152,11 +152,17 @@ export function resolveSlideBreakConfig(raw: unknown): SlideBreakConfig {
  * @param options Extra options; `headingLevels` selects which ATX levels split
  *                in heading mode (defaults to [1, 2]).
  */
+export interface ResolveSlideBreaksOptions {
+  headingLevels?: number[];
+  lineOffset?: number;
+}
+
 export function resolveSlideBreaks(
   content: string,
   mode: SlideBreakMode = 'blank',
-  options: { headingLevels?: number[] } = {},
+  options: ResolveSlideBreaksOptions = {},
 ): SlideBreakResult {
+  const lineOffset = options.lineOffset ?? 0;
   const headingLevels = new Set(
     options.headingLevels && options.headingLevels.length > 0
       ? options.headingLevels
@@ -176,8 +182,8 @@ export function resolveSlideBreaks(
     const segLines = lines.slice(segmentStart, endExclusive);
     chunks.push({
       text: segLines.join('\n'),
-      start: segmentStart,
-      end: Math.max(segmentStart, endExclusive - 1),
+      start: segmentStart + lineOffset,
+      end: Math.max(segmentStart, endExclusive - 1) + lineOffset,
     });
   };
 

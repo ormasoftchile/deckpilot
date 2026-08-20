@@ -72,11 +72,12 @@ async function parseMarkdownDeck(
 ): Promise<ParseResult> {
   try {
     // Extract deck-level frontmatter (before first slide delimiter)
-    const { data: metadata, content: bodyContent } = extractDeckFrontmatter(content);
+    const { data: metadata, content: bodyContent, lineOffset: frontmatterOffset } = extractDeckFrontmatter(content);
 
     // If frontmatter declares `content: <path>`, load that file's body instead.
     // Imported file's frontmatter (if any) is discarded — wrapper is source of truth.
     let effectiveBody = bodyContent;
+    let effectiveOffset = frontmatterOffset;
     const importWarnings: string[] = [];
     const importPath = typeof metadata.content === 'string' ? metadata.content.trim() : '';
     if (importPath) {
@@ -86,8 +87,9 @@ async function parseMarkdownDeck(
           : path.resolve(path.dirname(filePath), importPath);
         const live = options?.readImport?.(resolved);
         const imported = live !== undefined ? live : await fs.promises.readFile(resolved, 'utf-8');
-        const { content: importedBody } = extractDeckFrontmatter(imported);
+        const { content: importedBody, lineOffset: importedOffset } = extractDeckFrontmatter(imported);
         effectiveBody = importedBody;
+        effectiveOffset = importedOffset;
       } catch (importError) {
         const msg = importError instanceof Error ? importError.message : 'Unknown import error';
         importWarnings.push(`[content] could not import '${importPath}': ${msg}`);
@@ -117,6 +119,7 @@ async function parseMarkdownDeck(
       slideBreak: breakCfg.mode,
       headingLevels: breakCfg.headingLevels,
       listFragmentMode: resolveListFragmentMode(mergedMetadata.listFragmentMode),
+      lineOffset: effectiveOffset,
     });
 
     if (slides.length === 0) {
@@ -197,18 +200,20 @@ async function parseMarkdownDeck(
  * Extract deck-level frontmatter from content
  * Handles the case where frontmatter is at the very beginning
  */
-function extractDeckFrontmatter(content: string): { data: Record<string, unknown>; content: string } {
+function extractDeckFrontmatter(content: string): { data: Record<string, unknown>; content: string; lineOffset: number } {
   try {
     const parsed = matter(content);
     return {
       data: parsed.data,
       content: parsed.content,
+      lineOffset: parsed.lineOffset,
     };
   } catch (error) {
     // If frontmatter parsing fails, return content as-is
     return {
       data: {},
       content,
+      lineOffset: 0,
     };
   }
 }
@@ -265,6 +270,7 @@ async function parseYamlDeck(
 
   // Load the external (untouched) markdown body.
   let body: string;
+  let bodyOffset = 0;
   try {
     const resolved = path.isAbsolute(importPath)
       ? importPath
@@ -272,7 +278,9 @@ async function parseYamlDeck(
     const live = options?.readImport?.(resolved);
     const imported = live !== undefined ? live : await fs.promises.readFile(resolved, 'utf-8');
     // Strip any frontmatter the content file may carry — manifest is source of truth.
-    body = extractDeckFrontmatter(imported).content;
+    const extracted = extractDeckFrontmatter(imported);
+    body = extracted.content;
+    bodyOffset = extracted.lineOffset;
   } catch (importError) {
     const msg = importError instanceof Error ? importError.message : 'Unknown import error';
     return { error: `[content] could not import '${importPath}': ${msg}` };
@@ -284,6 +292,7 @@ async function parseYamlDeck(
     slideBreak: breakCfg.mode,
     headingLevels: breakCfg.headingLevels,
     listFragmentMode: resolveListFragmentMode(manifest.deck?.listFragmentMode),
+    lineOffset: bodyOffset,
   });
 
   if (slides.length === 0) {
