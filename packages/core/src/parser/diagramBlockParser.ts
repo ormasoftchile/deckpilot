@@ -11,14 +11,16 @@
 import type { DiagramBlockRef, DiagramFenceInfo } from '../models/diagram';
 
 /**
- * Matches ```diagram:<lang> <attrs?>\n...\n``` fences.
+ * Matches ```diagram:<lang> <attrs?>\n...\n``` or simple ```triton / ```mermaid fences.
  * Allows up to 3 leading spaces so standard Markdown-indented fenced blocks
  * still parse as diagrams instead of falling back to plain code blocks.
- * Group 1 = language (e.g. "mermaid")
- * Group 2 = rest of info string after language (e.g. " {theme: dark}")
- * Group 3 = fence body
+ * Group 1 = explicit diagram language (e.g. "mermaid" from "diagram:mermaid")
+ * Group 2 = simple fence language (e.g. "triton" or "mermaid")
+ * Group 3 = rest of info string after language (e.g. " {theme: dark}")
+ * Group 4 = fence body
  */
-const DIAGRAM_FENCE_PATTERN = /^[ \t]{0,3}```diagram:(\S+)([^\r\n]*)?\r?\n([\s\S]*?)^[ \t]{0,3}```\s*$/gm;
+const DIAGRAM_FENCE_PATTERN =
+  /^[ \t]{0,3}```(?:diagram:(\S+)|(triton|mermaid))([^\r\n]*)?\r?\n([\s\S]*?)^[ \t]{0,3}```\s*$/gm;
 
 export interface DiagramBlockParseResult {
   /** Original content with diagram fences replaced by <!--DIAGRAM:id--> markers. */
@@ -28,7 +30,7 @@ export interface DiagramBlockParseResult {
 }
 
 /**
- * Parse all diagram:* fenced blocks from slide content.
+ * Parse all diagram fences (```diagram:<lang>, ```triton, ```mermaid) from slide content.
  * Returns DiagramBlockRef[] and cleaned content (fences replaced with markers).
  *
  * @param content    Raw slide content (markdown).
@@ -43,11 +45,26 @@ export function parseDiagramBlocks(
 
   const cleanedContent = content.replace(
     DIAGRAM_FENCE_PATTERN,
-    (fullMatch, lang: string, infoRest: string, body: string, offset: number) => {
+    (
+      fullMatch,
+      explicitLang: string | undefined,
+      simpleLang: string | undefined,
+      infoRest: string | undefined,
+      body: string,
+      offset: number,
+    ) => {
+      const lang = (explicitLang ?? simpleLang ?? '').trim();
+      const attributes = parseAttributes(infoRest ?? '');
+
+      // Escape hatch: if explicitly marked {render: false} or {code: true}, keep as plain code fence
+      if (attributes?.render === 'false' || attributes?.code === 'true') {
+        return fullMatch;
+      }
+
       const id = `diagram-${slideIndex}-${counter++}`;
       const fence: DiagramFenceInfo = {
-        language: lang.trim(),
-        attributes: parseAttributes(infoRest ?? ''),
+        language: lang,
+        attributes,
       };
 
       blocks.push({
