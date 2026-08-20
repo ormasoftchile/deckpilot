@@ -32,6 +32,8 @@ export interface ParseSlidesOptions {
   headingLevels?: number[];
   /** Default list fragmentation mode for presentation rendering. */
   listFragmentMode?: ListFragmentMode;
+  /** Line offset from stripped deck frontmatter. */
+  lineOffset?: number;
 }
 
 // Initialize markdown-it renderer
@@ -82,7 +84,7 @@ export function parseSlides(content: string, options: ParseSlidesOptions = {}): 
   const { chunks: rawSlides, usedDeprecatedDelimiter } = resolveSlideBreaks(
     content,
     options.slideBreak ?? 'blank',
-    { headingLevels: options.headingLevels },
+    { headingLevels: options.headingLevels, lineOffset: options.lineOffset },
   );
 
   // Surface a one-time migration hint when a bare `---` acted as a separator.

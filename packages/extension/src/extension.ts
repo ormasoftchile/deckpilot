@@ -38,10 +38,17 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
         return undefined;
     }
 
-    const filePath = editor.document.uri.fsPath;
+    const doc = editor.document;
+    const isMarkdown = doc.languageId === 'markdown' || doc.languageId === 'deck-markdown';
+
+    if (doc.uri.scheme === 'untitled' && isMarkdown) {
+        return doc.uri;
+    }
+
+    const filePath = doc.uri.fsPath;
 
     if (filePath.endsWith('.deck.md')) {
-        return editor.document.uri;
+        return doc.uri;
     }
 
     if (filePath.endsWith('.deck.yaml')) {
@@ -54,8 +61,8 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
             return vscode.Uri.file(plainMdPath); // sidecar → its .md
         }
         // Standalone YAML-primary deck: valid when it declares `content:`.
-        if (readDeckContentImport(editor.document.getText(), filePath)) {
-            return editor.document.uri;
+        if (readDeckContentImport(doc.getText(), filePath)) {
+            return doc.uri;
         }
         return undefined;
     }
@@ -66,10 +73,10 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
     }
     // Any markdown document can be presented directly as a deck
     if (
-        editor.document.languageId === 'markdown' ||
+        isMarkdown ||
         filePath.endsWith('.md')
     ) {
-        return editor.document.uri;
+        return doc.uri;
     }
     return undefined;
 }
@@ -120,6 +127,13 @@ async function resolveDeckUriFromArg(resource: vscode.Uri | undefined): Promise<
  *  - any other file → the deck whose `content:` imports it, or itself if `.md`.
  */
 async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
+    if (uri.scheme === 'untitled') {
+        const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+        if (openDoc && (openDoc.languageId === 'markdown' || openDoc.languageId === 'deck-markdown')) {
+            return uri;
+        }
+    }
+
     const filePath = uri.fsPath;
     if (filePath.endsWith('.deck.md')) {
         return uri;
@@ -217,16 +231,18 @@ function treatAllMarkdownAsDeck(uri: vscode.Uri | undefined): boolean {
  * deck imports. The content check is a synchronous index lookup.
  */
 async function updateDeckContextKeys(editor: vscode.TextEditor | undefined): Promise<void> {
-    const filePath = editor?.document.uri.fsPath;
-    const isMarkdown = editor?.document.languageId === 'markdown' || editor?.document.languageId === 'deck-markdown';
-    let isDeck = !!filePath && (
+    const doc = editor?.document;
+    const filePath = doc?.uri.fsPath;
+    const isMarkdown = doc?.languageId === 'markdown' || doc?.languageId === 'deck-markdown';
+    const isUntitled = doc?.uri.scheme === 'untitled';
+    let isDeck = (isUntitled && isMarkdown) || (!!filePath && (
         filePath.endsWith('.deck.md') ||
         filePath.endsWith('.deck.yaml') ||
         filePath.endsWith('.md') ||
         isMarkdown
-    );
-    // If treatAllMarkdownAsDeck is explicitly disabled, check if it's a heading-based or explicit deck
-    if (isMarkdown && !treatAllMarkdownAsDeck(editor?.document.uri)) {
+    ));
+    // If treatAllMarkdownAsDeck is explicitly disabled, check if it's an explicit deck
+    if (isMarkdown && !treatAllMarkdownAsDeck(doc?.uri)) {
         isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
     }
     const isContent = !!filePath && !isDeck && deckContentFiles.has(path.normalize(filePath));

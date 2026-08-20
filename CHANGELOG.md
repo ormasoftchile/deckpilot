@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Untitled Document Support**: Commands like `Start Presentation`, `Open Live Preview`, and `Show Resolved Deck Model` can now be run directly on unsaved / untitled buffers (`untitled:Untitled-N`) whose syntax is set to Markdown.
+
 - **Simple Diagram Fences (` ```triton ` and ` ```mermaid `)**: Direct diagram rendering support for standard ` ```triton ` and ` ```mermaid ` code fences without requiring the `diagram:` prefix.
   - Matches the standard Triton VS Code extension and GitHub/GitLab Markdown rendering.
   - Supports inline attributes (e.g. ` ```triton {theme: minimal, caption: "Architecture"} `) and in-fence YAML frontmatter.
@@ -20,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Explorer context menu entries ("Deckpilot: Start Presentation", "Deckpilot: Open Live Preview") now available on all Markdown files.
   - Deck commands (`Show Resolved Deck Model`, `Extract Metadata to Sidecar`, `Validate Deck`) support plain `.md` files seamlessly.
   - Public Deckpilot Viewer (`apps/viewer`) automatically discovers companion `.deck.yaml` sidecars for any `.md` URL.
+
+### Fixed
+
+- **Live Preview Cursor Sync**: Corrected slide source line ranges when deck frontmatter and multiline blocks (such as diagrams or code blocks) are present, ensuring moving through text within a slide does not jump preview to the next slide prematurely.
 
 ## [0.9.36] - 2026-05-24
 

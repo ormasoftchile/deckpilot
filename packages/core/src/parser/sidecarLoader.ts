@@ -68,6 +68,9 @@ export async function sidecarExists(deckMdPath: string): Promise<boolean> {
  * @returns Parsed SidecarFile, or null if no sidecar exists or cannot be parsed
  */
 export async function loadSidecar(deckMdPath: string): Promise<SidecarFile | null> {
+  if (!deckMdPath.endsWith('.deck.md') && !deckMdPath.endsWith('.md')) {
+    return null;
+  }
   if (!(await sidecarExists(deckMdPath))) {
     return null;
   }

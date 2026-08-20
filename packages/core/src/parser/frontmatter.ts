@@ -15,11 +15,11 @@ import { load as yamlLoad } from 'js-yaml';
 
 const FENCE_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/;
 
-export function matter(input: string): { data: Record<string, unknown>; content: string } {
-  if (input.length === 0) return { data: {}, content: '' };
+export function matter(input: string): { data: Record<string, unknown>; content: string; lineOffset: number } {
+  if (input.length === 0) return { data: {}, content: '', lineOffset: 0 };
   const stripped = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
   const match = FENCE_RE.exec(stripped);
-  if (!match) return { data: {}, content: stripped };
+  if (!match) return { data: {}, content: stripped, lineOffset: 0 };
   const yamlBody = match[1];
   const content = stripped.slice(match[0].length);
   const parsed = yamlBody.trim().length === 0 ? {} : yamlLoad(yamlBody);
@@ -27,7 +27,8 @@ export function matter(input: string): { data: Record<string, unknown>; content:
     parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
-  return { data, content };
+  const lineOffset = match[0].split(/\r?\n/).length - 1;
+  return { data, content, lineOffset };
 }
 
 export default matter;

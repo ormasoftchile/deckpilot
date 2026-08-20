@@ -56,7 +56,10 @@ export async function showResolvedDeckModel(provider: DeckModelContentProvider):
         return;
     }
 
-    let filePath = editor.document.uri.fsPath;
+    const doc = editor.document;
+    const isMarkdown = doc.languageId === 'markdown' || doc.languageId === 'deck-markdown';
+    let docUri = doc.uri;
+    let filePath = doc.uri.fsPath;
 
     // If triggered from a .deck.yaml sidecar, derive the companion markdown path
     if (filePath.endsWith('.deck.yaml')) {
@@ -65,21 +68,23 @@ export async function showResolvedDeckModel(provider: DeckModelContentProvider):
         
         if (fs.existsSync(deckMdPath)) {
             filePath = deckMdPath;
+            docUri = vscode.Uri.file(deckMdPath);
         } else if (fs.existsSync(plainMdPath)) {
             filePath = plainMdPath;
+            docUri = vscode.Uri.file(plainMdPath);
         } else {
             void vscode.window.showErrorMessage(
                 'No paired .deck.md or .md file found alongside this sidecar.'
             );
             return;
         }
-    } else if (!filePath.endsWith('.md')) {
+    } else if (!filePath.endsWith('.md') && !(doc.uri.scheme === 'untitled' && isMarkdown)) {
         void vscode.window.showErrorMessage('Active file is not a Markdown (.md, .deck.md) or .deck.yaml file.');
         return;
     }
 
-    // Load the .deck.md content
-    const deckDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+    // Load the deck content
+    const deckDoc = await vscode.workspace.openTextDocument(docUri);
     const content = deckDoc.getText();
 
     let result;
@@ -112,7 +117,7 @@ export async function showResolvedDeckModel(provider: DeckModelContentProvider):
 
     provider.update(uri, json);
 
-    const doc = await vscode.workspace.openTextDocument(uri);
-    const activeDoc = await vscode.languages.setTextDocumentLanguage(doc, 'json');
+    const virtualDoc = await vscode.workspace.openTextDocument(uri);
+    const activeDoc = await vscode.languages.setTextDocumentLanguage(virtualDoc, 'json');
     await vscode.window.showTextDocument(activeDoc, { preview: true });
 }
