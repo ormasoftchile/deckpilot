@@ -207,16 +207,8 @@ function treatAllMarkdownAsDeck(uri: vscode.Uri | undefined): boolean {
     return (
         vscode.workspace
             .getConfiguration('deckPilot', uri)
-            .get<boolean>('treatAllMarkdownAsDeck') ?? false
+            .get<boolean>('treatAllMarkdownAsDeck') ?? true
     );
-}
-
-/** Matches any Markdown ATX heading line (`#` through `######`). */
-const HEADING_RE = /^#{1,6}\s/m;
-
-/** True when `text` contains at least one Markdown heading line. */
-function hasHeading(text: string): boolean {
-    return HEADING_RE.test(text);
 }
 
 /**
@@ -226,17 +218,16 @@ function hasHeading(text: string): boolean {
  */
 async function updateDeckContextKeys(editor: vscode.TextEditor | undefined): Promise<void> {
     const filePath = editor?.document.uri.fsPath;
-    let isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
-    // When enabled, any markdown document with at least one heading counts as a
-    // deck (existing `.deck.*` files are always decks regardless of setting).
-    if (
-        !isDeck &&
-        editor &&
-        editor.document.languageId === 'markdown' &&
-        treatAllMarkdownAsDeck(editor.document.uri) &&
-        hasHeading(editor.document.getText())
-    ) {
-        isDeck = true;
+    const isMarkdown = editor?.document.languageId === 'markdown' || editor?.document.languageId === 'deck-markdown';
+    let isDeck = !!filePath && (
+        filePath.endsWith('.deck.md') ||
+        filePath.endsWith('.deck.yaml') ||
+        filePath.endsWith('.md') ||
+        isMarkdown
+    );
+    // If treatAllMarkdownAsDeck is explicitly disabled, check if it's a heading-based or explicit deck
+    if (isMarkdown && !treatAllMarkdownAsDeck(editor?.document.uri)) {
+        isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
     }
     const isContent = !!filePath && !isDeck && deckContentFiles.has(path.normalize(filePath));
     await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeck', isDeck);
