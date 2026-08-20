@@ -178,6 +178,83 @@ describe('parseDiagramBlocks', () => {
     ].join('\n'));
   });
 
+  it('parses simple ```triton fences as diagrams', () => {
+    const content = [
+      '```triton',
+      'flowchart TD',
+      '  A --> B',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.cleanedContent).to.equal('<!--DIAGRAM:diagram-0-0-->');
+    expect(result.blocks).to.have.lengthOf(1);
+    expect(result.blocks[0].fence.language).to.equal('triton');
+    expect(result.blocks[0].source).to.equal('flowchart TD\n  A --> B\n');
+  });
+
+  it('parses simple ```mermaid fences as diagrams', () => {
+    const content = [
+      '```mermaid',
+      'sequenceDiagram',
+      '  Alice->>Bob: Hello',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.cleanedContent).to.equal('<!--DIAGRAM:diagram-0-0-->');
+    expect(result.blocks).to.have.lengthOf(1);
+    expect(result.blocks[0].fence.language).to.equal('mermaid');
+  });
+
+  it('parses attributes on simple ```triton and ```mermaid fences', () => {
+    const content = [
+      '```triton {theme: minimal, caption: "System architecture"}',
+      'flowchart TD',
+      '  A --> B',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.blocks).to.have.lengthOf(1);
+    expect(result.blocks[0].fence.language).to.equal('triton');
+    expect(result.blocks[0].fence.attributes).to.deep.equal({
+      theme: 'minimal',
+      caption: 'System architecture',
+    });
+  });
+
+  it('skips simple fence when marked with render: false escape hatch', () => {
+    const content = [
+      '```triton {render: false}',
+      'flowchart TD',
+      '  A --> B',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.cleanedContent).to.equal(content);
+    expect(result.blocks).to.have.lengthOf(0);
+  });
+
+  it('skips simple fence when marked with code: true escape hatch', () => {
+    const content = [
+      '```mermaid {code: true}',
+      'graph TD',
+      '  A --> B',
+      '```',
+    ].join('\n');
+
+    const result = parseDiagramBlocks(content, 0);
+
+    expect(result.cleanedContent).to.equal(content);
+    expect(result.blocks).to.have.lengthOf(0);
+  });
+
   it('parses CRLF diagram fences', () => {
     const content = '```diagram:mermaid\r\ngraph TD\r\n  A --> B\r\n```\r\n';
 

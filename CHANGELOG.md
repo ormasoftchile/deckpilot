@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Simple Diagram Fences (` ```triton ` and ` ```mermaid `)**: Direct diagram rendering support for standard ` ```triton ` and ` ```mermaid ` code fences without requiring the `diagram:` prefix.
+  - Matches the standard Triton VS Code extension and GitHub/GitLab Markdown rendering.
+  - Supports inline attributes (e.g. ` ```triton {theme: minimal, caption: "Architecture"} `) and in-fence YAML frontmatter.
+  - Supports escape hatches (`{render: false}` or `{code: true}`) to display literal code snippets when teaching diagram syntax.
+  - Continues full backward compatibility with ` ```diagram:triton ` and ` ```diagram:mermaid `.
+
 - **Universal Markdown Presentation & Preview**: Direct presentation and live preview support over any `.md` file in addition to `.deck.md`.
   - Automatic companion sidecar discovery (`[name].deck.yaml`) and env file discovery (`[name].deck.env`) for both `.md` and `.deck.md` files.
   - Explorer context menu entries ("Deckpilot: Start Presentation", "Deckpilot: Open Live Preview") now available on all Markdown files.
