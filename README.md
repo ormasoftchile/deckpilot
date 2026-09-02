@@ -135,11 +135,27 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
   - Same-basename SRT narration slots
   - `voiceover-script.md` and `voiceover-script.json`
   - `recording-session.json` (full timing log)
-6. Record and mux the narration with `srt-dubber <session>.srt <session>.mp4`
+6. Choose **Record Narration** when Auto-Record completes. Deckpilot launches
+   srt-dubber with the matching MP4 and SRT in a VS Code terminal.
 
 Deckpilot coordinates the configured recorder; it does not encode MP4 video
 itself. SRT timings use the actual presentation segment boundaries, while the
 text comes from the sidecar narration cues.
+
+You can also run **Deckpilot: Record Narration for Latest Export** from the
+Command Palette while the deck is open. Deckpilot searches its configured
+recording output, `recordings/`, and the deck directory for the newest matching
+MP4/SRT pair. It resolves `srt-dubber` from `PATH` by default; configure an
+explicit executable when needed:
+
+```json
+{
+  "deckPilot.dubbing.executable": "C:\\tools\\srt-dubber.exe"
+}
+```
+
+The terminal remains visible because narration recording is interactive, but
+you do not need to type or construct the command.
 
 ### Record only the VS Code window on Windows
 

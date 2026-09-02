@@ -19,9 +19,32 @@ import {
 import { PreviewProvider } from './preview';
 import type { DeckpilotDiagramAPI, IDiagramRenderer } from '@deckpilot/core/renderer/diagramRenderer';
 import { diagramLog, initializeDiagramLogger } from './utils/diagramLogger';
+import { findLatestNarrationArtifacts } from './dubbing/dubbingDiscovery';
+import { launchNarration } from './dubbing/dubbingLauncher';
 
 let conductor: Conductor | undefined;
 let previewProvider: PreviewProvider | undefined;
+
+async function showRecordingComplete(
+    message: string,
+    allFiles: string[],
+    captionFile: string,
+    videoPath?: string,
+): Promise<void> {
+    const choices = videoPath ? ['Record Narration', 'Open Script'] : ['Open Script'];
+    const choice = await vscode.window.showInformationMessage(message, ...choices);
+    if (choice === 'Record Narration' && videoPath) {
+        await launchNarration({ videoPath, srtPath: captionFile, modifiedMs: Date.now() }, path.dirname(captionFile));
+        return;
+    }
+    if (choice === 'Open Script') {
+        const mdFile = allFiles.find(file => file.endsWith('.md'));
+        if (mdFile) {
+            const document = await vscode.workspace.openTextDocument(mdFile);
+            await vscode.window.showTextDocument(document);
+        }
+    }
+}
 
 /**
  * Resolves a deck URI from the active editor.
@@ -482,19 +505,12 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const captionFile = await captionGen.exportSrt(session, captionDir);
 
                 const allFiles = [...sessionFiles, ...scriptFiles, captionFile];
-                void vscode.window.showInformationMessage(
+                void showRecordingComplete(
                     `⏹️ Recording saved: ${allFiles.length} files exported`,
-                    'Open Script'
-                ).then(choice => {
-                    if (choice === 'Open Script') {
-                        const mdFile = allFiles.find(f => f.endsWith('.md'));
-                        if (mdFile) {
-                            void vscode.workspace.openTextDocument(mdFile).then(doc => {
-                                void vscode.window.showTextDocument(doc);
-                            });
-                        }
-                    }
-                });
+                    allFiles,
+                    captionFile,
+                    session.recorder?.outputPath,
+                );
             }
         }
     );
@@ -573,21 +589,50 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const captionFile = await captionGen.exportSrt(session, captionDir);
 
                 const allFiles = [...sessionFiles, ...scriptFiles, captionFile];
-                void vscode.window.showInformationMessage(
+                void showRecordingComplete(
                     `🤖 Auto-record complete: ${allFiles.length} files exported`,
-                    'Open Script'
-                ).then(choice => {
-                    if (choice === 'Open Script') {
-                        const mdFile = allFiles.find(f => f.endsWith('.md'));
-                        if (mdFile) {
-                            void vscode.workspace.openTextDocument(mdFile).then(doc => {
-                                void vscode.window.showTextDocument(doc);
-                            });
-                        }
-                    }
-                });
+                    allFiles,
+                    captionFile,
+                    session.recorder?.outputPath,
+                );
             }
         }
+    );
+
+    const recordNarrationDisposable = vscode.commands.registerCommand(
+        'deckPilot.recordNarration',
+        async () => {
+            const deckUri = await resolveDeckUri(vscode.window.activeTextEditor);
+            if (!deckUri) {
+                void vscode.window.showWarningMessage(
+                    'Open the deck whose latest recording you want to narrate.',
+                );
+                return;
+            }
+
+            const deckDirectory = path.dirname(deckUri.fsPath);
+            const recorderOutput = vscode.workspace
+                .getConfiguration('deckPilot.recording', deckUri)
+                .get<string>('outputDir', '')
+                .trim();
+            const outputDirectory = recorderOutput
+                ? path.isAbsolute(recorderOutput)
+                    ? recorderOutput
+                    : path.resolve(deckDirectory, recorderOutput)
+                : deckDirectory;
+            const artifacts = await findLatestNarrationArtifacts([
+                outputDirectory,
+                path.join(deckDirectory, 'recordings'),
+                deckDirectory,
+            ]);
+            if (!artifacts) {
+                void vscode.window.showWarningMessage(
+                    'No matching MP4 and SRT export was found for this deck.',
+                );
+                return;
+            }
+            await launchNarration(artifacts, deckDirectory);
+        },
     );
 
     const cancelAutoRecordDisposable = vscode.commands.registerCommand(
@@ -753,6 +798,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
         markRetakeDisposable,
         toggleRecordingPauseDisposable,
         autoRecordDisposable,
+        recordNarrationDisposable,
         cancelAutoRecordDisposable,
         extractMetadataToSidecarDisposable,
         installAuthoringSkillsDisposable,

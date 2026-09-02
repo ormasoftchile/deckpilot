@@ -122,6 +122,10 @@
         "title": "Deckpilot: Auto-Record Deck"
       },
       {
+        "command": "deckPilot.recordNarration",
+        "title": "Deckpilot: Record Narration for Latest Export"
+      },
+      {
         "command": "deckPilot.cancelAutoRecord",
         "title": "Deckpilot: Cancel Auto-Record"
       },
@@ -203,6 +207,12 @@
           "type": "string",
           "default": "0:none",
           "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '0:none', '1:none', etc. For directshow (Windows) use the display name."
+        },
+        "deckPilot.dubbing.executable": {
+          "type": "string",
+          "default": "srt-dubber",
+          "scope": "resource",
+          "description": "Path or command name for the srt-dubber executable used by Record Narration. Defaults to resolving srt-dubber from PATH."
         }
       }
     },
@@ -267,8 +277,8 @@
     "lint:fix": "eslint packages/core/src packages/extension/src --ext ts --fix",
     "test": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
     "test:unit": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
-    "test:e2e:auto-record": "tsc -b && node out/test/e2e/videoWorkflow/run.js",
-    "test:e2e:video-workflow": "tsc -b && node out/test/e2e/videoWorkflow/run.js",
+    "test:e2e:auto-record": "tsc -b && npm run bundle && node out/test/e2e/videoWorkflow/run.js",
+    "test:e2e:video-workflow": "tsc -b && npm run bundle && node out/test/e2e/videoWorkflow/run.js",
     "clean": "rimraf out dist packages/core/dist",
     "package": "vsce package --no-dependencies",
     "deploy": "vsce publish --no-dependencies",

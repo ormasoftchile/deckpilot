@@ -27,9 +27,14 @@ async function main(): Promise<void> {
   const resultPath = path.join(fixtureRoot, 'result.json');
   const userDataDir = path.join(fixtureRoot, 'vscode-user-data');
   const extensionsDir = path.join(fixtureRoot, 'vscode-extensions');
+  const srtDubber = process.env['SRT_DUBBER_PATH'] ?? path.resolve(
+    repoRoot, '..', 'srt-dubber', 'build', 'Release',
+    process.platform === 'win32' ? 'srt-dubber.exe' : 'srt-dubber',
+  );
 
   await fs.promises.rm(fixtureRoot, { recursive: true, force: true });
   await fs.promises.mkdir(outputRoot, { recursive: true });
+  await fs.promises.access(srtDubber);
 
   const ffmpeg = process.env['FFMPEG_PATH'] ?? 'ffmpeg';
   await execFile(ffmpeg, [
@@ -108,6 +113,7 @@ The presentation is being driven by Auto-Record.
       DECKPILOT_E2E_FIXTURE_ROOT: fixtureRoot,
       DECKPILOT_E2E_OUTPUT_ROOT: outputRoot,
       DECKPILOT_E2E_RESULT_PATH: resultPath,
+      SRT_DUBBER_PATH: srtDubber,
     },
     launchArgs: [
       fixtureRoot,
@@ -130,12 +136,6 @@ The presentation is being driven by Auto-Record.
     captureWidth?: number;
     captureHeight?: number;
   };
-  const srtDubber = process.env['SRT_DUBBER_PATH'] ?? path.resolve(
-    repoRoot, '..', 'srt-dubber', 'build', 'Release',
-    process.platform === 'win32' ? 'srt-dubber.exe' : 'srt-dubber',
-  );
-  await fs.promises.access(srtDubber);
-
   const takesDir = path.join(fixtureRoot, 'fixture-takes');
   await fs.promises.mkdir(takesDir, { recursive: true });
   for (let index = 1; index <= result.captionCount; index++) {
