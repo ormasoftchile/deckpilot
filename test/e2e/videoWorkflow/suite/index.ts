@@ -71,6 +71,26 @@ export async function run(): Promise<void> {
     if (captionCount !== 3) {
       throw new Error(`Expected 3 SRT entries, exported ${captionCount}`);
     }
+    const dubbingExecutable = requiredEnv('SRT_DUBBER_PATH');
+    await vscode.workspace
+      .getConfiguration('deckPilot.dubbing')
+      .update('executable', dubbingExecutable, vscode.ConfigurationTarget.Workspace);
+    const deckDocument = await vscode.workspace.openTextDocument(deckPath);
+    await vscode.window.showTextDocument(deckDocument);
+    const terminalCount = vscode.window.terminals.length;
+    await vscode.commands.executeCommand('deckPilot.recordNarration');
+    const narrationTerminal = vscode.window.terminals.find(
+      terminal => terminal.name === 'Deckpilot Narration',
+    );
+    if (!narrationTerminal || vscode.window.terminals.length !== terminalCount + 1) {
+      throw new Error('Deckpilot did not launch srt-dubber in a VS Code terminal');
+    }
+    const narrationProcessId = await narrationTerminal.processId;
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (narrationProcessId === undefined || narrationTerminal.exitStatus !== undefined) {
+      throw new Error('The srt-dubber terminal process did not stay running');
+    }
+    narrationTerminal.dispose();
     await fs.promises.writeFile(resultPath, JSON.stringify({
       fixtureRoot,
       outputRoot,
@@ -79,6 +99,7 @@ export async function run(): Promise<void> {
       resolvedRecorderCommand,
       captureWidth: captureSize ? Number(captureSize[1]) : undefined,
       captureHeight: captureSize ? Number(captureSize[2]) : undefined,
+      narrationProcessId,
       captionCount,
       segmentCount: session.segments.length,
       eventCount: session.events.length,
