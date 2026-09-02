@@ -19,6 +19,7 @@ import { RecordingEvent, RecordingSegment, VoiceOverCue, IgnoredInterval } from 
  */
 const NOTABLE_EVENT_TYPES = new Set([
   'fragment.revealed',
+  'action.completed',
   'file.opened',
   'editor.highlighted',
   'terminal.command.started',
@@ -133,6 +134,10 @@ function buildCueForEventMap(
     const unmatchedCues: typeof fragCues = [];
 
     for (const cue of fragCues) {
+      if (cue.source === 'frontmatter') {
+        unmatchedCues.push(cue);
+        continue;
+      }
       const match = notableEvents.find(
         e =>
           e.type === 'fragment.revealed' &&

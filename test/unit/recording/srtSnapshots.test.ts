@@ -80,6 +80,12 @@ function synthesiseEvents(
       currentSlide = step.slideIndex;
     }
 
+    if (step.type === 'trigger-action') {
+      push('action.completed', step.slideIndex, {
+        metadata: { actionId: step.actionId },
+      });
+    }
+
     clock += step.durationMs;
   }
 

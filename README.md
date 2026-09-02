@@ -52,11 +52,12 @@ Trigger IDE actions directly from slide content:
 
 Deckpilot can auto-present your deck and coordinate with an external recorder to produce video and narration artifacts.
 
-- Voice-over cues — `<!-- voice: text -->` per slide, `<!-- voice[N]: text -->` per fragment
+- Sidecar narration — ordered `slides[].cues[]` keep the talk track out of slide Markdown
+- Inline voice cues — `<!-- voice: text -->` and `<!-- voice[N]: text -->` remain supported and take precedence over sidecar cues
 - Manual recording — start/stop session; pause/resume timing, retake markers, narration markers
 - **Auto-Pilot** — hands-free: drives slides, fragments, and actions at a pace computed from voice cue word count
 - External recorder — configure ffmpeg (or any tool) to start/stop automatically via settings
-- Exports — `voiceover-script.md`, SRT captions, event JSON, MP4 video (via external recorder)
+- Exports — paired MP4/SRT files, `voiceover-script.md`, `voiceover-script.json`, and `recording-session.json`
 
 ### 4. Onboarding & validation
 
@@ -125,15 +126,20 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
 
 ## Example workflow: record a demo
 
-1. Write a `.deck.md` deck with slides, actions, and voice cues
+1. Write a `.deck.md` deck and put ordered narration cues in its `.deck.yaml` sidecar
 2. Configure an external recorder in VS Code settings (e.g. ffmpeg)
 3. Run **Deckpilot: Auto-Record Deck** from the command palette
 4. Deckpilot drives the presentation automatically, coordinating with the recorder
-5. When done, export:
+5. When done, Deckpilot exports:
    - MP4 video (captured by the external recorder)
-   - SRT captions
-   - `voiceover-script.md`
-   - Event JSON (full timing log)
+  - Same-basename SRT narration slots
+  - `voiceover-script.md` and `voiceover-script.json`
+  - `recording-session.json` (full timing log)
+6. Record and mux the narration with `srt-dubber <session>.srt <session>.mp4`
+
+Deckpilot coordinates the configured recorder; it does not encode MP4 video
+itself. SRT timings use the actual presentation segment boundaries, while the
+text comes from the sidecar narration cues.
 
 ---
 
@@ -153,22 +159,21 @@ slides:
   - id: intro          # matches <!-- id: intro --> in the .deck.md
     notes: "Remind the audience who you are."
     cues:
-      - "Welcome everyone. Today we'll look at..."
+      - "Welcome everyone. Today we'll look at..." # slide entry
+      - "First, notice how the demo is structured." # next fragment/action
     autoFragment: false   # suppress fragment animations (good for title slides)
     layout: center        # center | left | right | columns
     actions:
       - type: terminal.run
         cmd: npm start
 
-recording:
-  autoStart: false
-
-export:
-  subtitles: true
-  srtFormat: srt
 ```
 
 Slide IDs are set with `<!-- id: slug -->` comments in the Markdown right after `---`.
+
+Within `cues`, the first non-empty item narrates slide entry. Later items map
+in order to fragment reveals or actions on that slide. Keep each item to one
+spoken beat because each exported item becomes its own SRT recording slot.
 
 All deck commands work when a `.deck.yaml` file is the active editor — they auto-resolve the paired `.deck.md`.
 

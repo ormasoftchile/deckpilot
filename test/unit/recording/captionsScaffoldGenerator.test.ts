@@ -51,7 +51,28 @@ describe('CaptionsScaffoldGenerator', () => {
 
       const srt = generator.generateSrt(session);
       expect(srt).to.include('00:01:05,000'); // start — exercises the HH:MM:SS,mmm format
-      expect(srt).to.include('00:01:07,500'); // end = startTimeMs + readingTimeMs('A caption.') = 65000 + 2500
+      expect(srt).to.include('00:01:08,000');
+    });
+
+    it('should use segment boundaries so adjacent captions cannot overlap', () => {
+      const session = createMockSession({
+        segments: [
+          createMockSegment({
+            startTimeMs: 0,
+            endTimeMs: 2000,
+            draftNarration: 'This narration has enough words that its estimated reading time exceeds two seconds.',
+          }),
+          createMockSegment({
+            startTimeMs: 2000,
+            endTimeMs: 5000,
+            draftNarration: 'The next narration beat.',
+          }),
+        ],
+      });
+
+      const srt = generator.generateSrt(session);
+      expect(srt).to.include('00:00:00,000 --> 00:00:02,000');
+      expect(srt).to.include('00:00:02,000 --> 00:00:05,000');
     });
 
     it('should skip segments with empty narration', () => {
