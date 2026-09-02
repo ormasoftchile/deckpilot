@@ -89,7 +89,7 @@ export function resolveDubbingExecutable(
   }
 
   const extensions = process.platform === 'win32'
-    ? ['', ...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';')]
+    ? ['', ...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';').filter(Boolean)]
     : [''];
   for (const directory of pathValue.split(path.delimiter).filter(Boolean)) {
     for (const extension of extensions) {
@@ -100,4 +100,28 @@ export function resolveDubbingExecutable(
     }
   }
   return undefined;
+}
+
+export async function validateNarrationArtifacts(
+  artifacts: NarrationArtifacts,
+): Promise<string | undefined> {
+  try {
+    const [video, srt] = await Promise.all([
+      fs.promises.stat(artifacts.videoPath),
+      fs.promises.stat(artifacts.srtPath),
+    ]);
+    if (video.size === 0) {
+      return 'The exported MP4 is empty.';
+    }
+    if (srt.size === 0) {
+      return 'The exported SRT has no narration entries. Open the intended deck and check its sidecar cues.';
+    }
+    const srtContent = await fs.promises.readFile(artifacts.srtPath, 'utf8');
+    if (srtContent.trim().length === 0) {
+      return 'The exported SRT has no narration entries. Open the intended deck and check its sidecar cues.';
+    }
+    return undefined;
+  } catch {
+    return 'The exported MP4 or SRT no longer exists.';
+  }
 }

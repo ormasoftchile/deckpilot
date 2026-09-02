@@ -150,6 +150,9 @@ while the text comes from the sidecar narration cues.
 Keep source media in a `clips/` directory beside the deck and add a dedicated
 video item wherever it belongs in the presentation sequence:
 
+For a ready-to-run Windows walkthrough, open
+[`examples/video-workflow/video-workflow.code-workspace`](examples/video-workflow/video-workflow.code-workspace).
+
 ```markdown
 <!-- slide -->
 
@@ -201,7 +204,7 @@ Each recording is isolated under
 `recordings/<deck>/<timestamp-session>/`. The folder contains the recoverable
 `session-*.mp4` capture, composed `<deck>.mp4`, matching SRT, recording manifest,
 and voice-over scripts. srt-dubber creates its project, takes, processed audio,
-and final `output/output.mp4` inside the same session folder.
+and final `output/<deck-name>-dubbed.mp4` inside the same session folder.
 
 You can also run **Deckpilot: Record Narration for Latest Export** from the
 Command Palette while the deck is open. Deckpilot searches its configured

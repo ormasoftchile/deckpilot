@@ -29,12 +29,13 @@ async function showRecordingComplete(
     message: string,
     allFiles: string[],
     captionFile: string,
+    deckDirectory: string,
     videoPath?: string,
 ): Promise<void> {
     const choices = videoPath ? ['Record Narration', 'Open Script'] : ['Open Script'];
     const choice = await vscode.window.showInformationMessage(message, ...choices);
     if (choice === 'Record Narration' && videoPath) {
-        await launchNarration({ videoPath, srtPath: captionFile, modifiedMs: Date.now() }, path.dirname(captionFile));
+        await launchNarration({ videoPath, srtPath: captionFile, modifiedMs: Date.now() }, deckDirectory);
         return;
     }
     if (choice === 'Open Script') {
@@ -509,6 +510,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     `⏹️ Recording saved: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
+                    path.dirname(session.deckPath),
                     session.composition?.outputPath ?? session.recorder?.outputPath,
                 );
             }
@@ -593,6 +595,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     `🤖 Auto-record complete: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
+                    path.dirname(session.deckPath),
                     session.composition?.outputPath ?? session.recorder?.outputPath,
                 );
             }
