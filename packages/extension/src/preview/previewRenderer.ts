@@ -215,7 +215,8 @@ function renderSlide(slide: Slide, deckCwd: string, env?: Record<string, string>
 function slideHasPresenterContent(slide: Slide): boolean {
   return (
     (!!slide.speakerNotes && slide.speakerNotes.trim().length > 0) ||
-    (Array.isArray(slide.cues) && slide.cues.some((c) => c.trim().length > 0)) ||
+    (Array.isArray(slide.cues) && slide.cues.some((cue) =>
+      typeof cue === 'string' ? cue.trim().length > 0 : cue.text.trim().length > 0)) ||
     (Array.isArray(slide.voiceCues) && slide.voiceCues.some((c) => c.text.trim().length > 0))
   );
 }
@@ -235,7 +236,9 @@ function renderPresenterBlock(slide: Slide): string {
     </div>`);
   }
 
-  const cues = (slide.cues ?? []).filter((c) => c.trim().length > 0);
+  const cues = (slide.cues ?? [])
+    .map(cue => typeof cue === 'string' ? cue : cue.text)
+    .filter(cue => cue.trim().length > 0);
   if (cues.length > 0) {
     const items = cues.map((c) => `<li>${escapeHtml(c.trim())}</li>`).join('');
     parts.push(`<div class="preview-notes-item">

@@ -28,12 +28,13 @@ const LAYOUT_CLASS_MAP: Record<string, string> = {
  * - Returns a new array; input slides are not mutated.
  */
 export function mergeSidecarIntoSlides(slides: Slide[], sidecar: SidecarFile): Slide[] {
-  if (!sidecar.slides || sidecar.slides.length === 0) {
+  const entries = [...(sidecar.slides ?? []), ...(sidecar.items ?? [])];
+  if (entries.length === 0) {
     return slides;
   }
 
   const sidecarMap = new Map<string, SidecarSlide>(
-    sidecar.slides.map(s => [s.id, s])
+    entries.map(s => [s.id, s])
   );
 
   return slides.map(slide => {

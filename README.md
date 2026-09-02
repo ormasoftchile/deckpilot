@@ -52,6 +52,7 @@ Trigger IDE actions directly from slide content:
 
 Deckpilot can auto-present your deck and coordinate with an external recorder to produce video and narration artifacts.
 
+- First-class video items — place local clips between rendered slides with `:::video`
 - Sidecar narration — ordered `slides[].cues[]` keep the talk track out of slide Markdown
 - Inline voice cues — `<!-- voice: text -->` and `<!-- voice[N]: text -->` remain supported and take precedence over sidecar cues
 - Manual recording — start/stop session; pause/resume timing, retake markers, narration markers
@@ -139,8 +140,68 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
    srt-dubber with the matching MP4 and SRT in a VS Code terminal.
 
 Deckpilot coordinates the configured recorder; it does not encode MP4 video
-itself. SRT timings use the actual presentation segment boundaries, while the
-text comes from the sidecar narration cues.
+itself during capture. When a deck contains video items, Deckpilot composes a
+final MP4 afterward by replacing the captured playback intervals with the
+source clips. SRT timings use the remapped presentation segment boundaries,
+while the text comes from the sidecar narration cues.
+
+### Video items
+
+Keep source media in a `clips/` directory beside the deck and add a dedicated
+video item wherever it belongs in the presentation sequence:
+
+```markdown
+<!-- slide -->
+
+:::video
+id: execution-demo
+src: ./clips/execution.mp4
+start: 5s
+end: 42s
+audio: duck
+:::
+
+<!-- slide -->
+```
+
+`id` and `src` are required. `start` and `end` optionally trim the source clip.
+`audio` is `mute`, `preserve`, or `duck` (the default). Auto-Pilot waits for
+playback to finish, records the exact interval, and replaces that screen-captured
+interval with a normalized source clip using a hard cut. Source clips are local
+files; remote URLs and transitions are not supported.
+
+Narration for both slides and videos belongs in canonical sidecar `items[]`:
+
+```yaml
+items:
+  - id: intro
+    cues:
+      - "Introduce the demo."
+  - id: execution-demo
+    cues:
+      - "Watch the command execute."
+      - at: 8.5s
+        text: "Notice how the output updates."
+  - id: summary
+    cues:
+      - "Summarize the result."
+
+export:
+  outputDir: ./recordings
+```
+
+Existing sidecar `slides[]` entries remain supported. New decks should use
+`items[]` so slide and video narration share one model.
+
+For video items, the first string cue starts at video entry. Additional cues
+use `{ at, text }`, where `at` is relative to the trimmed clip start and accepts
+seconds or milliseconds. Timed cues are remapped with the composed video.
+
+Each recording is isolated under
+`recordings/<deck>/<timestamp-session>/`. The folder contains the recoverable
+`session-*.mp4` capture, composed `<deck>.mp4`, matching SRT, recording manifest,
+and voice-over scripts. srt-dubber creates its project, takes, processed audio,
+and final `output/output.mp4` inside the same session folder.
 
 You can also run **Deckpilot: Record Narration for Latest Export** from the
 Command Palette while the deck is open. Deckpilot searches its configured
@@ -178,8 +239,9 @@ pixel from odd-sized windows because H.264 `yuv420p` requires even dimensions.
 ### Validate the recording workflow
 
 The Windows end-to-end gate creates a temporary deck and sidecar, launches a
-real Extension Development Host, runs Auto-Record, generates deterministic
-narration takes, invokes srt-dubber, and verifies the final MP4:
+real Extension Development Host, plays and inserts a source clip, runs
+Auto-Record, generates deterministic narration takes, invokes srt-dubber, and
+verifies final pixels, retained clip audio, codecs, dimensions, and MP4 decode:
 
 ```powershell
 npm run test:e2e:video-workflow

@@ -26,6 +26,7 @@ import {
   RecordingMarkerMessage,
   SlideRenderedMessage,
   SlideRenderedPayload,
+  VideoPlaybackMessage,
 } from './messages';
 
 // ============================================================================
@@ -151,6 +152,14 @@ export function isSlideRenderedMessage(msg: unknown): msg is SlideRenderedMessag
   return isMessage(msg) && msg.type === 'slideRendered';
 }
 
+export function isVideoPlaybackMessage(msg: unknown): msg is VideoPlaybackMessage {
+  return isMessage(msg) && (
+    msg.type === 'videoPlaybackStarted' ||
+    msg.type === 'videoPlaybackEnded' ||
+    msg.type === 'videoPlaybackFailed'
+  );
+}
+
 /**
  * Base message type check
  */
@@ -197,6 +206,7 @@ export interface MessageHandlers {
   onFragmentRevealed?: (message: FragmentRevealedMessage) => void | Promise<void>;
   onRecordingMarker?: (message: RecordingMarkerMessage) => void | Promise<void>;
   onSlideRendered?: (payload: SlideRenderedPayload) => void | Promise<void>;
+  onVideoPlayback?: (message: VideoPlaybackMessage) => void | Promise<void>;
 }
 
 /**
@@ -244,6 +254,8 @@ export function createMessageDispatcher(handlers: MessageHandlers) {
         await handlers.onRecordingMarker(message);
       } else if (isSlideRenderedMessage(message) && handlers.onSlideRendered) {
         await handlers.onSlideRendered(message.payload);
+      } else if (isVideoPlaybackMessage(message) && handlers.onVideoPlayback) {
+        await handlers.onVideoPlayback(message);
       } else {
         console.warn('Unhandled message type:', (message as WebviewToHostMessage).type);
       }
@@ -265,7 +277,7 @@ export function parseMessage(data: unknown): WebviewToHostMessage | null {
     'navigate', 'executeAction', 'undo', 'redo', 'close', 'ready', 'vscodeCommand',
     'goBack', 'saveScene', 'restoreScene', 'deleteScene', 'envSetupRequest',
     'retryStep', 'resetToCheckpoint', 'fragmentRevealed', 'recordingMarker',
-    'slideRendered',
+    'slideRendered', 'videoPlaybackStarted', 'videoPlaybackEnded', 'videoPlaybackFailed',
   ];
   if (!validTypes.includes(data.type)) {
     return null;

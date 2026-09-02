@@ -490,7 +490,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');
                 const { CaptionsScaffoldGenerator } = await import('./recording/captionsScaffoldGenerator');
 
-                const outputDir = path.dirname(session.deckPath);
+                const outputDir = session.outputDirectory ?? path.dirname(session.deckPath);
                 const serializer = new RecordingSerializer();
                 const scriptGen = new VoiceOverScriptGenerator();
                 const captionGen = new CaptionsScaffoldGenerator();
@@ -509,7 +509,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     `⏹️ Recording saved: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
-                    session.recorder?.outputPath,
+                    session.composition?.outputPath ?? session.recorder?.outputPath,
                 );
             }
         }
@@ -576,7 +576,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');
                 const { CaptionsScaffoldGenerator } = await import('./recording/captionsScaffoldGenerator');
 
-                const outputDir = path.dirname(session.deckPath);
+                const outputDir = session.outputDirectory ?? path.dirname(session.deckPath);
                 const serializer = new RecordingSerializer();
                 const scriptGen = new VoiceOverScriptGenerator();
                 const captionGen = new CaptionsScaffoldGenerator();
@@ -593,7 +593,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     `🤖 Auto-record complete: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
-                    session.recorder?.outputPath,
+                    session.composition?.outputPath ?? session.recorder?.outputPath,
                 );
             }
         }

@@ -57,7 +57,8 @@ export function buildSegments(
   }
 
   // Identify boundary events (ordered by time)
-  const sorted = [...events].sort((a, b) => a.relativeTimeMs - b.relativeTimeMs);
+  const sorted = [...events, ...buildTimedCueEvents(events, cues)]
+    .sort((a, b) => a.relativeTimeMs - b.relativeTimeMs);
 
   // Build ordinal cue map before identifying boundaries so both phases use
   // the same matching: voice[N] means the Nth fragment reveal on the slide,
@@ -92,6 +93,38 @@ export function buildSegments(
   return segments;
 }
 
+function buildTimedCueEvents(
+  events: RecordingEvent[],
+  cues: VoiceOverCue[],
+): RecordingEvent[] {
+  return cues.flatMap((cue, index) => {
+    if (cue.offsetMs === undefined) {
+      return [];
+    }
+    const videoStart = events.find(event =>
+      event.type === 'video.started' && event.slideIndex === cue.slideIndex);
+    const videoEnd = events.find(event =>
+      event.type === 'video.ended' &&
+      event.slideIndex === cue.slideIndex &&
+      event.relativeTimeMs >= (videoStart?.relativeTimeMs ?? Number.MAX_SAFE_INTEGER));
+    if (!videoStart || !videoEnd) {
+      return [];
+    }
+    const relativeTimeMs = videoStart.relativeTimeMs + cue.offsetMs;
+    if (relativeTimeMs >= videoEnd.relativeTimeMs) {
+      return [];
+    }
+    return [{
+      id: `timed-cue-${cue.slideIndex}-${index}`,
+      type: 'manual.marker' as const,
+      timestamp: videoStart.timestamp + cue.offsetMs,
+      relativeTimeMs,
+      slideIndex: cue.slideIndex,
+      metadata: { timedCueIndex: index },
+    }];
+  });
+}
+
 /**
  * Build a map from notable event ID → the VoiceOverCue that should narrate
  * that moment.
@@ -107,6 +140,16 @@ function buildCueForEventMap(
   cues: VoiceOverCue[],
 ): Map<string, VoiceOverCue> {
   const map = new Map<string, VoiceOverCue>();
+
+  for (const event of sorted) {
+    const timedCueIndex = event.metadata?.['timedCueIndex'];
+    if (event.type === 'manual.marker' && typeof timedCueIndex === 'number') {
+      const cue = cues[timedCueIndex];
+      if (cue) {
+        map.set(event.id, cue);
+      }
+    }
+  }
 
   const slideIndices = new Set(
     cues.filter(c => c.fragmentIndex !== undefined).map(c => c.slideIndex),
@@ -179,7 +222,7 @@ function identifyBoundaries(
 
   // Priority 1a: slide-level cues — match the first event on each slide
   for (const cue of cues) {
-    if (cue.fragmentIndex !== undefined) { continue; }
+    if (cue.fragmentIndex !== undefined || cue.offsetMs !== undefined) { continue; }
     const match = sorted.find(e =>
       e.slideIndex === cue.slideIndex &&
       !seen.has(e.id),

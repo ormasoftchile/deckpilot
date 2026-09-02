@@ -6,6 +6,8 @@
 import { Action, ActionDefinition } from './action';
 import type { SidecarAction } from './sidecar';
 import type { DiagramBlockRef } from './diagram';
+import type { VideoItemSpec } from './deckItem';
+import type { SidecarCue } from './sidecar';
 
 /**
  * YAML frontmatter structure for a slide
@@ -100,9 +102,11 @@ export interface Slide {
    */
   voiceCues?: Array<{ fragmentIndex?: number; text: string }>;
   /** Speaker cue strings merged from sidecar (DA-05) */
-  cues?: string[];
+  cues?: SidecarCue[];
   /** Slide duration hint merged from sidecar, e.g. "2m30s" (DA-05) */
   duration?: string;
+  /** Video metadata when this compatibility slide represents a video item. */
+  video?: VideoItemSpec;
   /** Actions sourced from sidecar YAML; wired to action registry in DA-07/08 (DA-05) */
   sidecarActions?: SidecarAction[];
   /**

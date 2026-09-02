@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: AutoPilotConfig = {
  */
 export interface AutoPilotStep {
   /** What to do */
-  type: 'advance' | 'trigger-action' | 'wait' | 'close-panel' | 'refocus';
+  type: 'advance' | 'trigger-action' | 'wait' | 'close-panel' | 'refocus' | 'play-video';
   /** How long to wait after this step (ms) */
   durationMs: number;
   /** Slide index this step belongs to */
@@ -96,6 +96,16 @@ export function buildAutoPilotPlan(
         slideIndex: si,
         label: `Advance to slide ${si + 1}`,
       });
+    }
+
+    if (slide.video) {
+      steps.push({
+        type: 'play-video',
+        durationMs: 0,
+        slideIndex: si,
+        label: `Play video: ${slide.video.id}`,
+      });
+      continue;
     }
 
     // Slide-level cue wait

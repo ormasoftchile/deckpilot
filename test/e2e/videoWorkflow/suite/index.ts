@@ -25,8 +25,8 @@ export async function run(): Promise<void> {
   if (!parsed.deck) {
     throw new Error(parsed.error ?? 'Deck parsing failed');
   }
-  if (parsed.deck.slides.length !== 3) {
-    throw new Error(`Expected 3 slides, parsed ${parsed.deck.slides.length}`);
+  if (parsed.deck.slides.length !== 5) {
+    throw new Error(`Expected 5 deck items, parsed ${parsed.deck.slides.length}`);
   }
 
   const extension = vscode.extensions.getExtension('focus-space.executable-talk');
@@ -51,7 +51,14 @@ export async function run(): Promise<void> {
       throw new Error(`Auto-Record did not complete: ${JSON.stringify(session?.recorder)}`);
     }
 
-    const videoPath = session.recorder.outputPath;
+    const capturePath = session.recorder.outputPath;
+    const videoPath = session.composition?.outputPath;
+    if (!videoPath || session.composition?.decisions.length !== 3) {
+      throw new Error(
+        `Expected three composed video items: ${session.compositionError ?? 'no composition output'}; ` +
+        `events=${session.events.map(event => `${event.type}:${JSON.stringify(event.metadata ?? {})}`).join(',')}`,
+      );
+    }
     const resolvedRecorderCommand = session.recorder.startCommand ?? '';
     const captureSize = resolvedRecorderCommand.match(/-video_size (\d+)x(\d+)/);
     if (process.platform === 'win32' && !captureSize) {
@@ -60,16 +67,25 @@ export async function run(): Promise<void> {
     const serializer = new RecordingSerializer();
     const scriptGenerator = new VoiceOverScriptGenerator();
     const captionGenerator = new CaptionsScaffoldGenerator();
-    await serializer.exportSession(session, outputRoot);
-    await scriptGenerator.exportScripts(session, outputRoot);
-    const srtPath = await captionGenerator.exportSrt(session, outputRoot);
+    const sessionDirectory = session.outputDirectory;
+    if (!sessionDirectory || !sessionDirectory.startsWith(outputRoot)) {
+      throw new Error(`Recording did not resolve a session output directory: ${sessionDirectory}`);
+    }
+    const sessionFiles = await serializer.exportSession(session, sessionDirectory);
+    const scriptFiles = await scriptGenerator.exportScripts(session, sessionDirectory);
+    const srtPath = await captionGenerator.exportSrt(session, sessionDirectory);
+    for (const artifact of [videoPath, srtPath, ...sessionFiles, ...scriptFiles]) {
+      if (path.dirname(artifact) !== sessionDirectory) {
+        throw new Error(`Artifact was written outside the session directory: ${artifact}`);
+      }
+    }
 
     await fs.promises.access(videoPath);
     await fs.promises.access(srtPath);
     const srt = await fs.promises.readFile(srtPath, 'utf8');
     const captionCount = (srt.match(/^\d+$/gm) ?? []).length;
-    if (captionCount !== 3) {
-      throw new Error(`Expected 3 SRT entries, exported ${captionCount}`);
+    if (captionCount !== 8) {
+      throw new Error(`Expected 8 SRT entries, exported ${captionCount}`);
     }
     const dubbingExecutable = requiredEnv('SRT_DUBBER_PATH');
     await vscode.workspace
@@ -94,7 +110,9 @@ export async function run(): Promise<void> {
     await fs.promises.writeFile(resultPath, JSON.stringify({
       fixtureRoot,
       outputRoot,
+      sessionDirectory,
       videoPath,
+      capturePath,
       srtPath,
       resolvedRecorderCommand,
       captureWidth: captureSize ? Number(captureSize[1]) : undefined,
@@ -103,6 +121,8 @@ export async function run(): Promise<void> {
       captionCount,
       segmentCount: session.segments.length,
       eventCount: session.events.length,
+      compositionDecisionCount: session.composition.decisions.length,
+      compositionDecisions: session.composition.decisions,
     }, null, 2));
   } finally {
     await conductor.close();

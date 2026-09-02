@@ -29,6 +29,16 @@ export class FilePathValidator implements ValidationCheck {
     const checks: Array<Promise<ValidationIssue | null>> = [];
 
     for (const slide of deck.slides) {
+      if (slide.video) {
+        const deckDirectory = path.dirname(deck.filePath);
+        const videoBase = typeof deck.metadata.basePath === 'string'
+          ? path.resolve(deckDirectory, deck.metadata.basePath)
+          : deckDirectory;
+        checks.push(
+          this.checkPath(slide.video.src, videoBase, slide.index, 'video'),
+        );
+      }
+
       // Check interactive elements (actions)
       for (const el of slide.interactiveElements) {
         if (FILE_ACTION_TYPES.has(el.action.type)) {

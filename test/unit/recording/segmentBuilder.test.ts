@@ -96,6 +96,28 @@ describe('SegmentBuilder', () => {
       expect(segments[1].cueText).to.equal('Explain the action result');
     });
 
+    it('should create timed narration segments within a video item', () => {
+      const events: RecordingEvent[] = [
+        createMockEvent({ type: 'slide.entered', slideIndex: 1, relativeTimeMs: 5000 }),
+        createMockEvent({ type: 'video.started', slideIndex: 1, relativeTimeMs: 5100 }),
+        createMockEvent({ type: 'video.ended', slideIndex: 1, relativeTimeMs: 10100 }),
+        createMockEvent({ type: 'slide.exited', slideIndex: 1, relativeTimeMs: 10200 }),
+      ];
+      const cues: VoiceOverCue[] = [
+        { slideIndex: 1, text: 'Introduce the clip', source: 'frontmatter' },
+        { slideIndex: 1, text: 'Point out the output', source: 'frontmatter', offsetMs: 2500 },
+      ];
+      const slides = [createMockSlide({ index: 0 }), createMockSlide({
+        index: 1,
+        video: { id: 'demo', src: './clips/demo.mp4', audio: 'duck' },
+      })];
+
+      const segments = buildSegments(events, cues, slides);
+      const timed = segments.find(segment => segment.cueText === 'Point out the output');
+
+      expect(timed?.startTimeMs).to.equal(7600);
+    });
+
     it('should fall back to speaker notes when no cue', () => {
       const events: RecordingEvent[] = [
         createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),

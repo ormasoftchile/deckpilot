@@ -5,7 +5,9 @@
 
 import { matter } from './frontmatter';
 import MarkdownIt from 'markdown-it';
+import yaml from 'js-yaml';
 import { Slide, SlideFrontmatter, createSlide } from '../models/slide';
+import type { VideoAudioPolicy, VideoItemSpec } from '../models/deckItem';
 import { parseActionLinks } from './actionLinkParser';
 import { parseActionBlocks } from './actionBlockParser';
 import { parseDiagramBlocks } from './diagramBlockParser';
@@ -167,6 +169,23 @@ export function parseSlides(content: string, options: ParseSlidesOptions = {}): 
  * Parse individual slide content including frontmatter
  */
 function parseSlideContent(index: number, rawContent: string, options: ParseSlidesOptions): Slide {
+  const video = parseVideoBlock(rawContent);
+  if (video) {
+    const escapedId = escapeAttribute(video.id);
+    const escapedSrc = escapeAttribute(video.src);
+    const trimStart = video.trimStartMs ?? 0;
+    const trimEnd = video.trimEndMs ?? 0;
+    const slide = createSlide(
+      index,
+      rawContent,
+      `<div class="deck-video-item" data-video-id="${escapedId}"><video class="deck-video-item-player" src="${escapedSrc}" data-video-id="${escapedId}" data-video-src="${escapedSrc}" data-trim-start="${trimStart}" data-trim-end="${trimEnd}" data-audio-policy="${video.audio}" controls playsinline></video></div>`,
+    );
+    slide.id = video.id;
+    slide.idExplicit = true;
+    slide.video = video;
+    return slide;
+  }
+
   let content = rawContent;
   let frontmatter: SlideFrontmatter | undefined;
   
@@ -344,6 +363,61 @@ function parseSlideContent(index: number, rawContent: string, options: ParseSlid
   }
   
   return slide;
+}
+
+function parseVideoBlock(content: string): VideoItemSpec | undefined {
+  const lines = content.trim().split(/\r?\n/);
+  if (lines[0]?.trim().toLowerCase() !== ':::video') {
+    return undefined;
+  }
+  if (lines[lines.length - 1]?.trim() === ':::') {
+    lines.pop();
+  }
+  lines.shift();
+  const parsed = yaml.load(lines.join('\n')) as Record<string, unknown> | undefined;
+  if (!parsed || typeof parsed.id !== 'string' || typeof parsed.src !== 'string') {
+    throw new Error('video item requires string id and src fields');
+  }
+  const audio = parsed.audio ?? 'duck';
+  if (audio !== 'mute' && audio !== 'preserve' && audio !== 'duck') {
+    throw new Error('video item audio must be mute, preserve, or duck');
+  }
+  const trimStartMs = parseTimeMs(parsed.start, 'start');
+  const trimEndMs = parseTimeMs(parsed.end, 'end');
+  if (trimStartMs !== undefined && trimEndMs !== undefined && trimEndMs <= trimStartMs) {
+    throw new Error('video item end must be after start');
+  }
+  return {
+    id: parsed.id.trim(),
+    src: parsed.src.trim(),
+    audio: audio as VideoAudioPolicy,
+    ...(trimStartMs !== undefined ? { trimStartMs } : {}),
+    ...(trimEndMs !== undefined ? { trimEndMs } : {}),
+  };
+}
+
+function parseTimeMs(value: unknown, field: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.round(value * 1000);
+  }
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d+(?:\.\d+)?)(ms|s)?$/i);
+    if (match) {
+      return Math.round(Number(match[1]) * (match[2]?.toLowerCase() === 'ms' ? 1 : 1000));
+    }
+  }
+  throw new Error(`video item ${field} must be a non-negative time such as 5s or 250ms`);
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /**

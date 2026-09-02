@@ -55,17 +55,17 @@ export function parseCues(slides: Slide[]): VoiceOverCue[] {
     // Sidecar cues are ordered narration beats: the first belongs to slide
     // entry and each subsequent cue follows the next fragment/action event.
     if (slide.cues && slide.cues.length > 0) {
-      const sidecarCues = slide.cues.filter(text => text.trim().length > 0);
+      const sidecarCues = slide.cues.filter(cue =>
+        typeof cue === 'string' ? cue.trim().length > 0 : cue.text.trim().length > 0);
       for (let index = 0; index < sidecarCues.length; index++) {
-        const text = sidecarCues[index];
-        if (text.trim().length > 0) {
-          cues.push({
-            slideIndex: slide.index,
-            text: text.trim(),
-            source: 'frontmatter',
-            ...(index > 0 ? { fragmentIndex: index } : {}),
-          });
-        }
+        const cue = sidecarCues[index];
+        const timed = typeof cue === 'string' ? undefined : parseCueOffset(cue.at);
+        cues.push({
+          slideIndex: slide.index,
+          text: (typeof cue === 'string' ? cue : cue.text).trim(),
+          source: 'frontmatter',
+          ...(timed !== undefined ? { offsetMs: timed } : index > 0 ? { fragmentIndex: index } : {}),
+        });
       }
       continue;
     }
@@ -81,6 +81,19 @@ export function parseCues(slides: Slide[]): VoiceOverCue[] {
   }
 
   return cues;
+}
+
+function parseCueOffset(value: string | number): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.round(value * 1000);
+  }
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d+(?:\.\d+)?)(ms|s)?$/i);
+    if (match) {
+      return Math.round(Number(match[1]) * (match[2]?.toLowerCase() === 'ms' ? 1 : 1000));
+    }
+  }
+  throw new Error(`Timed cue offset must be a non-negative time, got: ${String(value)}`);
 }
 
 /**

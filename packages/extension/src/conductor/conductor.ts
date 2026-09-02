@@ -31,6 +31,7 @@ import {
   createSlideEnteredEvent,
   createSlideExitedEvent,
   createFragmentRevealedEvent,
+  createVideoPlaybackEvent,
   createActionTriggeredEvent,
   createActionCompletedEvent,
   createSceneRestoredEvent,
@@ -39,9 +40,12 @@ import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
 import { buildAutoPilotPlan, AutoPilotStep, AutoPilotConfig, resolveAutoPilotConfig } from '../recording/autoPilot';
+import { resolveRecordingOutputLayout } from '../recording/outputLayout';
+import { composeRecordedVideo, validateVideoSources } from '../recording/videoComposer';
 import { disposeBrowserPanel } from '../browser';
 import { diagramLog } from '../utils/diagramLogger';
 import { DiagramService, annotateDiagramPlaceholders } from '../services/diagramService';
+import type { VideoPlaybackMessage } from '../webview/messages';
 
 /**
  * Actions that require workspace trust
@@ -114,10 +118,13 @@ export class Conductor implements vscode.Disposable {
   private diagramRegistry: DiagramRendererRegistry;
   private diagramService: DiagramService;
   private recorderOrchestrator: RecorderOrchestrator | undefined;
+  private recordingOutputDirectory: string | undefined;
   private autoPilotRunning = false;
   private autoPilotConfig: AutoPilotConfig = resolveAutoPilotConfig();
   /** Pending slide render callback — resolved when webview confirms render complete */
   private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
+  private videoPlaybackStatus = new Map<number, 'playing' | 'ended' | 'failed'>();
+  private videoPlaybackWaiters = new Map<number, (error?: string) => void>();
 
   constructor(extensionUri: vscode.Uri) {
     this.stateStack = new StateStack();
@@ -262,6 +269,9 @@ export class Conductor implements vscode.Disposable {
       onSlideRendered: (payload) => {
         this.handleSlideRendered(payload.slideIndex);
       },
+      onVideoPlayback: (message) => {
+        this.handleVideoPlayback(message);
+      },
     };
 
     // Show presentation
@@ -293,6 +303,10 @@ export class Conductor implements vscode.Disposable {
 
     // Get current slide
     const slide = this.deck.slides[targetIndex];
+    if (slide.video) {
+      this.videoPlaybackStatus.delete(targetIndex);
+      this.videoPlaybackWaiters.delete(targetIndex);
+    }
 
     // Emit recording events after index update
     if (this.recordingState.isRecording()) {
@@ -747,12 +761,25 @@ export class Conductor implements vscode.Disposable {
 
     // Launch external recorder if configured
     const recorderConfig = getRecorderConfig();
+    const session = this.recordingState.getSession();
+    if (!session) {
+      this.outputChannel.appendLine('[Recording] Session failed to initialize');
+      return;
+    }
+    const outputLayout = resolveRecordingOutputLayout({
+      deckPath: this.deck.filePath,
+      sessionId: session.sessionId,
+      startedAt: session.recordingStartTime,
+      exportOutputDir: this.deck.metadata.export?.outputDir,
+      recorderOutputDir: recorderConfig.outputDir,
+    });
+    this.recordingOutputDirectory = outputLayout.sessionDirectory;
+    recorderConfig.outputDir = outputLayout.sessionDirectory;
     this.outputChannel.appendLine(
       `[Recording] Recorder config — start: "${recorderConfig.startCommand}", stop: "${recorderConfig.stopCommand}", dir: "${recorderConfig.outputDir}"`,
     );
     this.recorderOrchestrator = new RecorderOrchestrator(recorderConfig, this.outputChannel);
     if (this.recorderOrchestrator.isConfigured()) {
-      const session = this.recordingState.getSession();
       const sessionId = session?.sessionId ?? 'unknown';
       this.outputChannel.appendLine(`[Recording] Launching recorder for session ${sessionId}`);
       const started = await this.recorderOrchestrator.start(sessionId, this.deck.filePath);
@@ -776,7 +803,45 @@ export class Conductor implements vscode.Disposable {
   async stopRecording(): Promise<RecordingSession | undefined> {
     const session = this.recordingState.stopRecording(this.currentSlideIndex);
     if (session && this.deck) {
-      // Build segments from timeline + deck cues
+      session.outputDirectory = this.recordingOutputDirectory;
+
+      // Stop external recorder and attach metadata
+      if (this.recorderOrchestrator) {
+        await this.recorderOrchestrator.stop(session.sessionId);
+        session.recorder = this.recorderOrchestrator.getMetadata();
+        this.recorderOrchestrator.dispose();
+        this.recorderOrchestrator = undefined;
+      }
+
+      if (session.recorder?.stopped && this.deck.slides.some(slide => slide.video)) {
+        try {
+          const baseDirectory = this.resolvedBasePath();
+          const composed = await composeRecordedVideo(session, baseDirectory);
+          if (composed) {
+            session.composition = composed.composition;
+            for (const event of session.events) {
+              event.relativeTimeMs = composed.plan.mapTime(event.relativeTimeMs);
+              event.timestamp = session.recordingStartTime + event.relativeTimeMs;
+            }
+            for (const interval of session.ignoredIntervals) {
+              interval.startTimeMs = composed.plan.mapTime(interval.startTimeMs);
+              interval.endTimeMs = composed.plan.mapTime(interval.endTimeMs);
+            }
+            session.durationMs = composed.plan.outputDurationMs;
+            session.recordingEndTime = session.recordingStartTime + composed.plan.outputDurationMs;
+            this.outputChannel.appendLine(
+              `[Recording] Composed ${composed.plan.decisions.length} video item(s): ${composed.composition.outputPath}`,
+            );
+          }
+        } catch (error) {
+          session.compositionError = error instanceof Error ? error.message : String(error);
+          this.outputChannel.appendLine(`[Recording] Composition failed: ${session.compositionError}`);
+          void vscode.window.showWarningMessage(
+            `Video composition failed; the raw capture was retained. ${session.compositionError}`,
+          );
+        }
+      }
+
       const cues = parseCues(this.deck.slides);
       session.segments = buildSegments(
         session.events,
@@ -788,14 +853,7 @@ export class Conductor implements vscode.Disposable {
         `[Recording] Session stopped — ${session.events.length} events, ` +
         `${session.segments.length} segments, ${session.durationMs ?? 0}ms`,
       );
-
-      // Stop external recorder and attach metadata
-      if (this.recorderOrchestrator) {
-        await this.recorderOrchestrator.stop(session.sessionId);
-        session.recorder = this.recorderOrchestrator.getMetadata();
-        this.recorderOrchestrator.dispose();
-        this.recorderOrchestrator = undefined;
-      }
+      this.recordingOutputDirectory = undefined;
     }
     return session;
   }
@@ -827,6 +885,15 @@ export class Conductor implements vscode.Disposable {
       return undefined;
     }
 
+    try {
+      await validateVideoSources(this.deck.slides, this.resolvedBasePath());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.outputChannel.appendLine(`[AutoPilot] Video preflight failed: ${message}`);
+      void vscode.window.showErrorMessage(`Cannot auto-record: ${message}`);
+      return undefined;
+    }
+
     this.autoPilotRunning = true;
     this.outputChannel.appendLine('[AutoPilot] Building execution plan...');
 
@@ -846,11 +913,12 @@ export class Conductor implements vscode.Disposable {
       this.outputChannel.appendLine(`  ${step.type} (${step.durationMs}ms) — ${step.label}`);
     }
 
-    // Go to first slide
-    await this.goToSlide(0);
-
     // Start recording (with external recorder if configured)
     await this.startRecording();
+
+    // Re-enter the first item after recording starts. This is required when
+    // the deck begins with a video that may already have previewed on open.
+    await this.goToSlide(0);
 
     // Execute the plan
     try {
@@ -921,11 +989,73 @@ export class Conductor implements vscode.Disposable {
         await this.delay(step.durationMs);
         break;
 
+      case 'play-video':
+        await this.waitForVideoPlayback(step.slideIndex);
+        break;
+
       case 'close-panel':
         await vscode.commands.executeCommand('workbench.action.closePanel');
         await this.delay(500);
         break;
     }
+  }
+
+  private handleVideoPlayback(message: VideoPlaybackMessage): void {
+    const { payload } = message;
+    const type = message.type === 'videoPlaybackStarted'
+      ? 'video.started'
+      : message.type === 'videoPlaybackEnded'
+        ? 'video.ended'
+        : 'video.failed';
+    const status = message.type === 'videoPlaybackStarted'
+      ? 'playing'
+      : message.type === 'videoPlaybackEnded'
+        ? 'ended'
+        : 'failed';
+    this.videoPlaybackStatus.set(payload.slideIndex, status);
+
+    if (this.recordingState.isRecording()) {
+      const video = this.deck?.slides[payload.slideIndex]?.video;
+      this.recordingState.recordEvent(createVideoPlaybackEvent(type, payload.slideIndex, {
+        videoId: payload.videoId,
+        src: video?.src ?? payload.src,
+        trimStartMs: video?.trimStartMs,
+        trimEndMs: video?.trimEndMs,
+        audio: video?.audio,
+        currentTimeMs: payload.currentTimeMs,
+        error: payload.error,
+      }, payload.timestamp));
+    }
+
+    if (status !== 'playing') {
+      this.videoPlaybackWaiters.get(payload.slideIndex)?.(payload.error);
+      this.videoPlaybackWaiters.delete(payload.slideIndex);
+    }
+  }
+
+  private async waitForVideoPlayback(slideIndex: number): Promise<void> {
+    const status = this.videoPlaybackStatus.get(slideIndex);
+    if (status === 'ended') {
+      return;
+    }
+    if (status === 'failed') {
+      throw new Error(`Video playback failed on item ${slideIndex + 1}`);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.videoPlaybackWaiters.delete(slideIndex);
+        reject(new Error(`Video playback timed out on item ${slideIndex + 1}`));
+      }, 30 * 60 * 1000);
+      this.videoPlaybackWaiters.set(slideIndex, (error) => {
+        clearTimeout(timeout);
+        if (error) {
+          reject(new Error(error));
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 
   /**
