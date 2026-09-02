@@ -30,6 +30,23 @@ describe('SegmentBuilder', () => {
       expect(segments[1].slideIndex).to.equal(1);
     });
 
+    it('should not duplicate the first slide for its initial entered event', () => {
+      const events: RecordingEvent[] = [
+        createMockEvent({ type: 'session.started', slideIndex: 0, relativeTimeMs: 0 }),
+        createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 900 }),
+        createMockEvent({ type: 'slide.exited', slideIndex: 0, relativeTimeMs: 3000 }),
+      ];
+      const cues: VoiceOverCue[] = [
+        { slideIndex: 0, text: 'Opening narration', source: 'frontmatter' },
+      ];
+      const slides = [createMockSlide({ index: 0 })];
+
+      const segments = buildSegments(events, cues, slides);
+
+      expect(segments).to.have.length(1);
+      expect(segments[0].cueText).to.equal('Opening narration');
+    });
+
     it('should create segments at fragment boundaries', () => {
       const events: RecordingEvent[] = [
         createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),

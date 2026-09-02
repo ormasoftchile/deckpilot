@@ -141,6 +141,40 @@ Deckpilot coordinates the configured recorder; it does not encode MP4 video
 itself. SRT timings use the actual presentation segment boundaries, while the
 text comes from the sidecar narration cues.
 
+### Record only the VS Code window on Windows
+
+Use Deckpilot's window-bound placeholders as `gdigrab` input options. Add this
+to the workspace's `.vscode/settings.json`:
+
+```json
+{
+  "deckPilot.recording.startCommand": "ffmpeg -hide_banner -loglevel error -y -f gdigrab -draw_mouse 0 -framerate 30 -offset_x {{windowX}} -offset_y {{windowY}} -video_size {{windowWidth}}x{{windowHeight}} -i desktop -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 -preset ultrafast -pix_fmt yuv420p \"{{outputPath}}\"",
+  "deckPilot.recording.outputDir": "./recordings",
+  "deckPilot.recording.outputExtension": "mp4"
+}
+```
+
+`-offset_x`, `-offset_y`, and `-video_size` must appear before `-i desktop`;
+otherwise `gdigrab` captures the entire virtual desktop. Start Auto-Record
+from the VS Code window you want captured. The crop filter removes at most one
+pixel from odd-sized windows because H.264 `yuv420p` requires even dimensions.
+
+### Validate the recording workflow
+
+The Windows end-to-end gate creates a temporary deck and sidecar, launches a
+real Extension Development Host, runs Auto-Record, generates deterministic
+narration takes, invokes srt-dubber, and verifies the final MP4:
+
+```powershell
+npm run test:e2e:video-workflow
+```
+
+Prerequisites are VS Code, ffmpeg/ffprobe on `PATH`, and a Release build of the
+sibling `../srt-dubber` repository. Override discovery with
+`VSCODE_EXECUTABLE_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`, or `SRT_DUBBER_PATH`.
+The Windows recorder resolves the foreground window when Auto-Record begins,
+so keep the intended VS Code window focused at that moment.
+
 ---
 
 ## Authoring

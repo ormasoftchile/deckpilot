@@ -209,7 +209,18 @@ function identifyBoundaries(
   }
 
   // Priority 3: slide changes (including session.started as first slide entry)
+  const sessionStart = sorted.find(e => e.type === 'session.started');
   for (const e of sorted) {
+    if (e.type === 'slide.entered' && sessionStart?.slideIndex === e.slideIndex) {
+      const initialSlideAlreadyExited = sorted.some(candidate =>
+        candidate.type === 'slide.exited' &&
+        candidate.slideIndex === sessionStart.slideIndex &&
+        candidate.relativeTimeMs < e.relativeTimeMs,
+      );
+      if (!initialSlideAlreadyExited) {
+        continue;
+      }
+    }
     if ((e.type === 'slide.entered' || e.type === 'session.started') && !seen.has(e.id)) {
       seen.add(e.id);
       boundaries.push(e);

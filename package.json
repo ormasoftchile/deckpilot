@@ -182,7 +182,7 @@
         "deckPilot.recording.startCommand": {
           "type": "string",
           "default": "",
-          "description": "Shell command to launch an external screen recorder when recording starts. Use {{outputPath}} for the video file path and {{sessionId}} for the session identifier."
+          "description": "Shell command to launch an external screen recorder. Templates: {{outputPath}}, {{sessionId}}, {{windowX}}, {{windowY}}, {{windowWidth}}, and {{windowHeight}}. On Windows, pass the window values to gdigrab as -offset_x, -offset_y, and -video_size input options."
         },
         "deckPilot.recording.stopCommand": {
           "type": "string",
@@ -267,6 +267,8 @@
     "lint:fix": "eslint packages/core/src packages/extension/src --ext ts --fix",
     "test": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
     "test:unit": "mocha --require test/unit/helpers/vscode-mock.cjs --require ts-node/register 'test/unit/**/*.test.ts'",
+    "test:e2e:auto-record": "tsc -b && node out/test/e2e/videoWorkflow/run.js",
+    "test:e2e:video-workflow": "tsc -b && node out/test/e2e/videoWorkflow/run.js",
     "clean": "rimraf out dist packages/core/dist",
     "package": "vsce package --no-dependencies",
     "deploy": "vsce publish --no-dependencies",
