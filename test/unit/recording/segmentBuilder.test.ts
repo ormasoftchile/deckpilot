@@ -60,6 +60,25 @@ describe('SegmentBuilder', () => {
       expect(segments[0].cueText).to.equal('Welcome to the presentation');
     });
 
+    it('should map ordered sidecar narration to completed actions', () => {
+      const events: RecordingEvent[] = [
+        createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),
+        createMockEvent({ type: 'action.completed', slideIndex: 0, relativeTimeMs: 3000 }),
+        createMockEvent({ type: 'slide.exited', slideIndex: 0, relativeTimeMs: 6000 }),
+      ];
+      const cues: VoiceOverCue[] = [
+        { slideIndex: 0, text: 'Introduce the slide', source: 'frontmatter' },
+        { slideIndex: 0, fragmentIndex: 1, text: 'Explain the action result', source: 'frontmatter' },
+      ];
+      const slides = [createMockSlide({ index: 0 })];
+
+      const segments = buildSegments(events, cues, slides);
+
+      expect(segments).to.have.length(2);
+      expect(segments[1].startTimeMs).to.equal(3000);
+      expect(segments[1].cueText).to.equal('Explain the action result');
+    });
+
     it('should fall back to speaker notes when no cue', () => {
       const events: RecordingEvent[] = [
         createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),

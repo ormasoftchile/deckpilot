@@ -62,12 +62,16 @@ Each entry corresponds to a slide by `id`.
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | string | **Required.** Must match a `<!-- id: ... -->` anchor in the deck. |
-| `cues` | string[] | Voice/talk-track lines. One per beat. |
-| `actions` | action[] | Same shape as inline actions, but hidden from the slide UI. Use for `onEnter` automation. |
-| `duration` | string | Target duration (`8s`, `1m30s`). Used by the auto-recorder. |
+| `cues` | string[] | Ordered narration beats. The first is for slide entry; later items map to fragment/action events. |
+| `actions` | action[] | Same shape as inline actions. Rendered as interactive elements and driven by Auto-Pilot. |
+| `duration` | string | Authored target duration (`8s`, `1m30s`). Stored as metadata; Auto-Pilot currently paces from cue word count instead. |
 | `checkpoint` | string | Named checkpoint for retake/recovery during recording. |
 
 ### `recording`
+
+These fields are parsed as deck metadata but do not currently configure or
+start the external recorder. Configure `deckPilot.recording.*` in VS Code
+settings and invoke a recording command explicitly.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -75,6 +79,9 @@ Each entry corresponds to a slide by `id`.
 | `format` | string | `mp4` or `webm`. |
 
 ### `export`
+
+These fields are parsed as deck metadata but do not currently suppress or
+select exports. Stopping a recording exports all supported narration artifacts.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -87,7 +94,7 @@ Each entry corresponds to a slide by `id`.
 - Keep cues **short and spoken-style** — they become subtitles. One sentence per cue.
 - Set `duration` only after at least one practice run — guessing produces bad pacing.
 - Use `checkpoint` between major sections so retake recovery has clean cut points.
-- `actions` in the sidecar are for automation that should happen automatically (e.g. open a file when the slide loads). User-clickable buttons stay in the `.deck.md`.
+- `actions` in the sidecar become interactive presentation elements and are also driven by Auto-Pilot. They are not executed automatically when the slide loads.
 
 ## Extracting an existing deck to a sidecar
 

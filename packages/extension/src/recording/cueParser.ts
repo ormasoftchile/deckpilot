@@ -52,14 +52,18 @@ export function parseCues(slides: Slide[]): VoiceOverCue[] {
       continue;
     }
 
-    // Sidecar cues (slide.cues) are slide-level strings; no fragment association.
+    // Sidecar cues are ordered narration beats: the first belongs to slide
+    // entry and each subsequent cue follows the next fragment/action event.
     if (slide.cues && slide.cues.length > 0) {
-      for (const text of slide.cues) {
+      const sidecarCues = slide.cues.filter(text => text.trim().length > 0);
+      for (let index = 0; index < sidecarCues.length; index++) {
+        const text = sidecarCues[index];
         if (text.trim().length > 0) {
           cues.push({
             slideIndex: slide.index,
             text: text.trim(),
             source: 'frontmatter',
+            ...(index > 0 ? { fragmentIndex: index } : {}),
           });
         }
       }

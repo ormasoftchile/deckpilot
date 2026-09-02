@@ -239,6 +239,7 @@ describe('CueParser', () => {
       expect(cues[0].fragmentIndex).to.be.undefined;
       expect(cues[1].text).to.equal('Second talking point');
       expect(cues[1].source).to.equal('frontmatter');
+      expect(cues[1].fragmentIndex).to.equal(1);
     });
 
     it('should prefer comment cues over sidecar cues when both are present', () => {

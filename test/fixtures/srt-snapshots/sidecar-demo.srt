@@ -11,3 +11,7 @@ output
 3
 00:00:30,100 --> 00:00:32,600
 Show the application starting up
+
+4
+00:00:32,600 --> 00:00:35,400
+Point out the port it binds to

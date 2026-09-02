@@ -14,6 +14,7 @@ export interface SidecarAction {
 
 export interface SidecarSlide {
   id: string;
+  /** Ordered narration beats: slide entry first, then fragment/action events. */
   cues?: string[];
   duration?: string;
   actions?: SidecarAction[];

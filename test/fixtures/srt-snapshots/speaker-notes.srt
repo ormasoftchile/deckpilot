@@ -29,6 +29,6 @@ The imports at the top pull in the
 Conductor and all the providers.
 
 7
-00:01:04,400 --> 00:01:07,600
+00:01:04,400 --> 00:01:06,900
 The activate function registers all
 commands and providers.
