@@ -44,6 +44,9 @@ test-results/
 # Recording binaries and transcripts
 *.mp4
 *.srt
+# Source video items are authored inputs, not generated recordings.
+!clips/**/*.mp4
+!**/clips/**/*.mp4
 # Allow committed snapshot fixtures
 !test/fixtures/**/*.srt
 
@@ -53,6 +56,8 @@ examples/voiceover-script.json
 examples/voiceover-script.md
 examples/recordings/*.srt
 examples/recordings/*.mp4
+recordings/
+**/recordings/
 
 # AI tooling — never commit
 .squad/

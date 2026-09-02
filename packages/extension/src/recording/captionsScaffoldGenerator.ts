@@ -50,8 +50,9 @@ export class CaptionsScaffoldGenerator {
     await fs.promises.mkdir(outputDir, { recursive: true });
 
     let srtFilename = 'captions-draft.srt';
-    if (session.recorder?.outputPath) {
-      const videoBasename = path.basename(session.recorder.outputPath, path.extname(session.recorder.outputPath));
+    const videoPath = session.composition?.outputPath ?? session.recorder?.outputPath;
+    if (videoPath) {
+      const videoBasename = path.basename(videoPath, path.extname(videoPath));
       srtFilename = `${videoBasename}.srt`;
     }
 

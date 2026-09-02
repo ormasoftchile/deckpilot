@@ -728,8 +728,57 @@
     // Update breadcrumb trail (T040)
     updateBreadcrumbTrail(payload.navigationHistory, payload.canGoBack, payload.totalHistoryEntries);
 
+    setupVideoPlayback();
+
     // Notify extension that slide rendering is complete
     vscode.postMessage({ type: 'slideRendered', payload: { slideIndex: currentSlide } });
+  }
+
+  function setupVideoPlayback() {
+    const video = slideContent.querySelector('video.deck-video-item-player');
+    if (!video) return;
+
+    const trimStartMs = Number(video.dataset.trimStart || 0);
+    const trimEndMs = Number(video.dataset.trimEnd || 0);
+    let finished = false;
+
+    // Source audio is applied during post-production. Keep preview playback
+    // muted so Chromium permits Auto-Pilot playback without a user gesture.
+    video.muted = true;
+
+    const post = (type, error) => vscode.postMessage({
+      type,
+      payload: {
+        slideIndex: currentSlide,
+        videoId: video.dataset.videoId || '',
+        src: video.dataset.videoSrc || video.currentSrc,
+        currentTimeMs: Math.round(video.currentTime * 1000),
+        timestamp: Date.now(),
+        ...(error ? { error } : {}),
+      },
+    });
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      video.pause();
+      post('videoPlaybackEnded');
+    };
+
+    video.addEventListener('loadedmetadata', () => {
+      video.currentTime = trimStartMs / 1000;
+      void video.play().catch(error => post('videoPlaybackFailed', String(error)));
+    }, { once: true });
+    video.addEventListener('playing', () => post('videoPlaybackStarted'), { once: true });
+    video.addEventListener('timeupdate', () => {
+      if (trimEndMs > 0 && video.currentTime * 1000 >= trimEndMs) finish();
+    });
+    video.addEventListener('ended', finish, { once: true });
+    video.addEventListener('error', () => {
+      if (finished) return;
+      finished = true;
+      post('videoPlaybackFailed', video.error?.message || 'Video playback failed');
+    }, { once: true });
+    video.load();
   }
 
   function handleDeckLoaded(message) {

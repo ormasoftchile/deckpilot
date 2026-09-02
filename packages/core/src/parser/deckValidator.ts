@@ -102,7 +102,7 @@ export function validateSlideIds(slides: Slide[]): SlideDiagnosticResult[] {
 // Sidecar YAML validation (DA-12)
 // ---------------------------------------------------------------------------
 
-const KNOWN_SIDECAR_KEYS = new Set(['deck', 'slides', 'recording', 'export', 'environment']);
+const KNOWN_SIDECAR_KEYS = new Set(['deck', 'items', 'slides', 'recording', 'export', 'environment']);
 
 /**
  * Extract the 0-based line number from a js-yaml YAMLException, if available.
@@ -120,27 +120,26 @@ function yamlErrorLine(err: unknown): number {
 /**
  * Validate slide entries in an already-parsed SidecarFile.
  *
- * Checks that each entry in `slides[]` has a non-empty string `id` field.
+ * Checks that each entry in `items[]` and `slides[]` has a non-empty string `id` field.
  * Returns one Error-severity diagnostic per missing or blank id.
  */
 function validateSidecarSlideIdPresence(sidecar: SidecarFile): SlideDiagnosticResult[] {
   const diagnostics: SlideDiagnosticResult[] = [];
-  if (!sidecar.slides) {
-    return diagnostics;
+  for (const [key, entries] of [['items', sidecar.items], ['slides', sidecar.slides]] as const) {
+    entries?.forEach((entry, index) => {
+      if (!entry.id || typeof entry.id !== 'string' || entry.id.trim() === '') {
+        diagnostics.push({
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+          },
+          message: `${key}[${index}] is missing a required 'id' field`,
+          severity: SlideDiagnosticSeverity.Error,
+          source: SOURCE,
+        });
+      }
+    });
   }
-  sidecar.slides.forEach((slide, index) => {
-    if (!slide.id || typeof slide.id !== 'string' || slide.id.trim() === '') {
-      diagnostics.push({
-        range: {
-          start: { line: 0, character: 0 },
-          end: { line: 0, character: 0 },
-        },
-        message: `slides[${index}] is missing a required 'id' field`,
-        severity: SlideDiagnosticSeverity.Error,
-        source: SOURCE,
-      });
-    }
-  });
   return diagnostics;
 }
 
@@ -208,7 +207,7 @@ export function validateSidecarSchema(sidecarContent: string): SlideDiagnosticRe
           start: { line: 0, character: 0 },
           end: { line: 0, character: 0 },
         },
-        message: `Unknown top-level key '${key}' — expected one of: deck, slides, recording, export, environment`,
+        message: `Unknown top-level key '${key}' — expected one of: deck, items, slides, recording, export, environment`,
         severity: SlideDiagnosticSeverity.Warning,
         source: SOURCE,
       });
@@ -242,7 +241,11 @@ export function validateSidecarSlideIds(
   slides: Slide[],
   sidecar: SidecarFile,
 ): SlideDiagnosticResult[] {
-  if (!sidecar || !sidecar.slides || sidecar.slides.length === 0) {
+  if (!sidecar) {
+    return [];
+  }
+  const entries = [...(sidecar.slides ?? []), ...(sidecar.items ?? [])];
+  if (entries.length === 0) {
     return [];
   }
 
@@ -250,7 +253,7 @@ export function validateSidecarSlideIds(
     slides.map(s => s.id).filter((id): id is string => id !== undefined),
   );
 
-  return sidecar.slides
+  return entries
     .filter(entry => !knownIds.has(entry.id))
     .map(entry => ({
       range: {

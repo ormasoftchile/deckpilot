@@ -89,6 +89,19 @@ export function createFragmentRevealedEvent(
   return event;
 }
 
+export function createVideoPlaybackEvent(
+  type: 'video.started' | 'video.ended' | 'video.failed',
+  slideIndex: number,
+  metadata: Record<string, unknown>,
+  timestamp?: number,
+): RecordingEvent {
+  const event = baseEvent(type, slideIndex, metadata);
+  if (timestamp !== undefined) {
+    event.timestamp = timestamp;
+  }
+  return event;
+}
+
 /**
  * Create an action.triggered event.
  */

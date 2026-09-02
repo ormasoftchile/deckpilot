@@ -15,6 +15,9 @@ export type RecordingEventType =
   | 'slide.entered'
   | 'slide.exited'
   | 'fragment.revealed'
+  | 'video.started'
+  | 'video.ended'
+  | 'video.failed'
   | 'action.triggered'
   | 'action.completed'
   | 'terminal.command.started'
@@ -65,6 +68,8 @@ export interface RecordingSession {
   recordingEndTime?: number;
   /** Total duration in milliseconds */
   durationMs?: number;
+  /** Directory containing all artifacts produced for this recording session. */
+  outputDirectory?: string;
   /** Ordered list of all recorded events */
   events: RecordingEvent[];
   /** Derived script segments (populated at export time) */
@@ -75,8 +80,31 @@ export interface RecordingSession {
   manualMarkers: ManualMarker[];
   /** External recorder metadata (if configured) */
   recorder?: RecorderMetadata;
+  /** Post-production replacement decisions and composed output. */
+  composition?: RecordingComposition;
+  /** Composition failure while retaining the recoverable raw capture. */
+  compositionError?: string;
   /** Metadata about the export environment */
   exportMetadata: ExportMetadata;
+}
+
+export interface RecordingCompositionDecision {
+  videoId: string;
+  src: string;
+  captureStartMs: number;
+  captureEndMs: number;
+  sourceStartMs: number;
+  sourceEndMs: number;
+  outputStartMs: number;
+  outputEndMs: number;
+  audio: 'mute' | 'preserve' | 'duck';
+}
+
+export interface RecordingComposition {
+  capturePath: string;
+  outputPath: string;
+  outputDurationMs: number;
+  decisions: RecordingCompositionDecision[];
 }
 
 /**
@@ -158,6 +186,8 @@ export interface VoiceOverCue {
   slideIndex: number;
   /** Fragment index, if cue targets a specific fragment */
   fragmentIndex?: number;
+  /** Offset from video.started for timed video-item narration. */
+  offsetMs?: number;
   /** Cue text */
   text: string;
   /** Source of the cue in the deck */

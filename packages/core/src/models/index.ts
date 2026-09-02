@@ -5,6 +5,7 @@
 export * from './action';
 export * from './slide';
 export * from './deck';
+export * from './deckItem';
 export * from './snapshot';
 export * from './env';
 

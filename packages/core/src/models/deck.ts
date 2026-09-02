@@ -5,6 +5,7 @@
 
 import { Slide } from './slide';
 import { EnvDeclaration } from './env';
+import { DeckItem } from './deckItem';
 
 /**
  * Pre-authored scene anchor defined in deck YAML frontmatter.
@@ -162,6 +163,8 @@ export interface Deck {
   author?: string;
   /** Ordered collection of slides */
   slides: Slide[];
+  /** Ordered presentation items. Video items retain backing slides for protocol compatibility. */
+  items?: DeckItem[];
   /** Default list fragmentation mode for presentation rendering */
   listFragmentMode?: ListFragmentMode;
   /** Zero-based index of active slide */
@@ -186,11 +189,15 @@ export function createDeck(
   slides: Slide[],
   metadata: DeckMetadata = {}
 ): Deck {
+  const items: DeckItem[] = slides.map((slide, index) => slide.video
+    ? { kind: 'video', index, slide, ...slide.video }
+    : { kind: 'slide', id: slide.id ?? `slide-${index + 1}`, index, slide });
   return {
     filePath,
     title: metadata.title,
     author: metadata.author,
     slides,
+    items,
     listFragmentMode: metadata.listFragmentMode,
     currentSlideIndex: 0,
     metadata,

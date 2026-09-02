@@ -20,7 +20,7 @@ deck:
   title: My Talk            # optional override; .deck.md frontmatter wins on conflict
   theme: dark
 
-slides:
+items:
   - id: intro               # matches <!-- id: intro --> in the .deck.md
     cues:
       - Welcome the audience and frame the problem
@@ -36,6 +36,12 @@ slides:
       - Walk through dependency output, point out the lockfile commit
     duration: 18s
 
+  - id: execution-demo
+    cues:
+      - Introduce the video clip
+      - at: 8.5s
+        text: Point out the updated output
+
 recording:
   autoStart: false
   format: mp4
@@ -46,6 +52,9 @@ export:
   srtFormat: srt
 ```
 
+`items[]` is canonical for new decks and may reference either Markdown slides
+or `:::video` item IDs. The legacy `slides[]` key remains supported.
+
 ## Field reference
 
 ### `deck`
@@ -55,14 +64,14 @@ export:
 | `title` | string | Optional. The `.deck.md` frontmatter title takes precedence. |
 | `theme` | string | `dark` or `light`. |
 
-### `slides[]`
+### `items[]`
 
-Each entry corresponds to a slide by `id`.
+Each entry corresponds to a slide or video item by `id`.
 
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | string | **Required.** Must match a `<!-- id: ... -->` anchor in the deck. |
-| `cues` | string[] | Ordered narration beats. The first is for slide entry; later items map to fragment/action events. |
+| `cues` | array | Ordered narration beats. Slides use strings for entry/fragment/action events. Videos use a first string plus `{ at, text }` timed cues. |
 | `actions` | action[] | Same shape as inline actions. Rendered as interactive elements and driven by Auto-Pilot. |
 | `duration` | string | Authored target duration (`8s`, `1m30s`). Stored as metadata; Auto-Pilot currently paces from cue word count instead. |
 | `checkpoint` | string | Named checkpoint for retake/recovery during recording. |

@@ -4,6 +4,7 @@
  */
 
 import { expect } from 'chai';
+import * as path from 'path';
 import { FilePathValidator } from '../../../packages/extension/src/validation/filePathValidator';
 import { ValidationContext } from '../../../packages/extension/src/validation/types';
 import { Deck } from '../../../packages/core/src/models/deck';
@@ -121,6 +122,34 @@ describe('FilePathValidator', () => {
     const issues = await validator.run(context);
 
     expect(issues.some(i => i.severity === 'error')).to.be.true;
+  });
+
+  it('should validate video item source paths', async () => {
+    const slide = createSlide(0, '', '');
+    slide.video = {
+      id: 'demo',
+      src: 'clips/missing-demo.mp4',
+      audio: 'duck',
+    };
+    const context = makeContext([slide], process.cwd());
+
+    const issues = await validator.run(context);
+
+    expect(issues).to.have.length(1);
+    expect(issues[0].source).to.equal('video');
+    expect(issues[0].target).to.equal('clips/missing-demo.mp4');
+  });
+
+  it('should resolve video sources from the deck basePath', async () => {
+    const slide = createSlide(0, '', '');
+    slide.video = { id: 'fixture', src: 'package.json', audio: 'duck' };
+    const context = makeContext([slide], process.cwd());
+    context.deck.filePath = path.join(process.cwd(), 'decks', 'fixture.deck.md');
+    context.deck.metadata.basePath = '..';
+
+    const issues = await validator.run(context);
+
+    expect(issues).to.have.length(0);
   });
 
   it('should check multiple files in parallel', async () => {

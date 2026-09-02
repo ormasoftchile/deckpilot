@@ -460,7 +460,7 @@ describe('deckValidator — validateSidecarSchema() unit (DA-12)', () => {
     expect(diags).to.have.length(1);
     expect(diags[0].severity).to.equal(SlideDiagnosticSeverity.Warning);
     expect(diags[0].message).to.include("'unknown_key'");
-    expect(diags[0].message).to.include('deck, slides, recording, export');
+    expect(diags[0].message).to.include('deck, items, slides, recording, export');
   });
 
   it('returns a Warning per unknown key (two unknown keys → two Warnings)', () => {
@@ -525,6 +525,15 @@ describe('deckValidator — validateSidecarSchema() unit (DA-12)', () => {
     const yaml = 'slides:\n  - id: intro\n  - id: setup\n  - id: demo';
     const diags = validateSidecarSchema(yaml);
     expect(diags.filter(d => d.severity === SlideDiagnosticSeverity.Error)).to.have.length(0);
+  });
+
+  it('accepts canonical items and requires their ids', () => {
+    const valid = validateSidecarSchema('items:\n  - id: intro\n  - id: demo-video');
+    expect(valid).to.have.length(0);
+
+    const invalid = validateSidecarSchema('items:\n  - cues:\n    - missing id');
+    expect(invalid).to.have.length(1);
+    expect(invalid[0].message).to.include('items[0]');
   });
 
   it('sets source to "Deckpilot" on all diagnostic types', () => {

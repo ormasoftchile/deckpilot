@@ -15,7 +15,7 @@ export interface SidecarAction {
 export interface SidecarSlide {
   id: string;
   /** Ordered narration beats: slide entry first, then fragment/action events. */
-  cues?: string[];
+  cues?: SidecarCue[];
   duration?: string;
   actions?: SidecarAction[];
   checkpoint?: string;
@@ -31,6 +31,15 @@ export interface SidecarSlide {
    */
   autoFragment?: boolean;
 }
+
+export interface SidecarTimedCue {
+  at: string | number;
+  text: string;
+}
+
+export type SidecarCue = string | SidecarTimedCue;
+
+export type SidecarItem = SidecarSlide;
 
 export interface SidecarDeck {
   title?: string;
@@ -93,6 +102,8 @@ export interface SidecarFile {
   deck?: SidecarDeck;
   scenes?: SidecarScene[];
   slides?: SidecarSlide[];
+  /** Canonical metadata for ordered slide and video items. */
+  items?: SidecarItem[];
   recording?: SidecarRecording;
   export?: SidecarExport;
   environment?: SidecarEnvironment;

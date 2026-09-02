@@ -242,6 +242,26 @@ describe('CueParser', () => {
       expect(cues[1].fragmentIndex).to.equal(1);
     });
 
+    it('should parse timed sidecar cues for a video item', () => {
+      const slides = [
+        createMockSlide({
+          index: 1,
+          video: { id: 'demo', src: './clips/demo.mp4', audio: 'duck' },
+          cues: [
+            'Introduce the clip',
+            { at: '2.5s', text: 'Point out the output' },
+          ],
+        }),
+      ];
+
+      const cues = parseCues(slides);
+
+      expect(cues).to.have.length(2);
+      expect(cues[0].offsetMs).to.be.undefined;
+      expect(cues[1].offsetMs).to.equal(2500);
+      expect(cues[1].text).to.equal('Point out the output');
+    });
+
     it('should prefer comment cues over sidecar cues when both are present', () => {
       const slides = [
         createMockSlide({

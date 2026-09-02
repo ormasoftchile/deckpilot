@@ -34,6 +34,7 @@ async function main(): Promise<void> {
 
   await fs.promises.rm(fixtureRoot, { recursive: true, force: true });
   await fs.promises.mkdir(outputRoot, { recursive: true });
+  await fs.promises.mkdir(path.join(fixtureRoot, 'clips'), { recursive: true });
   await fs.promises.access(srtDubber);
 
   const ffmpeg = process.env['FFMPEG_PATH'] ?? 'ffmpeg';
@@ -46,6 +47,14 @@ async function main(): Promise<void> {
     '-hide_banner', '-loglevel', 'error', '-y',
     '-f', 'lavfi', '-i', 'color=c=blue:s=960x540',
     '-frames:v', '1', path.join(fixtureRoot, 'closing.png'),
+  ]);
+  await execFile(ffmpeg, [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=red:s=640x360:r=15:d=2',
+    '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=2',
+    '-map', '0:v:0', '-map', '1:a:0',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
+    path.join(fixtureRoot, 'clips', 'execution-demo.mp4'),
   ]);
 
   await fs.promises.writeFile(
@@ -69,10 +78,27 @@ autoRecord:
 
 <!-- slide -->
 
-<!-- id: middle -->
-# Middle
+:::video
+id: duck-demo
+src: ./clips/execution-demo.mp4
+audio: duck
+:::
 
-The presentation is being driven by Auto-Record.
+<!-- slide -->
+
+:::video
+id: mute-demo
+src: ./clips/execution-demo.mp4
+audio: mute
+:::
+
+<!-- slide -->
+
+:::video
+id: preserve-demo
+src: ./clips/execution-demo.mp4
+audio: preserve
+:::
 
 <!-- slide -->
 
@@ -86,13 +112,25 @@ The presentation is being driven by Auto-Record.
 
   await fs.promises.writeFile(
     path.join(fixtureRoot, 'workflow.deck.yaml'),
-    `slides:
+    `items:
   - id: opening
     cues:
       - "Opening narration fixture."
-  - id: middle
+  - id: duck-demo
     cues:
-      - "Middle narration fixture."
+      - "Ducked video narration fixture."
+      - at: 900ms
+        text: "Timed ducked video narration fixture."
+  - id: mute-demo
+    cues:
+      - "Muted video narration fixture."
+      - at: 900ms
+        text: "Timed muted video narration fixture."
+  - id: preserve-demo
+    cues:
+      - "Preserved video narration fixture."
+      - at: 900ms
+        text: "Timed preserved video narration fixture."
   - id: closing
     cues:
       - "Closing narration fixture."
@@ -135,6 +173,13 @@ The presentation is being driven by Auto-Record.
     captionCount: number;
     captureWidth?: number;
     captureHeight?: number;
+    compositionDecisionCount: number;
+    capturePath: string;
+    compositionDecisions: Array<{
+      videoId: string;
+      outputStartMs: number;
+      outputEndMs: number;
+    }>;
   };
   const takesDir = path.join(fixtureRoot, 'fixture-takes');
   await fs.promises.mkdir(takesDir, { recursive: true });
@@ -150,7 +195,7 @@ The presentation is being driven by Auto-Record.
     '--assemble-with-takes', result.srtPath, result.videoPath, takesDir,
   ]);
 
-  const finalVideoPath = path.join(result.outputRoot, 'output', 'output.mp4');
+  const finalVideoPath = path.join(path.dirname(result.srtPath), 'output', 'output.mp4');
   const probe = await execFile(process.env['FFPROBE_PATH'] ?? 'ffprobe', [
     '-v', 'error',
     '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height',
@@ -187,6 +232,43 @@ The presentation is being driven by Auto-Record.
     throw new Error('srt-dubber changed the encoded video stream');
   }
 
+  const duckDecision = result.compositionDecisions.find(decision => decision.videoId === 'duck-demo');
+  if (!duckDecision) {
+    throw new Error('Missing duck-demo composition decision');
+  }
+  const clipMiddleSeconds = ((duckDecision.outputStartMs +
+    duckDecision.outputEndMs) / 2 / 1000).toFixed(3);
+  const frameStats = await execFile(ffmpeg, [
+    '-hide_banner', '-nostats', '-ss', clipMiddleSeconds, '-i', finalVideoPath,
+    '-vf', 'crop=100:100:(iw-100)/2:(ih-100)/2,signalstats,metadata=print',
+    '-frames:v', '1', '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null',
+  ]);
+  const uAverage = Number(frameStats.stderr.match(/lavfi\.signalstats\.UAVG=([\d.]+)/)?.[1]);
+  const vAverage = Number(frameStats.stderr.match(/lavfi\.signalstats\.VAVG=([\d.]+)/)?.[1]);
+  if (!(uAverage < 110 && vAverage > 220)) {
+    throw new Error(`Inserted source clip was not red at ${clipMiddleSeconds}s: U=${uAverage}, V=${vAverage}`);
+  }
+
+  const policyVolumes = new Map<string, number>();
+  for (const decision of result.compositionDecisions) {
+    const sampleSeconds = ((decision.outputStartMs + 1750) / 1000).toFixed(3);
+    const audioStats = await execFile(ffmpeg, [
+      '-hide_banner', '-nostats', '-ss', sampleSeconds, '-t', '0.2',
+      '-i', finalVideoPath, '-map', '0:a:0', '-af', 'volumedetect',
+      '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null',
+    ]);
+    const rawVolume = audioStats.stderr.match(/mean_volume: ([-\w.]+) dB/)?.[1];
+    policyVolumes.set(decision.videoId, rawVolume === '-inf' ? Number.NEGATIVE_INFINITY : Number(rawVolume));
+  }
+  const muteVolume = policyVolumes.get('mute-demo') ?? 0;
+  const duckVolume = policyVolumes.get('duck-demo') ?? Number.NEGATIVE_INFINITY;
+  const preserveVolume = policyVolumes.get('preserve-demo') ?? Number.NEGATIVE_INFINITY;
+  if (!(muteVolume < -70 && duckVolume > -50 && preserveVolume - duckVolume > 8)) {
+    throw new Error(
+      `Unexpected policy levels: mute=${muteVolume}, duck=${duckVolume}, preserve=${preserveVolume}`,
+    );
+  }
+
   process.stdout.write(`${JSON.stringify({
     ...result,
     finalVideoPath,
@@ -194,6 +276,9 @@ The presentation is being driven by Auto-Record.
     audioCodec: audio.codec_name,
     width: video.width,
     height: video.height,
+    insertedFrameUAverage: uAverage,
+    insertedFrameVAverage: vAverage,
+    sourceAudioPolicyVolumesDb: Object.fromEntries(policyVolumes),
     videoHash: finalHash.stdout.trim(),
   }, null, 2)}\n`);
 }

@@ -178,6 +178,18 @@ export interface SlideRenderedMessage {
   };
 }
 
+export interface VideoPlaybackMessage {
+  type: 'videoPlaybackStarted' | 'videoPlaybackEnded' | 'videoPlaybackFailed';
+  payload: {
+    slideIndex: number;
+    videoId: string;
+    src: string;
+    currentTimeMs: number;
+    timestamp: number;
+    error?: string;
+  };
+}
+
 /**
  * Union of all Webview → Host messages
  */
@@ -198,6 +210,7 @@ export type WebviewToHostMessage =
   | ResetToCheckpointMessage
   | FragmentRevealedMessage
   | RecordingMarkerMessage
+  | VideoPlaybackMessage
   | SlideRenderedMessage;
 
 // ============================================================================

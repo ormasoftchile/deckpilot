@@ -34,6 +34,7 @@ import {
   RecordingMarkerPayload,
   RecordingStatusPayload,
   SlideRenderedPayload,
+  VideoPlaybackMessage,
 } from './messages';
 import { isWebviewMessage, createMessageDispatcher, MessageHandlers } from './messageHandler';
 import { Deck } from '@deckpilot/core/models/deck';
@@ -62,6 +63,7 @@ export interface WebviewCallbacks {
   onFragmentRevealed?(payload: FragmentRevealedPayload): void;
   onRecordingMarker?(payload: RecordingMarkerPayload): void;
   onSlideRendered?(payload: SlideRenderedPayload): void;
+  onVideoPlayback?(message: VideoPlaybackMessage): void;
 }
 
 /**
@@ -400,6 +402,9 @@ export class WebviewProvider implements vscode.Disposable {
       onSlideRendered: (payload: SlideRenderedPayload) => {
         this.callbacks?.onSlideRendered?.(payload);
       },
+      onVideoPlayback: (message: VideoPlaybackMessage) => {
+        this.callbacks?.onVideoPlayback?.(message);
+      },
     };
 
     const dispatcher = createMessageDispatcher(handlers);
@@ -423,10 +428,10 @@ export class WebviewProvider implements vscode.Disposable {
       path: vscode.Uri.file(deckFilePath).path.replace(/\/[^/]+$/, '') 
     });
 
-    // Transform src attributes in img tags
+    // Transform src attributes in local image and video tags.
     // Match: src="path" or src='path' (not starting with http, https, data, or webview URI scheme)
     return html.replace(
-      /(<img[^>]*\ssrc=["'])(?!https?:|data:|vscode-webview:)([^"']+)(["'][^>]*>)/gi,
+      /(<(?:img|video|source)\b[^>]*\ssrc=["'])(?!https?:|data:|vscode-webview:)([^"']+)(["'][^>]*>)/gi,
       (_match, prefix: string, src: string, suffix: string) => {
         try {
           // Decode HTML entities in the src
@@ -449,7 +454,7 @@ export class WebviewProvider implements vscode.Disposable {
           return `${prefix}${webviewUri.toString()}${suffix}`;
         } catch (error) {
           // If transformation fails, return original
-          console.warn('Failed to transform image URL:', src, error);
+          console.warn('Failed to transform media URL:', src, error);
           return _match;
         }
       }
@@ -530,7 +535,7 @@ export class WebviewProvider implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https: data:; media-src ${webview.cspSource};">
   <link href="${cssUri}" rel="stylesheet">
   <title>Presentation</title>
 </head>
