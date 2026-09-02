@@ -5,6 +5,7 @@ import * as path from 'path';
 import {
   findLatestNarrationArtifacts,
   resolveDubbingExecutable,
+  validateNarrationArtifacts,
 } from '../../../packages/extension/src/dubbing/dubbingDiscovery';
 
 describe('dubbing discovery', () => {
@@ -49,11 +50,56 @@ describe('dubbing discovery', () => {
     expect(result).to.be.undefined;
   });
 
+  it('rejects an empty SRT before launching narration', async () => {
+    const videoPath = path.join(root, 'talk.mp4');
+    const srtPath = path.join(root, 'talk.srt');
+    await fs.promises.writeFile(videoPath, 'video');
+    await fs.promises.writeFile(srtPath, '');
+
+    const error = await validateNarrationArtifacts({ videoPath, srtPath, modifiedMs: Date.now() });
+
+    expect(error).to.include('no narration entries');
+  });
+
+  it('rejects a whitespace-only SRT before launching narration', async () => {
+    const videoPath = path.join(root, 'talk.mp4');
+    const srtPath = path.join(root, 'talk.srt');
+    await fs.promises.writeFile(videoPath, 'video');
+    await fs.promises.writeFile(srtPath, ' \r\n\t');
+
+    const error = await validateNarrationArtifacts({ videoPath, srtPath, modifiedMs: Date.now() });
+
+    expect(error).to.include('no narration entries');
+  });
+
+  it('rejects an empty MP4 before launching narration', async () => {
+    const videoPath = path.join(root, 'talk.mp4');
+    const srtPath = path.join(root, 'talk.srt');
+    await fs.promises.writeFile(videoPath, '');
+    await fs.promises.writeFile(srtPath, '1\n00:00:00,000 --> 00:00:01,000\nHello');
+
+    const error = await validateNarrationArtifacts({ videoPath, srtPath, modifiedMs: Date.now() });
+
+    expect(error).to.equal('The exported MP4 is empty.');
+  });
+
   it('resolves an explicit executable path', async () => {
     const executable = path.join(root, process.platform === 'win32' ? 'srt-dubber.exe' : 'srt-dubber');
     await fs.promises.writeFile(executable, 'binary');
 
     expect(resolveDubbingExecutable(executable, root, '')).to.equal(executable);
+  });
+
+  it('resolves a configured path relative to the deck directory', async () => {
+    const deckDirectory = path.join(root, 'deck');
+    const toolsDirectory = path.join(root, 'tools');
+    await fs.promises.mkdir(deckDirectory);
+    await fs.promises.mkdir(toolsDirectory);
+    const filename = process.platform === 'win32' ? 'srt-dubber.exe' : 'srt-dubber';
+    const executable = path.join(toolsDirectory, filename);
+    await fs.promises.writeFile(executable, 'binary');
+
+    expect(resolveDubbingExecutable(`../tools/${filename}`, deckDirectory, '')).to.equal(executable);
   });
 
   it('resolves srt-dubber from PATH', async () => {

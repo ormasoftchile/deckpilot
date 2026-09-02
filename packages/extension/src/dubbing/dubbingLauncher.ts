@@ -3,12 +3,19 @@ import * as vscode from 'vscode';
 import {
   NarrationArtifacts,
   resolveDubbingExecutable,
+  validateNarrationArtifacts,
 } from './dubbingDiscovery';
 
 export async function launchNarration(
   artifacts: NarrationArtifacts,
   baseDirectory: string,
 ): Promise<boolean> {
+  const artifactError = await validateNarrationArtifacts(artifacts);
+  if (artifactError) {
+    await vscode.window.showErrorMessage(`Cannot record narration: ${artifactError}`);
+    return false;
+  }
+
   const configured = vscode.workspace
     .getConfiguration('deckPilot.dubbing')
     .get<string>('executable', 'srt-dubber');

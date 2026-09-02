@@ -1,0 +1,21 @@
+deck:
+  title: Video Workflow Walkthrough
+  theme: dark
+
+items:
+  - id: intro
+    cues:
+      - "This slide was rendered directly from Markdown by Deckpilot."
+
+  - id: execution-demo
+    cues:
+      - "Source video starts."
+      - at: 2s
+        text: "A timed cue lands here."
+
+  - id: summary
+    cues:
+      - "The source clip and rendered slides are now one composed presentation."
+
+export:
+  outputDir: ./recordings
