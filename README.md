@@ -270,6 +270,10 @@ to the workspace's `.vscode/settings.json`:
 otherwise `gdigrab` captures the entire virtual desktop. Start Auto-Record
 from the VS Code window you want captured. The crop filter removes at most one
 pixel from odd-sized windows because H.264 `yuv420p` requires even dimensions.
+On Windows, Deckpilot resolves the visible frame in physical pixels using DWM,
+including negative offsets and mixed-DPI multi-monitor layouts. If physical
+window bounds cannot be resolved, recording fails instead of falling back to a
+desktop region that could expose another monitor.
 
 ### Validate the recording workflow
 

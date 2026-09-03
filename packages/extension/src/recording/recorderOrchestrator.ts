@@ -16,6 +16,12 @@ import * as cp from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import { RecorderMetadata } from '@deckpilot/core/models/recording';
+import {
+  buildWindowsBoundsScript,
+  parseWindowsBounds,
+  resolveWindowPlaceholders,
+  WindowBounds,
+} from './windowsCaptureBounds';
 
 export interface RecorderConfig {
   startCommand: string;
@@ -24,13 +30,6 @@ export interface RecorderConfig {
   outputExtension: string;
   /** avfoundation / directshow screen device identifier, e.g. "0:none" or "1" */
   screenDevice: string;
-}
-
-interface WindowBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
 }
 
 /**
@@ -326,22 +325,12 @@ export class RecorderOrchestrator {
     if (/\{\{window(X|Y|Width|Height)\}\}/.test(result)) {
       const bounds = await this.getWindowBounds();
       if (bounds) {
-        result = result
-          .replace(/\{\{windowX\}\}/g, String(bounds.x))
-          .replace(/\{\{windowY\}\}/g, String(bounds.y))
-          .replace(/\{\{windowWidth\}\}/g, String(bounds.width))
-          .replace(/\{\{windowHeight\}\}/g, String(bounds.height));
+        result = resolveWindowPlaceholders(result, bounds);
         this.outputChannel.appendLine(
-          `[Recorder] Window bounds: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`,
+          `[Recorder] Physical window bounds: ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`,
         );
       } else {
-        this.outputChannel.appendLine('[Recorder] Could not detect window bounds, falling back to desktop');
-        // Replace with desktop fallback (remove offset/size, user gets full screen)
-        result = result
-          .replace(/\{\{windowX\}\}/g, '0')
-          .replace(/\{\{windowY\}\}/g, '0')
-          .replace(/\{\{windowWidth\}\}/g, '1920')
-          .replace(/\{\{windowHeight\}\}/g, '1080');
+        result = resolveWindowPlaceholders(result, undefined);
       }
     }
 
@@ -403,27 +392,7 @@ export class RecorderOrchestrator {
    */
   private getWindowBoundsWindows(): Promise<WindowBounds | undefined> {
     return new Promise((resolve) => {
-      const script = [
-        'Add-Type @"',
-        'using System;',
-        'using System.Runtime.InteropServices;',
-        'public class WinRect {',
-        '  [DllImport("user32.dll")]',
-        '  public static extern IntPtr GetForegroundWindow();',
-        '  [DllImport("user32.dll")]',
-        '  [return: MarshalAs(UnmanagedType.Bool)]',
-        '  public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);',
-        '  [StructLayout(LayoutKind.Sequential)]',
-        '  public struct RECT { public int Left, Top, Right, Bottom; }',
-        '}',
-        '"@',
-        '$hwnd = [WinRect]::GetForegroundWindow()',
-        '$rect = New-Object WinRect+RECT',
-        '[WinRect]::GetWindowRect($hwnd, [ref]$rect) | Out-Null',
-        '$w = $rect.Right - $rect.Left',
-        '$h = $rect.Bottom - $rect.Top',
-        '  Write-Output "$($rect.Left),$($rect.Top),$w,$h"',
-      ].join('\n');
+      const script = buildWindowsBoundsScript();
 
       const tmpFile = path.join(os.tmpdir(), 'et-window-bounds.ps1');
       fs.writeFileSync(tmpFile, script, 'utf-8');
@@ -438,10 +407,9 @@ export class RecorderOrchestrator {
             return;
           }
 
-          const parts = stdout.trim().split(',').map(Number);
-          if (parts.length === 4 &&
-              parts.every(n => !isNaN(n)) && parts[2] > 0 && parts[3] > 0) {
-            resolve({ x: parts[0], y: parts[1], width: parts[2], height: parts[3] });
+          const bounds = parseWindowsBounds(stdout);
+          if (bounds) {
+            resolve(bounds);
           } else {
             this.outputChannel.appendLine(`[Recorder] Unexpected bounds output: ${stdout.trim()}`);
             resolve(undefined);
