@@ -150,22 +150,29 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
 
 1. Write a `.deck.md` deck and put ordered narration cues in its `.deck.yaml` sidecar
 2. Configure an external recorder in VS Code settings (e.g. ffmpeg)
-3. Start the presentation, then run **Deckpilot: Auto-Record Deck**
-4. Deckpilot creates `narration.srt` and opens srt-dubber before capture begins
-5. Record and review every cue in srt-dubber, then quit it to continue
-6. Deckpilot processes the takes without fitting the provisional SRT slots, drives
+3. With the deck open, run **Deckpilot: Record or Update Narration**
+4. Record pending cues in srt-dubber, then quit. Existing takes whose normalized
+  cue text is unchanged are reused, even when cues move; only added or edited cues
+  need recording
+5. With the deck editor active, run **Deckpilot: Auto-Record Deck**; Deckpilot
+  opens presentation mode automatically
+6. Deckpilot uses the prepared takes to drive
   and captures the presentation using their measured durations, rewrites the SRT
   with the real capture timestamps, resyncs the takes, and assembles the final video
 7. When done, Deckpilot exports:
   - MP4 screen capture and composed presentation video
-  - Final `narration.srt` and `narration-project.json`
+  - Final `<deck>.srt` and `<deck>-project.json`
   - `voiceover-script.md` and `voiceover-script.json`
   - `recording-session.json` (full timing log)
-  - `output/narration-dubbed.mp4` (final narrated video)
+  - `output/<deck>-dubbed.mp4` (final narrated video)
 
 Deckpilot coordinates the configured recorder; it does not encode MP4 video
 itself during capture. Processed narration duration is authoritative for
 Auto-Pilot pacing; the initial SRT timestamps are only a recording scaffold.
+The production timeline is calculated before capture: each item starts after
+the configured pre-roll and all preceding measured narration or media durations.
+Video playback callbacks locate the raw interval to replace, but never determine
+the clip's published start time.
 When a deck contains video items, Deckpilot composes a final MP4 afterward by
 replacing the captured playback intervals with the source clips. Final SRT
 timings use the remapped presentation segment boundaries, while the text comes
@@ -226,18 +233,16 @@ For video items, the first string cue starts at video entry. Additional cues
 use `{ at, text }`, where `at` is relative to the trimmed clip start and accepts
 seconds or milliseconds. Timed cues are remapped with the composed video.
 
-Each recording is isolated under
-`recordings/<deck>/<timestamp-session>/`. The folder contains the recoverable
-`session-*.mp4` capture, composed `<deck>.mp4`, final `narration.srt`, recording
-manifest, and voice-over scripts. srt-dubber creates `narration-project.json`,
-raw takes, processed audio, and `output/narration-dubbed.mp4` inside the same
-session folder.
+Narration is persistent under `recordings/<deck>/narration/`, including its SRT,
+project metadata, raw takes, and processed takes. Running **Record or Update
+Narration** after editing the deck resyncs that project by normalized cue text.
 
-You can also run **Deckpilot: Record Narration for Latest Export** from the
-Command Palette while the deck is open. Deckpilot searches its configured
-recording output, `recordings/`, and the deck directory for the newest matching
-MP4/SRT pair. It resolves `srt-dubber` from `PATH` by default; configure an
-explicit executable when needed:
+Each visual recording is isolated under `recordings/<deck>/<timestamp-session>/`.
+The session folder contains the recoverable
+`session-*.mp4` capture, composed `<deck>.mp4`, final `narration.srt`, recording
+manifest, voice-over scripts, a staged narration project, and the final
+`output/<deck>-dubbed.mp4`. Deckpilot resolves `srt-dubber` from `PATH` by
+default; configure an explicit executable when needed:
 
 ```json
 {

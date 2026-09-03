@@ -186,16 +186,34 @@ audio: preserve
     compositionDecisionCount: number;
     capturePath: string;
     finalVideoPath: string;
+    sessionStoppedMs?: number;
+    narrationSegments: Array<{ text: string; startTimeMs: number; endTimeMs: number; durationMs: number }>;
     narrationTimings: Array<{ cueIndex: number; durationMs: number }>;
     compositionDecisions: Array<{
       videoId: string;
       outputStartMs: number;
       outputEndMs: number;
     }>;
+    runtimeVideoStarts: number[];
+    outputDurationMs: number;
+    firstNarrationStartMs: number;
   };
   if (result.narrationTimings.length !== result.captionCount ||
       result.narrationTimings.some(timing => timing.durationMs <= 0)) {
     throw new Error(`Invalid narration timings: ${JSON.stringify(result.narrationTimings)}`);
+  }
+  if (result.narrationSegments.length !== result.narrationTimings.length ||
+      result.narrationSegments.some((segment, index) =>
+        segment.durationMs !== result.narrationTimings[index].durationMs ||
+        segment.endTimeMs <= segment.startTimeMs)) {
+    throw new Error(`Narration segments lost measured timing: ${JSON.stringify(result.narrationSegments)}`);
+  }
+  if (result.compositionDecisions.some((decision, index) =>
+    decision.outputStartMs !== result.runtimeVideoStarts[index])) {
+    throw new Error(
+      `Video placement did not follow mapped runtime events: ` +
+      `${JSON.stringify(result.compositionDecisions)} vs ${JSON.stringify(result.runtimeVideoStarts)}`,
+    );
   }
 
   const finalVideoPath = result.finalVideoPath;
@@ -216,6 +234,14 @@ audio: preserve
   if (Number(media.format?.duration ?? 0) <= 0) {
     throw new Error('Final MP4 has no duration');
   }
+  const finalDurationMs = Math.round(Number(media.format?.duration ?? 0) * 1000);
+  if (result.sessionStoppedMs !== result.outputDurationMs ||
+      Math.abs(finalDurationMs - result.outputDurationMs) > 100) {
+    throw new Error(
+      `Final media did not follow runtime event duration: output=${result.outputDurationMs}ms, ` +
+      `events=${result.sessionStoppedMs}ms, final=${finalDurationMs}ms`,
+    );
+  }
   if (process.platform === 'win32') {
     const expectedWidth = result.captureWidth ?? 0;
     const expectedHeight = result.captureHeight ?? 0;
@@ -226,6 +252,22 @@ audio: preserve
         `Expected window-sized video near ${expectedWidth}x${expectedHeight}, got ${video.width}x${video.height}`,
       );
     }
+  }
+
+  const firstNarrationSeconds = ((result.firstNarrationStartMs + 100) / 1000).toFixed(3);
+  const narrationFrameStats = await execFile(ffmpeg, [
+    '-hide_banner', '-nostats', '-ss', firstNarrationSeconds, '-i', finalVideoPath,
+    '-vf', 'crop=100:100:(iw-100)/2:(ih-100)/2,signalstats,metadata=print',
+    '-frames:v', '1', '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null',
+  ]);
+  const narrationFrameVAverage = Number(
+    narrationFrameStats.stderr.match(/lavfi\.signalstats\.VAVG=([\d.]+)/)?.[1],
+  );
+  if (!(narrationFrameVAverage < 110)) {
+    throw new Error(
+      `Opening content was not visible when narration began at ${firstNarrationSeconds}s: ` +
+      `V=${narrationFrameVAverage}`,
+    );
   }
 
   await execFile(ffmpeg, ['-v', 'error', '-i', finalVideoPath, '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null']);
@@ -249,7 +291,20 @@ audio: preserve
   const uAverage = Number(frameStats.stderr.match(/lavfi\.signalstats\.UAVG=([\d.]+)/)?.[1]);
   const vAverage = Number(frameStats.stderr.match(/lavfi\.signalstats\.VAVG=([\d.]+)/)?.[1]);
   if (!(uAverage < 110 && vAverage > 220)) {
-    throw new Error(`Inserted source clip was not red at ${clipMiddleSeconds}s: U=${uAverage}, V=${vAverage}`);
+    throw new Error(`Captured embedded clip was not red at ${clipMiddleSeconds}s: U=${uAverage}, V=${vAverage}`);
+  }
+  const chromeStats = await execFile(ffmpeg, [
+    '-hide_banner', '-nostats', '-ss', clipMiddleSeconds, '-i', finalVideoPath,
+    '-vf', 'crop=100:100:20:20,signalstats,metadata=print',
+    '-frames:v', '1', '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null',
+  ]);
+  const chromeVAverage = Number(
+    chromeStats.stderr.match(/lavfi\.signalstats\.VAVG=([\d.]+)/)?.[1],
+  );
+  if (!(chromeVAverage < 200)) {
+    throw new Error(
+      `Source clip covered the captured VS Code window at ${clipMiddleSeconds}s: V=${chromeVAverage}`,
+    );
   }
 
   const policyVolumes = new Map<string, number>();
@@ -281,6 +336,8 @@ audio: preserve
     height: video.height,
     insertedFrameUAverage: uAverage,
     insertedFrameVAverage: vAverage,
+    chromeFrameVAverage: chromeVAverage,
+    narrationFrameVAverage,
     sourceAudioPolicyVolumesDb: Object.fromEntries(policyVolumes),
     videoHash: finalHash.stdout.trim(),
   }, null, 2)}\n`);

@@ -11,9 +11,10 @@ export interface RecordingOutputLayoutInput {
 export interface RecordingOutputLayout {
   outputRoot: string;
   sessionDirectory: string;
+  narrationDirectory: string;
 }
 
-function deckName(deckPath: string): string {
+export function recordingDeckName(deckPath: string): string {
   return path.basename(deckPath)
     .replace(/\.deck\.(md|yaml)$/i, '')
     .replace(/\.md$/i, '');
@@ -44,9 +45,11 @@ export function resolveRecordingOutputLayout(
     ? path.normalize(configuredRoot)
     : path.resolve(deckDirectory, configuredRoot);
   const sessionName = `${timestamp(input.startedAt)}-${input.sessionId.slice(0, 8)}`;
+  const deckOutputDirectory = path.join(outputRoot, recordingDeckName(input.deckPath));
 
   return {
     outputRoot,
-    sessionDirectory: path.join(outputRoot, deckName(input.deckPath), sessionName),
+    sessionDirectory: path.join(deckOutputDirectory, sessionName),
+    narrationDirectory: path.join(deckOutputDirectory, 'narration'),
   };
 }

@@ -21,8 +21,8 @@ export class RecordingState {
   /**
    * Start a new recording session.
    */
-  startRecording(deckPath: string, deckTitle?: string, slideIndex?: number): void {
-    this.controller.startRecording(deckPath, deckTitle, slideIndex);
+  startRecording(deckPath: string, deckTitle?: string, slideIndex?: number, sessionId?: string): void {
+    this.controller.startRecording(deckPath, deckTitle, slideIndex, sessionId);
   }
 
   /**
@@ -44,6 +44,10 @@ export class RecordingState {
    */
   recordEvent(event: RecordingEvent): void {
     this.controller.recordEvent(event);
+  }
+
+  recordEventAt(event: RecordingEvent, relativeTimeMs: number): void {
+    this.controller.recordEventAt(event, relativeTimeMs);
   }
 
   /**

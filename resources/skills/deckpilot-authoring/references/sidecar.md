@@ -4,14 +4,20 @@ The sidecar separates **operational metadata** (voice cues, timing, recording se
 
 ## File pairing
 
-A sidecar must be named `<base>.deck.yaml` next to `<base>.deck.md`. Example:
+A sidecar must be named `<base>.deck.yaml` next to the Markdown deck. Both
+`my-talk.deck.md` and plain `my-talk.md` resolve to `my-talk.deck.yaml`:
 
 ```
 my-talk.deck.md
 my-talk.deck.yaml
 ```
 
-The deck file must mark slides with `<!-- id: <slide-id> -->` anchors so the sidecar can reference them.
+Use the ID Deckpilot derives from each slide heading (`## Getting Started` becomes
+`getting-started`). Explicit `<!-- id: ... -->` anchors are optional and only
+needed when a slide has no useful heading-derived ID or must keep its ID after a
+heading rename.
+When a sidecar already exists, parse and merge it. Preserve unrelated deck,
+item, scene, recording, export, and environment metadata.
 
 ## Schema
 
@@ -21,7 +27,7 @@ deck:
   theme: dark
 
 items:
-  - id: intro               # matches <!-- id: intro --> in the .deck.md
+  - id: intro               # matches an "Intro" heading slug
     cues:
       - Welcome the audience and frame the problem
       - Mention the 60-second teaser, then pause
@@ -70,7 +76,7 @@ Each entry corresponds to a slide or video item by `id`.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | string | **Required.** Must match a `<!-- id: ... -->` anchor in the deck. |
+| `id` | string | **Required.** Must match the parsed slide ID, normally its heading slug. |
 | `cues` | array | Ordered narration beats. Slides use strings for entry/fragment/action events. Videos use a first string plus `{ at, text }` timed cues. |
 | `actions` | action[] | Same shape as inline actions. Rendered as interactive elements and driven by Auto-Pilot. |
 | `duration` | string | Authored target duration (`8s`, `1m30s`). Stored as metadata; Auto-Pilot currently paces from cue word count instead. |
@@ -104,6 +110,15 @@ select exports. Stopping a recording exports all supported narration artifacts.
 - Set `duration` only after at least one practice run — guessing produces bad pacing.
 - Use `checkpoint` between major sections so retake recovery has clean cut points.
 - `actions` in the sidecar become interactive presentation elements and are also driven by Auto-Pilot. They are not executed automatically when the slide loads.
+
+## Validation checklist
+
+After adding or changing cues:
+
+1. Confirm the resolved companion `.deck.yaml` exists and parses as YAML.
+2. Confirm every `items[].id` (or legacy `slides[].id`) resolves to a parsed slide or video item ID.
+3. Confirm requested cues are present and unrelated sidecar metadata remains intact.
+4. Run `Deckpilot: Validate Deck`.
 
 ## Extracting an existing deck to a sidecar
 

@@ -1,17 +1,17 @@
 1
-00:00:00,000 --> 00:00:02,500
+00:00:01,000 --> 00:00:03,500
 Introduce the browser panel feature
 
 2
-00:00:21,000 --> 00:00:26,200
+00:00:21,000 --> 00:00:21,000
 Show how to navigate the panel to a new
 URL without reopening it
 
 3
-00:00:43,700 --> 00:00:46,200
+00:00:41,200 --> 00:00:41,200
 Demonstrate local server support
 
 4
-00:00:46,200 --> 00:00:50,200
+00:00:41,200 --> 00:00:44,200
 Run the server, then open it in the
 browser panel

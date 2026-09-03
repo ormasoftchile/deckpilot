@@ -12,6 +12,7 @@
 export type RecordingEventType =
   | 'session.started'
   | 'session.stopped'
+  | 'narration.cue.started'
   | 'slide.entered'
   | 'slide.exited'
   | 'fragment.revealed'

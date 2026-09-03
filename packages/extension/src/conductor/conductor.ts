@@ -31,6 +31,7 @@ import { RecordingSession, VoiceOverCue } from '@deckpilot/core/models/recording
 import {
   createSlideEnteredEvent,
   createSlideExitedEvent,
+  createNarrationCueStartedEvent,
   createFragmentRevealedEvent,
   createVideoPlaybackEvent,
   createActionTriggeredEvent,
@@ -48,7 +49,12 @@ import {
   resolveAutoPilotConfig,
 } from '../recording/autoPilot';
 import { resolveRecordingOutputLayout } from '../recording/outputLayout';
-import { composeRecordedVideo, validateVideoSources } from '../recording/videoComposer';
+import {
+  composeRecordedVideo,
+  probeRecordedMediaDuration,
+  validateVideoSources,
+} from '../recording/videoComposer';
+import { alignRecordingSessionToCapture } from '../recording/videoCompositionPlan';
 import { disposeBrowserPanel } from '../browser';
 import { diagramLog } from '../utils/diagramLogger';
 import { DiagramService, annotateDiagramPlaceholders } from '../services/diagramService';
@@ -58,11 +64,13 @@ import type { VideoPlaybackMessage } from '../webview/messages';
  * Actions that require workspace trust
  */
 const TRUSTED_ACTION_TYPES: ActionType[] = ['terminal.run', 'debug.start'];
+const RECORDER_STARTUP_ALLOWANCE_MS = 2000;
 
 export interface NarrationSetup {
   deckPath: string;
   cues: VoiceOverCue[];
   outputDirectory: string;
+  narrationDirectory: string;
 }
 
 /**
@@ -133,6 +141,10 @@ export class Conductor implements vscode.Disposable {
   private recorderOrchestrator: RecorderOrchestrator | undefined;
   private recordingOutputDirectory: string | undefined;
   private autoPilotRunning = false;
+  private pendingVideoNarrationCues = new Map<
+    number,
+    Array<{ cueIndex: number; offsetMs: number }>
+  >();
   private autoPilotConfig: AutoPilotConfig = resolveAutoPilotConfig();
   private narrationTimings: readonly NarrationTiming[] = [];
   /** Pending slide render callback — resolved when webview confirms render complete */
@@ -774,23 +786,14 @@ export class Conductor implements vscode.Disposable {
     if (!this.deck) {
       return;
     }
-    this.recordingState.startRecording(
-      this.deck.filePath,
-      this.deck.title,
-      this.currentSlideIndex,
-    );
 
-    // Launch external recorder if configured
+    const sessionId = randomUUID();
+    const startedAt = Date.now();
     const recorderConfig = getRecorderConfig();
-    const session = this.recordingState.getSession();
-    if (!session) {
-      this.outputChannel.appendLine('[Recording] Session failed to initialize');
-      return;
-    }
     const outputLayout = resolveRecordingOutputLayout({
       deckPath: this.deck.filePath,
-      sessionId: session.sessionId,
-      startedAt: session.recordingStartTime,
+      sessionId,
+      startedAt,
       exportOutputDir: this.deck.metadata.export?.outputDir,
       recorderOutputDir: recorderConfig.outputDir,
     });
@@ -801,7 +804,6 @@ export class Conductor implements vscode.Disposable {
     );
     this.recorderOrchestrator = new RecorderOrchestrator(recorderConfig, this.outputChannel);
     if (this.recorderOrchestrator.isConfigured()) {
-      const sessionId = session?.sessionId ?? 'unknown';
       this.outputChannel.appendLine(`[Recording] Launching recorder for session ${sessionId}`);
       const started = await this.recorderOrchestrator.start(sessionId, this.deck.filePath);
       if (!started) {
@@ -813,6 +815,13 @@ export class Conductor implements vscode.Disposable {
       this.outputChannel.appendLine('[Recording] No external recorder configured');
     }
 
+    this.recordingState.startRecording(
+      this.deck.filePath,
+      this.deck.title,
+      this.currentSlideIndex,
+      sessionId,
+    );
+
     this.outputChannel.appendLine('[Recording] Session started');
   }
 
@@ -822,22 +831,44 @@ export class Conductor implements vscode.Disposable {
    * Returns undefined if not recording.
    */
   async stopRecording(): Promise<RecordingSession | undefined> {
+    const activeSession = this.recordingState.getSession();
+    if (!activeSession) return undefined;
+
+    if (this.recorderOrchestrator) {
+      await this.recorderOrchestrator.stop(activeSession.sessionId);
+    }
     const session = this.recordingState.stopRecording(this.currentSlideIndex);
     if (session && this.deck) {
       session.outputDirectory = this.recordingOutputDirectory;
 
       // Stop external recorder and attach metadata
       if (this.recorderOrchestrator) {
-        await this.recorderOrchestrator.stop(session.sessionId);
         session.recorder = this.recorderOrchestrator.getMetadata();
         this.recorderOrchestrator.dispose();
         this.recorderOrchestrator = undefined;
       }
 
+      if (session.recorder?.stopped && session.recorder.outputPath) {
+        try {
+          const captureDurationMs = await probeRecordedMediaDuration(session.recorder.outputPath);
+          const offsetMs = alignRecordingSessionToCapture(session, captureDurationMs);
+          this.outputChannel.appendLine(
+            `[Recording] Aligned event clock to capture (${offsetMs}ms startup offset)`,
+          );
+        } catch (error) {
+          this.outputChannel.appendLine(
+            `[Recording] Could not align event clock: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
       if (session.recorder?.stopped && this.deck.slides.some(slide => slide.video)) {
         try {
           const baseDirectory = this.resolvedBasePath();
-          const composed = await composeRecordedVideo(session, baseDirectory);
+          const composed = await composeRecordedVideo(
+            session,
+            baseDirectory,
+          );
           if (composed) {
             session.composition = composed.composition;
             for (const event of session.events) {
@@ -912,7 +943,20 @@ export class Conductor implements vscode.Disposable {
       deckPath: this.deck.filePath,
       cues: parseCues(this.deck.slides),
       outputDirectory: outputLayout.sessionDirectory,
+      narrationDirectory: outputLayout.narrationDirectory,
     };
+  }
+
+  async refreshDeckFromDisk(): Promise<void> {
+    if (!this.deck?.filePath) {
+      throw new Error('The active presentation has no deck file.');
+    }
+    const content = await fs.promises.readFile(this.deck.filePath, 'utf8');
+    const parseResult = await parseDeck(content, this.deck.filePath);
+    if (!parseResult.deck) {
+      throw new Error(parseResult.error ?? 'Failed to parse the active deck.');
+    }
+    await this.openDeck(parseResult.deck);
   }
 
   /**
@@ -931,8 +975,9 @@ export class Conductor implements vscode.Disposable {
       return undefined;
     }
 
+    let videoDurations: Map<number, number>;
     try {
-      await validateVideoSources(this.deck.slides, this.resolvedBasePath());
+      videoDurations = await validateVideoSources(this.deck.slides, this.resolvedBasePath());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.outputChannel.appendLine(`[AutoPilot] Video preflight failed: ${message}`);
@@ -941,6 +986,7 @@ export class Conductor implements vscode.Disposable {
     }
 
     this.autoPilotRunning = true;
+    try {
     this.outputChannel.appendLine('[AutoPilot] Building execution plan...');
 
     // Resolve pacing config: deck frontmatter overrides → defaults
@@ -957,6 +1003,12 @@ export class Conductor implements vscode.Disposable {
       this.deck.slides,
       this.autoPilotConfig,
       narrationTimings,
+      videoDurations,
+    );
+    this.pendingVideoNarrationCues = new Map(
+      plan
+        .filter(step => step.type === 'play-video')
+        .map(step => [step.slideIndex, step.narrationCues ?? []]),
     );
     this.narrationTimings = narrationTimings;
     this.outputChannel.appendLine(`[AutoPilot] Plan: ${plan.length} steps`);
@@ -967,13 +1019,27 @@ export class Conductor implements vscode.Disposable {
     // Start recording (with external recorder if configured)
     await this.startRecording(outputDirectory);
 
-    // Re-enter the first item after recording starts. This is required when
-    // the deck begins with a video that may already have previewed on open.
+    if (this.recorderOrchestrator?.getMetadata().started) {
+      this.outputChannel.appendLine(
+        `[AutoPilot] Waiting ${RECORDER_STARTUP_ALLOWANCE_MS}ms for recorder media startup`,
+      );
+      await this.delay(RECORDER_STARTUP_ALLOWANCE_MS);
+    }
+
+    let firstStepIndex = 0;
+    const initialStep = plan[0];
+    if (initialStep?.type === 'wait' && initialStep.label === 'Initial delay') {
+      await this.executeAutoPilotStep(initialStep);
+      firstStepIndex = 1;
+    }
+
+    // Re-enter the first item after pre-roll. This event is the exact anchor
+    // for its narration and restarts a video that may have previewed on open.
     await this.goToSlide(0);
 
     // Execute the plan
     try {
-      for (const step of plan) {
+      for (const step of plan.slice(firstStepIndex)) {
         if (!this.autoPilotRunning) {
           this.outputChannel.appendLine('[AutoPilot] Cancelled');
           break;
@@ -988,9 +1054,34 @@ export class Conductor implements vscode.Disposable {
     }
 
     // Stop recording
-    this.autoPilotRunning = false;
     this.outputChannel.appendLine('[AutoPilot] Complete — stopping recording');
-    return this.stopRecording();
+    return await this.stopRecording();
+    } finally {
+      await this.cleanupAutoPilotRun();
+    }
+  }
+
+  private async cleanupAutoPilotRun(): Promise<void> {
+    this.autoPilotRunning = false;
+    this.pendingVideoNarrationCues.clear();
+    this.narrationTimings = [];
+
+    if (this.recordingState.isRecording()) {
+      try {
+        await this.stopRecording();
+      } catch (error) {
+        this.outputChannel.appendLine(
+          `[AutoPilot] Cleanup failed while stopping recording: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        this.recordingState.stopRecording(this.currentSlideIndex);
+      }
+    }
+
+    if (this.recorderOrchestrator) {
+      this.recorderOrchestrator.dispose();
+      this.recorderOrchestrator = undefined;
+    }
+    this.recordingOutputDirectory = undefined;
   }
 
   /**
@@ -1005,6 +1096,16 @@ export class Conductor implements vscode.Disposable {
    */
   private async executeAutoPilotStep(step: AutoPilotStep): Promise<void> {
     this.outputChannel.appendLine(`[AutoPilot] >> ${step.type} (${step.durationMs}ms) — ${step.label}`);
+
+    if (step.type !== 'play-video') {
+      const stepStartMs = this.recordingState.getElapsedMs();
+      for (const cue of step.narrationCues ?? []) {
+        this.recordingState.recordEventAt(
+          createNarrationCueStartedEvent(step.slideIndex, cue.cueIndex),
+          stepStartMs + cue.offsetMs,
+        );
+      }
+    }
 
     switch (step.type) {
       case 'advance': {
@@ -1074,7 +1175,7 @@ export class Conductor implements vscode.Disposable {
 
     if (this.recordingState.isRecording()) {
       const video = this.deck?.slides[payload.slideIndex]?.video;
-      this.recordingState.recordEvent(createVideoPlaybackEvent(type, payload.slideIndex, {
+      const videoEvent = createVideoPlaybackEvent(type, payload.slideIndex, {
         videoId: payload.videoId,
         src: video?.src ?? payload.src,
         trimStartMs: video?.trimStartMs,
@@ -1082,7 +1183,17 @@ export class Conductor implements vscode.Disposable {
         audio: video?.audio,
         currentTimeMs: payload.currentTimeMs,
         error: payload.error,
-      }, payload.timestamp));
+      }, payload.timestamp);
+      this.recordingState.recordEvent(videoEvent);
+      if (type === 'video.started') {
+        for (const cue of this.pendingVideoNarrationCues.get(payload.slideIndex) ?? []) {
+          this.recordingState.recordEventAt(
+            createNarrationCueStartedEvent(payload.slideIndex, cue.cueIndex),
+            videoEvent.relativeTimeMs + cue.offsetMs,
+          );
+        }
+        this.pendingVideoNarrationCues.delete(payload.slideIndex);
+      }
     }
 
     if (status !== 'playing') {
@@ -2152,16 +2263,8 @@ export class Conductor implements vscode.Disposable {
    */
   private async reloadDeckFromDisk(filePath: string): Promise<void> {
     try {
-      const content = await fs.promises.readFile(filePath, 'utf8');
       diagramLog(`[conductor] Re-parsing deck from disk: ${filePath}`);
-      const parseResult = await parseDeck(content, filePath);
-      if (!parseResult.deck) {
-        diagramLog(`[conductor] Reload parse failed for ${filePath}: ${parseResult.error ?? 'parse error'}`);
-        this.outputChannel.appendLine(`[Sidecar] Reload failed: ${parseResult.error ?? 'parse error'}`);
-        return;
-      }
-      diagramLog(`[conductor] Deck parsed. Slides: ${parseResult.deck.slides.length}. Slide 0 diagramBlocks: ${parseResult.deck.slides[0]?.diagramBlocks?.length ?? 0}`);
-      await this.openDeck(parseResult.deck);
+      await this.refreshDeckFromDisk();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.outputChannel.appendLine(`[Sidecar] Watcher reload failed: ${msg}`);

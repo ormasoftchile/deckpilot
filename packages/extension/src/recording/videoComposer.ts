@@ -18,11 +18,17 @@ export interface CompositionResult {
   plan: VideoCompositionPlan;
 }
 
+export async function probeRecordedMediaDuration(filePath: string): Promise<number> {
+  return (await probeMedia(filePath)).durationMs;
+}
+
 export async function validateVideoSources(
   slides: Slide[],
   baseDirectory: string,
-): Promise<void> {
-  for (const slide of slides) {
+): Promise<Map<number, number>> {
+  const durations = new Map<number, number>();
+  for (let slideIndex = 0; slideIndex < slides.length; slideIndex++) {
+    const slide = slides[slideIndex];
     if (!slide.video) {
       continue;
     }
@@ -36,7 +42,12 @@ export async function validateVideoSources(
         `Video item '${slide.video.id}' ends at ${slide.video.trimEndMs}ms, beyond its ${media.durationMs}ms duration`,
       );
     }
+    durations.set(
+      slideIndex,
+      (slide.video.trimEndMs ?? media.durationMs) - (slide.video.trimStartMs ?? 0),
+    );
   }
+  return durations;
 }
 
 export async function composeRecordedVideo(
@@ -68,7 +79,11 @@ export async function composeRecordedVideo(
   const durations = new Map(
     [...sourceInfo.entries()].map(([id, info]) => [id, info.durationMs]),
   );
-  const plan = buildVideoCompositionPlan(session.events, capture.durationMs, durations);
+  const plan = buildVideoCompositionPlan(
+    session.events,
+    capture.durationMs,
+    durations,
+  );
   if (plan.decisions.length === 0) {
     return undefined;
   }
@@ -107,32 +122,49 @@ function buildFilter(
 ): string {
   const filters: string[] = [];
   const videoLabels: string[] = [];
-  let cursorMs = 0;
+  let captureCursorMs = 0;
+  let outputCursorMs = 0;
   let videoIndex = 0;
 
-  const captureSegment = (startMs: number, endMs: number): void => {
-    if (endMs <= startMs) {
+  const captureSegment = (startMs: number, endMs: number, outputDurationMs: number): void => {
+    if (endMs <= startMs || outputDurationMs <= 0) {
       return;
     }
+    const rate = outputDurationMs / (endMs - startMs);
     const label = `v${videoIndex++}`;
-    filters.push(`[0:v]trim=start=${seconds(startMs)}:end=${seconds(endMs)},setpts=PTS-STARTPTS,setsar=1,fps=${capture.frameRate},format=yuv420p[${label}]`);
+    filters.push(
+      `[0:v]trim=start=${seconds(startMs)}:end=${seconds(endMs)},` +
+      `setpts=${rate.toFixed(9)}*(PTS-STARTPTS),` +
+      `tpad=stop_mode=clone:stop_duration=${seconds(outputDurationMs)},` +
+      `trim=duration=${seconds(outputDurationMs)},setsar=1,fps=${capture.frameRate},` +
+      `format=yuv420p[${label}]`,
+    );
     videoLabels.push(`[${label}]`);
   };
 
-  plan.decisions.forEach((decision, decisionIndex) => {
-    captureSegment(cursorMs, decision.captureStartMs);
-    const label = `v${videoIndex++}`;
-    const inputIndex = decisionIndex + 1;
-    filters.push(
-      `[${inputIndex}:v]trim=start=${seconds(decision.sourceStartMs)}:end=${seconds(decision.sourceEndMs)},` +
-      `setpts=PTS-STARTPTS,scale=${capture.width}:${capture.height}:force_original_aspect_ratio=decrease,` +
-      `pad=${capture.width}:${capture.height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=${capture.frameRate},format=yuv420p[${label}]`,
+  plan.decisions.forEach((decision) => {
+    captureSegment(
+      captureCursorMs,
+      decision.captureStartMs,
+      decision.outputStartMs - outputCursorMs,
     );
-    videoLabels.push(`[${label}]`);
-    cursorMs = decision.captureEndMs;
+    captureSegment(
+      decision.captureStartMs,
+      decision.captureEndMs,
+      decision.outputEndMs - decision.outputStartMs,
+    );
+    captureCursorMs = decision.captureEndMs;
+    outputCursorMs = decision.outputEndMs;
   });
-  captureSegment(cursorMs, capture.durationMs);
-  filters.push(`${videoLabels.join('')}concat=n=${videoLabels.length}:v=1:a=0[vout]`);
+  captureSegment(
+    captureCursorMs,
+    capture.durationMs,
+    plan.outputDurationMs - outputCursorMs,
+  );
+  filters.push(
+    `${videoLabels.join('')}concat=n=${videoLabels.length}:v=1:a=0,` +
+    `trim=duration=${seconds(plan.outputDurationMs)},setpts=PTS-STARTPTS[vout]`,
+  );
 
   filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${seconds(plan.outputDurationMs)}[silence]`);
   const audioLabels = ['[silence]'];

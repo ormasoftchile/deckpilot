@@ -106,8 +106,55 @@ describe('VoiceOverScriptGenerator', () => {
       });
 
       const md = generator.generateMarkdown(session);
-      // Expect mm:ss format (with or without milliseconds)
-      expect(md).to.match(/\d{1,2}:\d{2}/);
+      expect(md).to.include('01:05.500');
+      expect(md).to.include('02:05.750');
+    });
+
+    it('should omit empty setup segments and distinguish cues from fragments', () => {
+      const session = createMockSession({
+        segments: [
+          createMockSegment({
+            segmentId: 'cue-1',
+            slideIndex: 1,
+            startTimeMs: 5,
+            endTimeMs: 3264,
+            durationMs: 3259,
+            cueText: 'Opening cue',
+            draftNarration: 'Opening cue',
+            eventSummary: '',
+          }),
+          createMockSegment({
+            segmentId: 'setup',
+            slideIndex: 1,
+            startTimeMs: 3280,
+            endTimeMs: 3326,
+            durationMs: 46,
+            cueText: undefined,
+            draftNarration: '',
+            eventSummary: '',
+          }),
+          createMockSegment({
+            segmentId: 'cue-2',
+            slideIndex: 1,
+            startTimeMs: 3326,
+            endTimeMs: 4181,
+            durationMs: 855,
+            cueText: 'Video cue',
+            draftNarration: 'Video cue',
+            eventSummary: '',
+          }),
+        ],
+      });
+
+      const md = generator.generateMarkdown(session);
+
+      expect(md).to.include('00:00.005');
+      expect(md).to.include('00:03.264');
+      expect(md).to.include('00:03.326');
+      expect(md).to.not.include('00:03.280');
+      expect(md).to.include('### Cue 1');
+      expect(md).to.include('### Cue 2');
+      expect(md).to.not.include('### Fragment');
     });
   });
 

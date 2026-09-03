@@ -26,6 +26,13 @@ export interface RecorderConfig {
   screenDevice: string;
 }
 
+interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
  * Read recorder configuration from VS Code settings.
  */
@@ -344,7 +351,7 @@ export class RecorderOrchestrator {
   /**
    * Get the VS Code window bounds using platform-specific methods.
    */
-  private async getWindowBounds(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+  private async getWindowBounds(): Promise<WindowBounds | undefined> {
     if (process.platform === 'win32') {
       return this.getWindowBoundsWindows();
     }
@@ -357,7 +364,7 @@ export class RecorderOrchestrator {
   /**
    * Get the VS Code window bounds on macOS using osascript.
    */
-  private getWindowBoundsMac(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+  private getWindowBoundsMac(): Promise<WindowBounds | undefined> {
     return new Promise((resolve) => {
       const script = [
         'tell application "System Events"',
@@ -394,7 +401,7 @@ export class RecorderOrchestrator {
    * Get the VS Code window bounds on Windows using a PowerShell script.
    * Finds the foreground window and reads its rect.
    */
-  private getWindowBoundsWindows(): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+  private getWindowBoundsWindows(): Promise<WindowBounds | undefined> {
     return new Promise((resolve) => {
       const script = [
         'Add-Type @"',
@@ -415,7 +422,7 @@ export class RecorderOrchestrator {
         '[WinRect]::GetWindowRect($hwnd, [ref]$rect) | Out-Null',
         '$w = $rect.Right - $rect.Left',
         '$h = $rect.Bottom - $rect.Top',
-        'Write-Output "$($rect.Left),$($rect.Top),$w,$h"',
+        '  Write-Output "$($rect.Left),$($rect.Top),$w,$h"',
       ].join('\n');
 
       const tmpFile = path.join(os.tmpdir(), 'et-window-bounds.ps1');
@@ -432,7 +439,8 @@ export class RecorderOrchestrator {
           }
 
           const parts = stdout.trim().split(',').map(Number);
-          if (parts.length === 4 && parts.every(n => !isNaN(n)) && parts[2] > 0 && parts[3] > 0) {
+          if (parts.length === 4 &&
+              parts.every(n => !isNaN(n)) && parts[2] > 0 && parts[3] > 0) {
             resolve({ x: parts[0], y: parts[1], width: parts[2], height: parts[3] });
           } else {
             this.outputChannel.appendLine(`[Recorder] Unexpected bounds output: ${stdout.trim()}`);

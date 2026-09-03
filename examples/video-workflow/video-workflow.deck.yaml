@@ -4,6 +4,7 @@ deck:
 
 items:
   - id: intro
+    autoFragment: false
     cues:
       - "This slide was rendered directly from Markdown by Deckpilot."
 
@@ -14,6 +15,7 @@ items:
         text: "A timed cue lands here."
 
   - id: summary
+    autoFragment: false
     cues:
       - "The source clip and rendered slides are now one composed presentation."
 

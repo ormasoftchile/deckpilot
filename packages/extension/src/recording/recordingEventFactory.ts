@@ -43,6 +43,13 @@ export function createSessionStoppedEvent(slideIndex: number): RecordingEvent {
   return baseEvent('session.stopped', slideIndex);
 }
 
+export function createNarrationCueStartedEvent(
+  slideIndex: number,
+  cueIndex: number,
+): RecordingEvent {
+  return baseEvent('narration.cue.started', slideIndex, { cueIndex });
+}
+
 /**
  * Create a slide.entered event.
  */

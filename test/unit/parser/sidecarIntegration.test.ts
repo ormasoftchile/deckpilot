@@ -115,6 +115,33 @@ describe('sidecarIntegration — full .deck.md + .deck.yaml round-trip', () => {
     fs.writeFileSync(sidecarPath, content, 'utf-8');
   }
 
+  it('merges cues by heading-derived IDs without explicit anchors', async () => {
+    deckMdPath = path.join(tmpDir, 'a.md');
+    const markdown = '## Some Slide 1\n\nContent\n\n## Some Slide 2\n\nMore content';
+    writeDeckMd(markdown);
+    fs.writeFileSync(
+      path.join(tmpDir, 'a.deck.yaml'),
+      [
+        'items:',
+        '  - id: some-slide-1',
+        '    cues:',
+        '      - First cue',
+        '  - id: some-slide-2',
+        '    cues:',
+        '      - Second cue',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const { deck, error } = await parseDeck(markdown, deckMdPath);
+
+    expect(error).to.equal(undefined);
+    expect(deck!.slides.map(slide => ({ id: slide.id, cues: slide.cues }))).to.deep.equal([
+      { id: 'some-slide-1', cues: ['First cue'] },
+      { id: 'some-slide-2', cues: ['Second cue'] },
+    ]);
+  });
+
   // =========================================================================
   // Happy path — full merge
   // =========================================================================

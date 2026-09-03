@@ -2,8 +2,8 @@
 
 This example walks through the complete local workflow on Windows:
 
-1. Deckpilot creates a provisional cue scaffold and opens srt-dubber.
-2. You record and review every narration take before presentation capture.
+1. Deckpilot creates or updates a persistent cue project from the deck files.
+2. You record only pending narration takes before presentation capture.
 3. Deckpilot measures the processed takes and uses those durations to render the
   opening slide, play `clips/execution-demo.mp4`, and render the closing slide.
 4. Auto-Record replaces the captured playback interval with the source clip.
@@ -29,14 +29,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\..\srt-dubber\scripts\
    developing Deckpilot, open this repository and press `F5`, then open the
    example workspace in the new window.
 2. Open `video-workflow.deck.md`.
-3. Run **Deckpilot: Start Presentation**.
-4. Keep that VS Code window focused and run **Deckpilot: Auto-Record Deck**.
-5. In srt-dubber, record each cue and review or redo takes as needed.
-6. Quit srt-dubber after every cue has a take. Deckpilot then performs capture,
-   retiming, resync, and final assembly automatically.
+3. Run **Deckpilot: Record or Update Narration**. No presentation needs to be running.
+4. In srt-dubber, record pending cues and review or redo takes as needed, then quit.
+5. Keep the deck editor active and run **Deckpilot: Auto-Record Deck**. Deckpilot
+  opens presentation mode automatically before capture.
 
-After narration is prepared, the presentation enters Zen Mode and the recorder
-crops the VS Code window to a centered 16:9 frame.
+The recorder preserves the VS Code window's aspect ratio and trims at most one
+pixel from each dimension for video codec compatibility.
 
 The example disables treating arbitrary Markdown as a deck, so accidentally
 running Auto-Record from this README cannot create an empty narration session.
@@ -44,18 +43,24 @@ running Auto-Record from this README cannot create an empty narration session.
 Everything for the run is kept under:
 
 ```text
+recordings/video-workflow/narration/
+  narration.srt
+  narration-project.json
+  takes/                    reusable raw takes
+  processed/                reusable processed takes
 recordings/video-workflow/<timestamp-session>/
   session-*.mp4          raw recoverable screen capture
   video-workflow.mp4     slides with the original source clip inserted
-  narration.srt          final narration text and capture timestamps
-  narration-project.json
+  video-workflow.srt     final narration text and capture timestamps
+  video-workflow-project.json
   recording-session.json
   voiceover-script.md
   voiceover-script.json
-  takes/
-  processed/
-  output/narration-dubbed.mp4  final narrated video
+  output/video-workflow-dubbed.mp4  final narrated video
 ```
+
+After changing the deck, run **Record or Update Narration** again. Unchanged cue
+text keeps its take; only added or edited cues become pending.
 
 The video item uses `audio: duck`, so its tone is retained quietly underneath
 narration. Change it to `mute` or `preserve` to compare the other policies.

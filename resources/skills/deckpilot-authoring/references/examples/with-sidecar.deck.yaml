@@ -5,7 +5,7 @@ deck:
   title: Recorded Walkthrough
   theme: dark
 
-slides:
+items:
   - id: intro
     cues:
       - Welcome the audience and frame the demo in one sentence

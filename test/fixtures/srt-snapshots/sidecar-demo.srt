@@ -1,17 +1,17 @@
 1
-00:00:00,000 --> 00:00:03,600
+00:00:01,000 --> 00:00:04,600
 Welcome the audience and explain the dual
 authoring model
 
 2
-00:00:12,100 --> 00:00:14,600
+00:00:12,100 --> 00:00:12,100
 Walk through the dependency installation
 output
 
 3
-00:00:30,100 --> 00:00:32,600
+00:00:27,600 --> 00:00:27,600
 Show the application starting up
 
 4
-00:00:32,600 --> 00:00:35,400
+00:00:27,600 --> 00:00:30,400
 Point out the port it binds to

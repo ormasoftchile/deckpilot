@@ -79,7 +79,6 @@ export function buildSegments(
       last,
       sorted,
       cueForEvent,
-      cues,
       slides,
       ignoredIntervals,
       measuredDurations,
@@ -104,7 +103,6 @@ export function buildSegments(
       endEvent,
       spanEvents,
       cueForEvent,
-      cues,
       slides,
       ignoredIntervals,
       measuredDurations,
@@ -120,6 +118,11 @@ function buildTimedCueEvents(
 ): RecordingEvent[] {
   return cues.flatMap((cue, index) => {
     if (cue.offsetMs === undefined) {
+      return [];
+    }
+    if (events.some(event =>
+      event.type === 'narration.cue.started' &&
+      event.metadata?.['cueIndex'] === index + 1)) {
       return [];
     }
     const videoStart = events.find(event =>
@@ -163,6 +166,11 @@ function buildCueForEventMap(
   const map = new Map<string, VoiceOverCue>();
 
   for (const event of sorted) {
+    const cueIndex = event.metadata?.['cueIndex'];
+    if (event.type === 'narration.cue.started' && typeof cueIndex === 'number') {
+      const cue = cues[cueIndex - 1];
+      if (cue) map.set(event.id, cue);
+    }
     const timedCueIndex = event.metadata?.['timedCueIndex'];
     if (event.type === 'manual.marker' && typeof timedCueIndex === 'number') {
       const cue = cues[timedCueIndex];
@@ -170,6 +178,18 @@ function buildCueForEventMap(
         map.set(event.id, cue);
       }
     }
+  }
+
+  for (const cue of cues) {
+    if (cue.fragmentIndex !== undefined || cue.offsetMs !== undefined) continue;
+    if ([...map.values()].includes(cue)) continue;
+    const match = sorted.find(event =>
+      event.type === 'video.started' && event.slideIndex === cue.slideIndex)
+      ?? sorted.find(event =>
+        event.type === 'slide.entered' && event.slideIndex === cue.slideIndex)
+      ?? sorted.find(event =>
+        event.type === 'session.started' && event.slideIndex === cue.slideIndex);
+    if (match) map.set(match.id, cue);
   }
 
   const slideIndices = new Set(
@@ -244,10 +264,7 @@ function identifyBoundaries(
   // Priority 1a: slide-level cues — match the first event on each slide
   for (const cue of cues) {
     if (cue.fragmentIndex !== undefined || cue.offsetMs !== undefined) { continue; }
-    const match = sorted.find(e =>
-      e.slideIndex === cue.slideIndex &&
-      !seen.has(e.id),
-    );
+    const match = sorted.find(e => cueForEvent.get(e.id) === cue && !seen.has(e.id));
     if (match) {
       seen.add(match.id);
       boundaries.push(match);
@@ -272,19 +289,15 @@ function identifyBoundaries(
     }
   }
 
-  // Priority 3: slide changes (including session.started as first slide entry)
+  // Priority 3: slide changes. session.started is only a fallback when no
+  // rendered slide entry was observed for the initial slide.
   const sessionStart = sorted.find(e => e.type === 'session.started');
+  const initialSlideEntered = sessionStart && sorted.some(candidate =>
+    candidate.type === 'slide.entered' &&
+    candidate.slideIndex === sessionStart.slideIndex,
+  );
   for (const e of sorted) {
-    if (e.type === 'slide.entered' && sessionStart?.slideIndex === e.slideIndex) {
-      const initialSlideAlreadyExited = sorted.some(candidate =>
-        candidate.type === 'slide.exited' &&
-        candidate.slideIndex === sessionStart.slideIndex &&
-        candidate.relativeTimeMs < e.relativeTimeMs,
-      );
-      if (!initialSlideAlreadyExited) {
-        continue;
-      }
-    }
+    if (e.type === 'session.started' && initialSlideEntered) continue;
     if ((e.type === 'slide.entered' || e.type === 'session.started') && !seen.has(e.id)) {
       seen.add(e.id);
       boundaries.push(e);
@@ -304,7 +317,6 @@ function createSegment(
   endEvent: RecordingEvent,
   spanEvents: RecordingEvent[],
   cueForEvent: Map<string, VoiceOverCue>,
-  cues: VoiceOverCue[],
   slides: Slide[],
   ignoredIntervals: IgnoredInterval[] = [],
   measuredDurations: ReadonlyMap<VoiceOverCue, number> = new Map(),
@@ -316,15 +328,11 @@ function createSegment(
   // Look up the cue for this specific event (ordinal-matched for fragments).
   const eventCue = cueForEvent.get(startEvent.id);
 
-  // Slide-level cue and speaker notes only apply on the slide entry segment,
-  // not on every fragment segment — otherwise the same text repeats N times.
+  // Speaker notes apply on slide entry. Narration cues are explicitly mapped
+  // to their rendered event so pre-roll and video setup segments stay silent.
   const isSlideEntry =
     startEvent.type === 'slide.entered' || startEvent.type === 'session.started';
-  const slideCue = isSlideEntry
-    ? cues.find(c => c.slideIndex === slideIndex && c.fragmentIndex === undefined)
-    : undefined;
-
-  const cue = eventCue ?? slideCue;
+  const cue = eventCue;
 
   const eventSummary = summarizeEvents(spanEvents);
   const draftNarration = cue?.text
@@ -336,11 +344,12 @@ function createSegment(
   // fallback), capped by the next event boundary.
   const startMs = startEvent.relativeTimeMs;
   const nextEventMs = endEvent.relativeTimeMs;
+  const narratedEndMs = startMs +
+    (cue ? measuredDurations.get(cue) ?? readingTimeMs(draftNarration) : readingTimeMs(draftNarration));
   const endMs = draftNarration.length > 0
-    ? Math.min(
-      startMs + (cue ? measuredDurations.get(cue) ?? readingTimeMs(draftNarration) : readingTimeMs(draftNarration)),
-      nextEventMs,
-    )
+    ? startEvent.type === 'narration.cue.started'
+      ? narratedEndMs
+      : Math.min(narratedEndMs, nextEventMs)
     : nextEventMs;
 
   const ignoredMs = computeIgnoredOverlap(startMs, endMs, ignoredIntervals);
