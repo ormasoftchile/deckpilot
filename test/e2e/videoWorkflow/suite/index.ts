@@ -6,6 +6,15 @@ import { Conductor } from '../../../../packages/extension/src/conductor/conducto
 import { RecordingSerializer } from '../../../../packages/extension/src/recording/recordingSerializer';
 import { VoiceOverScriptGenerator } from '../../../../packages/extension/src/recording/voiceOverScriptGenerator';
 import { CaptionsScaffoldGenerator } from '../../../../packages/extension/src/recording/captionsScaffoldGenerator';
+import {
+  createNarrationProject,
+  loadNarrationTimings,
+} from '../../../../packages/extension/src/dubbing/narrationProject';
+import {
+  assembleNarrationProject,
+  prepareNarrationProject,
+  resyncNarrationProject,
+} from '../../../../packages/extension/src/dubbing/dubbingLauncher';
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -19,6 +28,8 @@ export async function run(): Promise<void> {
   const fixtureRoot = requiredEnv('DECKPILOT_E2E_FIXTURE_ROOT');
   const outputRoot = requiredEnv('DECKPILOT_E2E_OUTPUT_ROOT');
   const resultPath = requiredEnv('DECKPILOT_E2E_RESULT_PATH');
+  const fixtureTakesRoot = requiredEnv('DECKPILOT_E2E_TAKES_ROOT');
+  const dubbingExecutable = requiredEnv('SRT_DUBBER_PATH');
   const deckPath = path.join(fixtureRoot, 'workflow.deck.md');
   const deckContent = await fs.promises.readFile(deckPath, 'utf8');
   const parsed = await parseDeck(deckContent, deckPath);
@@ -42,11 +53,47 @@ export async function run(): Promise<void> {
   await configuration.update('startCommand', recorderCommand, vscode.ConfigurationTarget.Workspace);
   await configuration.update('outputDir', outputRoot, vscode.ConfigurationTarget.Workspace);
   await configuration.update('outputExtension', 'mp4', vscode.ConfigurationTarget.Workspace);
+  await vscode.workspace
+    .getConfiguration('deckPilot.dubbing')
+    .update('executable', dubbingExecutable, vscode.ConfigurationTarget.Workspace);
 
   const conductor = new Conductor(extension.extensionUri);
   try {
     await conductor.openDeck(parsed.deck);
-    const session = await conductor.autoRecord();
+    const setup = conductor.createNarrationSetup();
+    if (!setup || setup.cues.length !== 8) {
+      throw new Error(`Expected eight narration cues, got ${setup?.cues.length ?? 0}`);
+    }
+    const narrationProject = await createNarrationProject(setup.cues, setup.outputDirectory);
+    const projectTakesDirectory = path.join(setup.outputDirectory, 'takes');
+    await fs.promises.mkdir(projectTakesDirectory, { recursive: true });
+    const projectEntries = [];
+    for (let cueOffset = 0; cueOffset < setup.cues.length; cueOffset++) {
+      const index = cueOffset + 1;
+      const rawTakePath = path.join(projectTakesDirectory, `${index}.wav`);
+      await fs.promises.copyFile(path.join(fixtureTakesRoot, `${index}.wav`), rawTakePath);
+      projectEntries.push({
+        index,
+        start_ms: cueOffset * 5000,
+        end_ms: (cueOffset + 1) * 5000,
+        slot_duration_ms: 5000,
+        text: setup.cues[cueOffset].text,
+        raw_take_path: rawTakePath,
+        processed_take_path: '',
+        raw_duration_ms: -1,
+        processed_duration_ms: -1,
+        status: 'pending',
+      });
+    }
+    await fs.promises.writeFile(
+      narrationProject.projectPath,
+      JSON.stringify(projectEntries, null, 2),
+      'utf8',
+    );
+    await prepareNarrationProject(narrationProject.srtPath, fixtureRoot);
+    const narrationTimings = await loadNarrationTimings(narrationProject, setup.cues);
+
+    const session = await conductor.autoRecord(narrationTimings, setup.outputDirectory);
     if (!session?.recorder?.outputPath || !session.recorder.started || !session.recorder.stopped) {
       throw new Error(`Auto-Record did not complete: ${JSON.stringify(session?.recorder)}`);
     }
@@ -73,8 +120,10 @@ export async function run(): Promise<void> {
     }
     const sessionFiles = await serializer.exportSession(session, sessionDirectory);
     const scriptFiles = await scriptGenerator.exportScripts(session, sessionDirectory);
-    const srtPath = await captionGenerator.exportSrt(session, sessionDirectory);
-    for (const artifact of [videoPath, srtPath, ...sessionFiles, ...scriptFiles]) {
+    const srtPath = narrationProject.srtPath;
+    await fs.promises.writeFile(srtPath, captionGenerator.generateSrt(session), 'utf8');
+    const legacySrtPath = await captionGenerator.exportSrt(session, sessionDirectory);
+    for (const artifact of [videoPath, srtPath, legacySrtPath, ...sessionFiles, ...scriptFiles]) {
       if (path.dirname(artifact) !== sessionDirectory) {
         throw new Error(`Artifact was written outside the session directory: ${artifact}`);
       }
@@ -87,10 +136,10 @@ export async function run(): Promise<void> {
     if (captionCount !== 8) {
       throw new Error(`Expected 8 SRT entries, exported ${captionCount}`);
     }
-    const dubbingExecutable = requiredEnv('SRT_DUBBER_PATH');
-    await vscode.workspace
-      .getConfiguration('deckPilot.dubbing')
-      .update('executable', dubbingExecutable, vscode.ConfigurationTarget.Workspace);
+    await resyncNarrationProject(srtPath, fixtureRoot);
+    const finalVideoPath = await assembleNarrationProject(srtPath, videoPath, fixtureRoot);
+    await fs.promises.access(finalVideoPath);
+
     const deckDocument = await vscode.workspace.openTextDocument(deckPath);
     await vscode.window.showTextDocument(deckDocument);
     const terminalCount = vscode.window.terminals.length;
@@ -114,10 +163,12 @@ export async function run(): Promise<void> {
       videoPath,
       capturePath,
       srtPath,
+      finalVideoPath,
       resolvedRecorderCommand,
       captureWidth: captureSize ? Number(captureSize[1]) : undefined,
       captureHeight: captureSize ? Number(captureSize[2]) : undefined,
       narrationProcessId,
+      narrationTimings,
       captionCount,
       segmentCount: session.segments.length,
       eventCount: session.events.length,

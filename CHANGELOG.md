@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Narration-first Auto-Record**: Records and processes narration before presentation capture, drives Auto-Pilot with measured take durations, rewrites captions with actual capture timestamps, preserves takes through resync, and assembles the final dubbed video automatically.
+
 - **Untitled Document Support**: Commands like `Start Presentation`, `Open Live Preview`, and `Show Resolved Deck Model` can now be run directly on unsaved / untitled buffers (`untitled:Untitled-N`) whose syntax is set to Markdown.
 
 - **Simple Diagram Fences (` ```triton ` and ` ```mermaid `)**: Direct diagram rendering support for standard ` ```triton ` and ` ```mermaid ` code fences without requiring the `diagram:` prefix.

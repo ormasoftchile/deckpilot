@@ -10,6 +10,7 @@
 
 import { Slide } from '@deckpilot/core/models/slide';
 import { RecordingEvent, RecordingSegment, VoiceOverCue, IgnoredInterval } from '@deckpilot/core/models/recording';
+import type { NarrationTiming } from './autoPilot';
 
 /**
  * Event types that are "notable" for segment boundary and voice cue matching:
@@ -48,6 +49,7 @@ export function buildSegments(
   cues: VoiceOverCue[],
   slides: Slide[],
   ignoredIntervals: IgnoredInterval[] = [],
+  narrationTimings: readonly NarrationTiming[] = [],
 ): RecordingSegment[] {
   // Reset counter for deterministic IDs within a session
   segmentCounter = 0;
@@ -64,6 +66,7 @@ export function buildSegments(
   // the same matching: voice[N] means the Nth fragment reveal on the slide,
   // not the element whose data-fragment attribute equals N.
   const cueForEvent = buildCueForEventMap(sorted, cues);
+  const measuredDurations = buildMeasuredDurationMap(cues, narrationTimings);
 
   const boundaries = identifyBoundaries(sorted, cues, cueForEvent);
 
@@ -71,7 +74,16 @@ export function buildSegments(
     // Single segment spanning entire session
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
-    return [createSegment(first, last, sorted, cueForEvent, cues, slides, ignoredIntervals)];
+    return [createSegment(
+      first,
+      last,
+      sorted,
+      cueForEvent,
+      cues,
+      slides,
+      ignoredIntervals,
+      measuredDurations,
+    )];
   }
 
   const segments: RecordingSegment[] = [];
@@ -87,7 +99,16 @@ export function buildSegments(
            e.relativeTimeMs < endEvent.relativeTimeMs,
     );
 
-    segments.push(createSegment(startEvent, endEvent, spanEvents, cueForEvent, cues, slides, ignoredIntervals));
+    segments.push(createSegment(
+      startEvent,
+      endEvent,
+      spanEvents,
+      cueForEvent,
+      cues,
+      slides,
+      ignoredIntervals,
+      measuredDurations,
+    ));
   }
 
   return segments;
@@ -286,6 +307,7 @@ function createSegment(
   cues: VoiceOverCue[],
   slides: Slide[],
   ignoredIntervals: IgnoredInterval[] = [],
+  measuredDurations: ReadonlyMap<VoiceOverCue, number> = new Map(),
 ): RecordingSegment {
   const slideIndex = startEvent.slideIndex;
   const slide = slides[slideIndex];
@@ -310,13 +332,15 @@ function createSegment(
     ?? eventSummary
     ?? '';
 
-  // When there's narration text, end the segment after the reading time rather
-  // than at the next event boundary — the next event time is arbitrary and can
-  // be far too short or far too long relative to the cue length.
+  // End narrated segments after the measured take duration (or reading-time
+  // fallback), capped by the next event boundary.
   const startMs = startEvent.relativeTimeMs;
   const nextEventMs = endEvent.relativeTimeMs;
   const endMs = draftNarration.length > 0
-    ? Math.min(startMs + readingTimeMs(draftNarration), nextEventMs)
+    ? Math.min(
+      startMs + (cue ? measuredDurations.get(cue) ?? readingTimeMs(draftNarration) : readingTimeMs(draftNarration)),
+      nextEventMs,
+    )
     : nextEventMs;
 
   const ignoredMs = computeIgnoredOverlap(startMs, endMs, ignoredIntervals);
@@ -334,6 +358,27 @@ function createSegment(
     eventSummary,
     draftNarration,
   };
+}
+
+function buildMeasuredDurationMap(
+  cues: VoiceOverCue[],
+  narrationTimings: readonly NarrationTiming[],
+): Map<VoiceOverCue, number> {
+  const durations = new Map<VoiceOverCue, number>();
+  for (const timing of narrationTimings) {
+    const cue = cues[timing.cueIndex - 1];
+    if (!cue || normalizeCueText(cue.text) !== normalizeCueText(timing.text)) {
+      continue;
+    }
+    if (Number.isFinite(timing.durationMs) && timing.durationMs > 0) {
+      durations.set(cue, Math.round(timing.durationMs));
+    }
+  }
+  return durations;
+}
+
+function normalizeCueText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 /**

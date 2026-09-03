@@ -6,6 +6,9 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--disable-extensions",
+        "--disable-extension=GitHub.copilot",
+        "--disable-extension=GitHub.copilot-chat",
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [
@@ -19,6 +22,9 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--disable-extensions",
+        "--disable-extension=GitHub.copilot",
+        "--disable-extension=GitHub.copilot-chat",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--extensionDevelopmentPath=${workspaceFolder}/apps/deckpilot-triton",
         "--extensionDevelopmentPath=${workspaceFolder}/apps/deckpilot-mermaid"
@@ -36,6 +42,9 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--disable-extensions",
+        "--disable-extension=GitHub.copilot",
+        "--disable-extension=GitHub.copilot-chat",
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--extensionDevelopmentPath=${workspaceFolder}/apps/deckpilot-triton"
       ],
@@ -54,6 +63,9 @@
       "request": "launch",
       "extensionDevelopmentPath": "${workspaceFolder}",
       "args": [
+        "--disable-extensions",
+        "--disable-extension=GitHub.copilot",
+        "--disable-extension=GitHub.copilot-chat",
         "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
       ],
       "outFiles": [

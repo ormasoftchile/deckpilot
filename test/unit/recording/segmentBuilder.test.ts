@@ -77,6 +77,24 @@ describe('SegmentBuilder', () => {
       expect(segments[0].cueText).to.equal('Welcome to the presentation');
     });
 
+    it('should use the measured take duration for a narrated segment', () => {
+      const events: RecordingEvent[] = [
+        createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),
+        createMockEvent({ type: 'slide.exited', slideIndex: 0, relativeTimeMs: 10000 }),
+      ];
+      const cues: VoiceOverCue[] = [
+        { slideIndex: 0, text: 'Brief cue', source: 'comment' },
+      ];
+      const slides = [createMockSlide({ index: 0 })];
+
+      const segments = buildSegments(events, cues, slides, [], [
+        { cueIndex: 1, text: 'Brief cue', durationMs: 4123 },
+      ]);
+
+      expect(segments[0].endTimeMs).to.equal(4123);
+      expect(segments[0].durationMs).to.equal(4123);
+    });
+
     it('should map ordered sidecar narration to completed actions', () => {
       const events: RecordingEvent[] = [
         createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),

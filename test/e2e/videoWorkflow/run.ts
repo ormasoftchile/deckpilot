@@ -56,6 +56,15 @@ async function main(): Promise<void> {
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
     path.join(fixtureRoot, 'clips', 'execution-demo.mp4'),
   ]);
+  const takesDir = path.join(fixtureRoot, 'fixture-takes');
+  await fs.promises.mkdir(takesDir, { recursive: true });
+  for (let index = 1; index <= 8; index++) {
+    await execFile(ffmpeg, [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', `sine=frequency=${330 + index * 110}:sample_rate=44100:duration=0.7`,
+      '-ac', '1', '-c:a', 'pcm_s16le', path.join(takesDir, `${index}.wav`),
+    ]);
+  }
 
   await fs.promises.writeFile(
     path.join(fixtureRoot, 'workflow.deck.md'),
@@ -151,6 +160,7 @@ audio: preserve
       DECKPILOT_E2E_FIXTURE_ROOT: fixtureRoot,
       DECKPILOT_E2E_OUTPUT_ROOT: outputRoot,
       DECKPILOT_E2E_RESULT_PATH: resultPath,
+      DECKPILOT_E2E_TAKES_ROOT: takesDir,
       SRT_DUBBER_PATH: srtDubber,
     },
     launchArgs: [
@@ -175,27 +185,20 @@ audio: preserve
     captureHeight?: number;
     compositionDecisionCount: number;
     capturePath: string;
+    finalVideoPath: string;
+    narrationTimings: Array<{ cueIndex: number; durationMs: number }>;
     compositionDecisions: Array<{
       videoId: string;
       outputStartMs: number;
       outputEndMs: number;
     }>;
   };
-  const takesDir = path.join(fixtureRoot, 'fixture-takes');
-  await fs.promises.mkdir(takesDir, { recursive: true });
-  for (let index = 1; index <= result.captionCount; index++) {
-    await execFile(ffmpeg, [
-      '-hide_banner', '-loglevel', 'error', '-y',
-      '-f', 'lavfi', '-i', `sine=frequency=${330 + index * 110}:sample_rate=44100:duration=0.7`,
-      '-ac', '1', '-c:a', 'pcm_s16le', path.join(takesDir, `${index}.wav`),
-    ]);
+  if (result.narrationTimings.length !== result.captionCount ||
+      result.narrationTimings.some(timing => timing.durationMs <= 0)) {
+    throw new Error(`Invalid narration timings: ${JSON.stringify(result.narrationTimings)}`);
   }
 
-  await execFile(srtDubber, [
-    '--assemble-with-takes', result.srtPath, result.videoPath, takesDir,
-  ]);
-
-  const finalVideoPath = path.join(path.dirname(result.srtPath), 'output', 'output.mp4');
+  const finalVideoPath = result.finalVideoPath;
   const probe = await execFile(process.env['FFPROBE_PATH'] ?? 'ffprobe', [
     '-v', 'error',
     '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height',

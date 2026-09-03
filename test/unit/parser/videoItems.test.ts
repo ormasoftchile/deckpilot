@@ -82,4 +82,31 @@ src: ./clips/execution.mp4
       'Notice the output update.',
     ]);
   });
+
+  it('holds a video item until its measured timed narration finishes', async () => {
+    const source = `---
+slideBreak: marker
+---
+:::video
+id: execution-demo
+src: ./clips/execution.mp4
+:::
+`;
+    await fs.promises.writeFile(deckPath.replace('.deck.md', '.deck.yaml'), `items:
+  - id: execution-demo
+    cues:
+      - "Introduce the clip."
+      - at: 900ms
+        text: "Explain the final frame."
+`);
+    const result = await parseDeck(source, deckPath);
+
+    const plan = buildAutoPilotPlan(result.deck!.slides, {}, [
+      { cueIndex: 1, text: 'Introduce the clip.', durationMs: 1200 },
+      { cueIndex: 2, text: 'Explain the final frame.', durationMs: 4000 },
+    ]);
+    const videoStep = plan.find(step => step.type === 'play-video');
+
+    expect(videoStep?.durationMs).to.equal(4900);
+  });
 });

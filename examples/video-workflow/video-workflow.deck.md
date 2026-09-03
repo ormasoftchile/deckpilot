@@ -23,10 +23,13 @@ presentation window.
 id: execution-demo
 src: ./clips/execution-demo.mp4
 audio: duck
+:::
 
-  zenMode: true
+<!-- slide -->
+
 <!-- id: summary -->
 
 # Ready for narration
 
 Deckpilot replaces the captured playback with the original source clip, then
+aligns narration to the captured timeline and assembles the final dubbed video.
