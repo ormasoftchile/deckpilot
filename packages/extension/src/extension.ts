@@ -109,6 +109,38 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
     if (importer) {
         return importer;
     }
+
+    // If the file is inside recordings/ or is an exported script, resolve the source deck
+    if (filePath.includes('/recordings/') || filePath.includes('\\recordings\\') || filePath.endsWith('voiceover-script.md')) {
+        let curDir = path.dirname(filePath);
+        for (let i = 0; i < 3; i++) {
+            const sessionJsonPath = path.join(curDir, 'recording-session.json');
+            if (fs.existsSync(sessionJsonPath)) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(sessionJsonPath, 'utf8'));
+                    if (data.deckPath && fs.existsSync(data.deckPath)) {
+                        return vscode.Uri.file(data.deckPath);
+                    }
+                } catch {
+                    // ignore parse error
+                }
+            }
+            const parent = path.dirname(curDir);
+            if (parent === curDir) { break; }
+            curDir = parent;
+        }
+        const match = filePath.match(/[\/\\]recordings[\/\\]([^\/\\]+)/);
+        if (match) {
+            const deckName = match[1];
+            const decks = await findDeckFiles();
+            const found = decks.find(d => path.basename(d.fsPath).startsWith(deckName));
+            if (found) {
+                return found;
+            }
+        }
+        return undefined;
+    }
+
     // Any markdown document can be presented directly as a deck
     if (
         isMarkdown ||
@@ -642,6 +674,22 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                         'Presentation capture completed without a video. Configure deckPilot.recording.startCommand.',
                     );
                 }
+
+                const videoBasename = path.basename(recordedVideo, path.extname(recordedVideo));
+                const pairedSrt = path.join(outputDir, `${videoBasename}.srt`);
+                if (pairedSrt !== captionFile) {
+                    await fs.promises.copyFile(captionFile, pairedSrt).catch(() => {});
+                }
+
+                try {
+                    await fs.promises.access(recordedVideo);
+                } catch {
+                    const errorDetail = session.compositionError ?? session.recorder?.error;
+                    const reason = errorDetail ? ` (${errorDetail.trim()})` : '';
+                    throw new Error(
+                        `Presentation capture did not produce a video file at ${recordedVideo}.${reason} Check your screen recording configuration (deckPilot.recording.startCommand and deckPilot.recording.screenDevice).`,
+                    );
+                }
                 const dubbedVideo = await vscode.window.withProgress(
                     {
                         location: vscode.ProgressLocation.Notification,
@@ -667,7 +715,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     captionFile,
                     path.dirname(session.deckPath),
                     dubbedVideo,
-                    false,
+                    true,
                 );
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
@@ -681,7 +729,31 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
     const recordNarrationDisposable = vscode.commands.registerCommand(
         'deckPilot.recordNarration',
         async () => {
-            const deckUri = await resolveDeckUri(vscode.window.activeTextEditor);
+            let deckUri = await resolveDeckUri(vscode.window.activeTextEditor);
+            if (!deckUri && conductor?.isActive()) {
+                const activeDeck = conductor.getDeck();
+                if (activeDeck?.filePath && fs.existsSync(activeDeck.filePath)) {
+                    deckUri = vscode.Uri.file(activeDeck.filePath);
+                }
+            }
+            if (!deckUri) {
+                const allDecks = await findDeckFiles();
+                if (allDecks.length === 1) {
+                    deckUri = allDecks[0];
+                } else if (allDecks.length > 1) {
+                    const pick = await vscode.window.showQuickPick(
+                        allDecks.map(d => ({
+                            label: path.basename(d.fsPath),
+                            description: path.relative(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '', d.fsPath),
+                            uri: d,
+                        })),
+                        { placeHolder: 'Select the deck whose latest recording you want to narrate' },
+                    );
+                    if (pick) {
+                        deckUri = pick.uri;
+                    }
+                }
+            }
             if (!deckUri) {
                 void vscode.window.showWarningMessage(
                     'Open the deck whose latest recording you want to narrate.',

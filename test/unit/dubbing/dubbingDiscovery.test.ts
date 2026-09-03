@@ -50,6 +50,19 @@ describe('dubbing discovery', () => {
     expect(result).to.be.undefined;
   });
 
+  it('pairs video and srt in a session directory with recording-session.json', async () => {
+    const sessionDir = path.join(root, 'recordings', 'talk', 'session1');
+    await fs.promises.mkdir(sessionDir, { recursive: true });
+    await fs.promises.writeFile(path.join(sessionDir, 'recording-session.json'), '{}');
+    await fs.promises.writeFile(path.join(sessionDir, 'talk.mp4'), 'video');
+    await fs.promises.writeFile(path.join(sessionDir, 'narration.srt'), '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+
+    const result = await findLatestNarrationArtifacts([root]);
+
+    expect(result?.videoPath).to.equal(path.join(sessionDir, 'talk.mp4'));
+    expect(result?.srtPath).to.equal(path.join(sessionDir, 'narration.srt'));
+  });
+
   it('rejects an empty SRT before launching narration', async () => {
     const videoPath = path.join(root, 'talk.mp4');
     const srtPath = path.join(root, 'talk.srt');

@@ -205,8 +205,8 @@
         },
         "deckPilot.recording.screenDevice": {
           "type": "string",
-          "default": "0:none",
-          "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '0:none', '1:none', etc. For directshow (Windows) use the display name."
+          "default": "1:none",
+          "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '1:none' for screen capture ('0:none' is usually the webcam). For directshow (Windows) use the display name."
         },
         "deckPilot.dubbing.executable": {
           "type": "string",
