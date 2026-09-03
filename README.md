@@ -14,6 +14,27 @@ From one deck, you can present, execute, onboard, and produce content.
 
 ---
 
+## Developer quick start
+
+Install [Node.js 20](https://nodejs.org/) and VS Code, then run this once from
+the repository root after cloning:
+
+```powershell
+npm run setup
+```
+
+This installs the exact dependencies from `package-lock.json` and builds
+Deckpilot plus the Triton and Mermaid companion extensions.
+
+Open the repository root in VS Code, select **Run Extension** in the Run and
+Debug view, and press `F5`. A new Extension Development Host window opens with
+the local Deckpilot build. Select **Run All Extensions (Triton + Mermaid)**
+instead when developing the companion renderers. The launch task rebuilds the
+extensions on subsequent runs; rerun `npm run setup` after `package-lock.json`
+changes.
+
+---
+
 ## Why Deckpilot?
 
 Most slide tools show content.
@@ -129,21 +150,26 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
 
 1. Write a `.deck.md` deck and put ordered narration cues in its `.deck.yaml` sidecar
 2. Configure an external recorder in VS Code settings (e.g. ffmpeg)
-3. Run **Deckpilot: Auto-Record Deck** from the command palette
-4. Deckpilot drives the presentation automatically, coordinating with the recorder
-5. When done, Deckpilot exports:
-   - MP4 video (captured by the external recorder)
-  - Same-basename SRT narration slots
+3. Start the presentation, then run **Deckpilot: Auto-Record Deck**
+4. Deckpilot creates `narration.srt` and opens srt-dubber before capture begins
+5. Record and review every cue in srt-dubber, then quit it to continue
+6. Deckpilot processes the takes without fitting the provisional SRT slots, drives
+  and captures the presentation using their measured durations, rewrites the SRT
+  with the real capture timestamps, resyncs the takes, and assembles the final video
+7. When done, Deckpilot exports:
+  - MP4 screen capture and composed presentation video
+  - Final `narration.srt` and `narration-project.json`
   - `voiceover-script.md` and `voiceover-script.json`
   - `recording-session.json` (full timing log)
-6. Choose **Record Narration** when Auto-Record completes. Deckpilot launches
-   srt-dubber with the matching MP4 and SRT in a VS Code terminal.
+  - `output/narration-dubbed.mp4` (final narrated video)
 
 Deckpilot coordinates the configured recorder; it does not encode MP4 video
-itself during capture. When a deck contains video items, Deckpilot composes a
-final MP4 afterward by replacing the captured playback intervals with the
-source clips. SRT timings use the remapped presentation segment boundaries,
-while the text comes from the sidecar narration cues.
+itself during capture. Processed narration duration is authoritative for
+Auto-Pilot pacing; the initial SRT timestamps are only a recording scaffold.
+When a deck contains video items, Deckpilot composes a final MP4 afterward by
+replacing the captured playback intervals with the source clips. Final SRT
+timings use the remapped presentation segment boundaries, while the text comes
+from the sidecar narration cues.
 
 ### Video items
 
@@ -202,9 +228,10 @@ seconds or milliseconds. Timed cues are remapped with the composed video.
 
 Each recording is isolated under
 `recordings/<deck>/<timestamp-session>/`. The folder contains the recoverable
-`session-*.mp4` capture, composed `<deck>.mp4`, matching SRT, recording manifest,
-and voice-over scripts. srt-dubber creates its project, takes, processed audio,
-and final `output/<deck-name>-dubbed.mp4` inside the same session folder.
+`session-*.mp4` capture, composed `<deck>.mp4`, final `narration.srt`, recording
+manifest, and voice-over scripts. srt-dubber creates `narration-project.json`,
+raw takes, processed audio, and `output/narration-dubbed.mp4` inside the same
+session folder.
 
 You can also run **Deckpilot: Record Narration for Latest Export** from the
 Command Palette while the deck is open. Deckpilot searches its configured
@@ -243,8 +270,9 @@ pixel from odd-sized windows because H.264 `yuv420p` requires even dimensions.
 
 The Windows end-to-end gate creates a temporary deck and sidecar, launches a
 real Extension Development Host, plays and inserts a source clip, runs
-Auto-Record, generates deterministic narration takes, invokes srt-dubber, and
-verifies final pixels, retained clip audio, codecs, dimensions, and MP4 decode:
+Auto-Record, records deterministic narration first, captures using the measured
+take durations, invokes srt-dubber, and verifies final pixels, retained clip
+audio, codecs, dimensions, and MP4 decode:
 
 ```powershell
 npm run test:e2e:video-workflow

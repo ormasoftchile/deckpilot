@@ -20,10 +20,21 @@ import { PreviewProvider } from './preview';
 import type { DeckpilotDiagramAPI, IDiagramRenderer } from '@deckpilot/core/renderer/diagramRenderer';
 import { diagramLog, initializeDiagramLogger } from './utils/diagramLogger';
 import { findLatestNarrationArtifacts } from './dubbing/dubbingDiscovery';
-import { launchNarration } from './dubbing/dubbingLauncher';
+import {
+    assembleNarrationProject,
+    launchNarration,
+    prepareNarrationProject,
+    recordNarrationProject,
+    resyncNarrationProject,
+} from './dubbing/dubbingLauncher';
+import {
+    createNarrationProject,
+    loadNarrationTimings,
+} from './dubbing/narrationProject';
 
 let conductor: Conductor | undefined;
 let previewProvider: PreviewProvider | undefined;
+let narrationWorkflowRunning = false;
 
 async function showRecordingComplete(
     message: string,
@@ -31,8 +42,11 @@ async function showRecordingComplete(
     captionFile: string,
     deckDirectory: string,
     videoPath?: string,
+    offerNarration = true,
 ): Promise<void> {
-    const choices = videoPath ? ['Record Narration', 'Open Script'] : ['Open Script'];
+    const choices = offerNarration && videoPath
+        ? ['Record Narration', 'Open Script']
+        : ['Open Script'];
     const choice = await vscode.window.showInformationMessage(message, ...choices);
     if (choice === 'Record Narration' && videoPath) {
         await launchNarration({ videoPath, srtPath: captionFile, modifiedMs: Date.now() }, deckDirectory);
@@ -557,13 +571,13 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 await vscode.window.showErrorMessage('Start a presentation first before auto-recording.', { modal: true });
                 return;
             }
-            if (conductor.isRecording() || conductor.isAutoPilotActive()) {
-                await vscode.window.showErrorMessage('A recording or auto-pilot is already running.', { modal: true });
+            if (conductor.isRecording() || conductor.isAutoPilotActive() || narrationWorkflowRunning) {
+                await vscode.window.showErrorMessage('A recording or narration workflow is already running.', { modal: true });
                 return;
             }
 
             const confirm = await vscode.window.showWarningMessage(
-                'Auto-Record will drive the entire presentation and record it. This may take a minute.',
+                'Auto-Record will record narration first, then drive and capture the presentation using the measured take durations.',
                 { modal: true },
                 'Start'
             );
@@ -571,9 +585,43 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 return;
             }
 
-            void vscode.window.showInformationMessage('🤖 Auto-pilot started — recording...');
-            const session = await conductor.autoRecord();
-            if (session) {
+            narrationWorkflowRunning = true;
+            try {
+                const setup = conductor.createNarrationSetup();
+                if (!setup) {
+                    throw new Error('The active presentation has no loaded deck.');
+                }
+                const project = await createNarrationProject(setup.cues, setup.outputDirectory);
+                void vscode.window.showInformationMessage(
+                    'Record every narration cue in srt-dubber, then quit to continue with presentation capture.',
+                );
+                const recorded = await recordNarrationProject(
+                    project.srtPath,
+                    path.dirname(setup.deckPath),
+                );
+                if (!recorded) {
+                    throw new Error('Narration recording did not complete successfully.');
+                }
+
+                const timings = await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: 'Preparing narration takes',
+                    },
+                    async () => {
+                        await prepareNarrationProject(
+                            project.srtPath,
+                            path.dirname(setup.deckPath),
+                        );
+                        return loadNarrationTimings(project, setup.cues);
+                    },
+                );
+
+                void vscode.window.showInformationMessage('Auto-pilot started using measured narration timing.');
+                const session = await conductor.autoRecord(timings, setup.outputDirectory);
+                if (!session) {
+                    throw new Error('Presentation capture did not produce a recording session.');
+                }
                 const { RecordingSerializer } = await import('./recording/recordingSerializer');
                 const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');
                 const { CaptionsScaffoldGenerator } = await import('./recording/captionsScaffoldGenerator');
@@ -585,19 +633,47 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
 
                 const sessionFiles = await serializer.exportSession(session, outputDir);
                 const scriptFiles = await scriptGen.exportScripts(session, outputDir);
-                const captionDir = session.recorder?.outputPath
-                    ? path.dirname(session.recorder.outputPath)
-                    : outputDir;
-                const captionFile = await captionGen.exportSrt(session, captionDir);
+                const captionFile = project.srtPath;
+                await fs.promises.writeFile(captionFile, captionGen.generateSrt(session), 'utf8');
 
-                const allFiles = [...sessionFiles, ...scriptFiles, captionFile];
-                void showRecordingComplete(
-                    `🤖 Auto-record complete: ${allFiles.length} files exported`,
+                const recordedVideo = session.composition?.outputPath ?? session.recorder?.outputPath;
+                if (!recordedVideo) {
+                    throw new Error(
+                        'Presentation capture completed without a video. Configure deckPilot.recording.startCommand.',
+                    );
+                }
+                const dubbedVideo = await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: 'Assembling narrated presentation',
+                    },
+                    async () => {
+                        await resyncNarrationProject(
+                            captionFile,
+                            path.dirname(setup.deckPath),
+                        );
+                        return assembleNarrationProject(
+                            captionFile,
+                            recordedVideo,
+                            path.dirname(setup.deckPath),
+                        );
+                    },
+                );
+
+                const allFiles = [...sessionFiles, ...scriptFiles, captionFile, dubbedVideo];
+                await showRecordingComplete(
+                    `Auto-record complete: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
                     path.dirname(session.deckPath),
-                    session.composition?.outputPath ?? session.recorder?.outputPath,
+                    dubbedVideo,
+                    false,
                 );
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                await vscode.window.showErrorMessage(`Auto-record failed: ${message}`, { modal: true });
+            } finally {
+                narrationWorkflowRunning = false;
             }
         }
     );

@@ -1,6 +1,6 @@
 /**
- * AutoPilot — drives a presentation automatically at a pace
- * calculated from voice cue text length.
+ * AutoPilot — drives a presentation using measured narration timing,
+ * with cue text length as a fallback when no recording is available.
  *
  * Used with recording mode to produce a hands-free screen capture
  * with properly timed captions.
@@ -58,6 +58,15 @@ export interface AutoPilotStep {
   label: string;
 }
 
+export interface NarrationTiming {
+  /** 1-based cue index matching the narration project/SRT entry. */
+  cueIndex: number;
+  /** Cue text used to guard against stale or reordered timing data. */
+  text: string;
+  /** Measured duration of the processed narration take. */
+  durationMs: number;
+}
+
 /**
  * Resolve a partial config against built-in defaults.
  */
@@ -72,9 +81,11 @@ export function resolveAutoPilotConfig(config: Partial<AutoPilotConfig> = {}): A
 export function buildAutoPilotPlan(
   slides: Slide[],
   config: Partial<AutoPilotConfig> = {},
+  narrationTimings: readonly NarrationTiming[] = [],
 ): AutoPilotStep[] {
   const cfg = resolveAutoPilotConfig(config);
   const cues = parseCues(slides);
+  const measuredDurations = buildMeasuredDurationMap(cues, narrationTimings);
   const steps: AutoPilotStep[] = [];
 
   // Initial wait
@@ -101,7 +112,10 @@ export function buildAutoPilotPlan(
     if (slide.video) {
       steps.push({
         type: 'play-video',
-        durationMs: 0,
+        durationMs: calculateVideoNarrationWindow(
+          cues.filter(cue => cue.slideIndex === si),
+          measuredDurations,
+        ),
         slideIndex: si,
         label: `Play video: ${slide.video.id}`,
       });
@@ -110,7 +124,11 @@ export function buildAutoPilotPlan(
 
     // Slide-level cue wait
     const slideCue = findCue(cues, si, undefined);
-    const slideWait = calculateDisplayTime(slideCue?.text, cfg);
+    const slideWait = calculateDisplayTime(
+      slideCue?.text,
+      cfg,
+      slideCue ? measuredDurations.get(slideCue) : undefined,
+    );
     steps.push({
       type: 'wait',
       durationMs: slideWait,
@@ -144,7 +162,15 @@ export function buildAutoPilotPlan(
       for (const el of entryElements) {
         notableOrdinal++;
         const actionCue = findCue(cues, si, notableOrdinal);
-        addActionSteps(steps, el, si, undefined, cfg, actionCue?.text);
+        addActionSteps(
+          steps,
+          el,
+          si,
+          undefined,
+          cfg,
+          actionCue?.text,
+          actionCue ? measuredDurations.get(actionCue) : undefined,
+        );
       }
 
       for (let fi = 1; fi <= slide.fragmentCount; fi++) {
@@ -160,7 +186,11 @@ export function buildAutoPilotPlan(
 
         // Fragment cue wait — looked up by ordinal, not by fi
         const fragCue = findCue(cues, si, notableOrdinal);
-        const fragWait = calculateDisplayTime(fragCue?.text, cfg);
+        const fragWait = calculateDisplayTime(
+          fragCue?.text,
+          cfg,
+          fragCue ? measuredDurations.get(fragCue) : undefined,
+        );
         steps.push({
           type: 'wait',
           durationMs: fragWait,
@@ -176,7 +206,15 @@ export function buildAutoPilotPlan(
         for (const el of fragElements) {
           notableOrdinal++;
           const actionCue = findCue(cues, si, notableOrdinal);
-          addActionSteps(steps, el, si, fi, cfg, actionCue?.text);
+          addActionSteps(
+            steps,
+            el,
+            si,
+            fi,
+            cfg,
+            actionCue?.text,
+            actionCue ? measuredDurations.get(actionCue) : undefined,
+          );
         }
       }
     } else {
@@ -184,7 +222,15 @@ export function buildAutoPilotPlan(
       for (const el of slide.interactiveElements) {
         notableOrdinal++;
         const actionCue = findCue(cues, si, notableOrdinal);
-        addActionSteps(steps, el, si, undefined, cfg, actionCue?.text);
+        addActionSteps(
+          steps,
+          el,
+          si,
+          undefined,
+          cfg,
+          actionCue?.text,
+          actionCue ? measuredDurations.get(actionCue) : undefined,
+        );
       }
     }
   }
@@ -247,6 +293,7 @@ function addActionSteps(
   fragmentIndex: number | undefined,
   cfg: AutoPilotConfig,
   cueText?: string,
+  measuredDurationMs?: number,
 ): void {
   steps.push({
     type: 'trigger-action',
@@ -259,7 +306,7 @@ function addActionSteps(
 
   // Wait at least as long as it takes to read the voice cue.
   // For actions that open a panel or file, also respect fileViewMs.
-  const cueMs = calculateDisplayTime(cueText, cfg);
+  const cueMs = calculateDisplayTime(cueText, cfg, measuredDurationMs);
   const viewMs = Math.max(cfg.fileViewMs, cueMs);
 
   if (el.action.type === 'terminal.run') {
@@ -301,13 +348,55 @@ function addActionSteps(
 export function calculateDisplayTime(
   text: string | undefined,
   config: AutoPilotConfig = DEFAULT_CONFIG,
+  measuredDurationMs?: number,
 ): number {
+  if (measuredDurationMs !== undefined) {
+    return measuredDurationMs;
+  }
   if (!text || text.trim().length === 0) {
     return config.minDisplayMs;
   }
   const words = text.trim().split(/\s+/).length;
   const readingMs = (words / config.wordsPerMinute) * 60 * 1000;
   return Math.max(readingMs, config.minDisplayMs);
+}
+
+function buildMeasuredDurationMap(
+  cues: VoiceOverCue[],
+  narrationTimings: readonly NarrationTiming[],
+): Map<VoiceOverCue, number> {
+  const measuredDurations = new Map<VoiceOverCue, number>();
+  for (const timing of narrationTimings) {
+    const cue = cues[timing.cueIndex - 1];
+    if (!cue || normalizeCueText(cue.text) !== normalizeCueText(timing.text)) {
+      continue;
+    }
+    if (!Number.isFinite(timing.durationMs) || timing.durationMs <= 0) {
+      continue;
+    }
+    measuredDurations.set(cue, Math.round(timing.durationMs));
+  }
+  return measuredDurations;
+}
+
+function normalizeCueText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function calculateVideoNarrationWindow(
+  cues: VoiceOverCue[],
+  measuredDurations: ReadonlyMap<VoiceOverCue, number>,
+): number {
+  let latestEndMs = 0;
+  for (const cue of cues) {
+    const durationMs = measuredDurations.get(cue);
+    if (durationMs === undefined) {
+      continue;
+    }
+    const startMs = cue.offsetMs ?? latestEndMs;
+    latestEndMs = Math.max(latestEndMs, startMs + durationMs);
+  }
+  return latestEndMs;
 }
 
 /**

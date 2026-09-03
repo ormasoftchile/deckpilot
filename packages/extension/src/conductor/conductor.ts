@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import { Deck } from '@deckpilot/core/models/deck';
 import { EnvStatus, EnvStatusEntry, ResolvedEnv } from '@deckpilot/core/models/env';
 import { Slide } from '@deckpilot/core/models/slide';
@@ -26,7 +27,7 @@ import { PreflightValidator } from '../validation/preflightValidator';
 import { ValidationReport, ValidationIssue } from '../validation/types';
 import { EnvFileLoader, EnvResolver, SecretScrubber } from '@deckpilot/core/env';
 import { OnboardingStepState, StepStatus, ValidationResult } from '@deckpilot/core/models/onboarding';
-import { RecordingSession } from '@deckpilot/core/models/recording';
+import { RecordingSession, VoiceOverCue } from '@deckpilot/core/models/recording';
 import {
   createSlideEnteredEvent,
   createSlideExitedEvent,
@@ -39,7 +40,13 @@ import {
 import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
 import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
-import { buildAutoPilotPlan, AutoPilotStep, AutoPilotConfig, resolveAutoPilotConfig } from '../recording/autoPilot';
+import {
+  buildAutoPilotPlan,
+  AutoPilotStep,
+  AutoPilotConfig,
+  NarrationTiming,
+  resolveAutoPilotConfig,
+} from '../recording/autoPilot';
 import { resolveRecordingOutputLayout } from '../recording/outputLayout';
 import { composeRecordedVideo, validateVideoSources } from '../recording/videoComposer';
 import { disposeBrowserPanel } from '../browser';
@@ -51,6 +58,12 @@ import type { VideoPlaybackMessage } from '../webview/messages';
  * Actions that require workspace trust
  */
 const TRUSTED_ACTION_TYPES: ActionType[] = ['terminal.run', 'debug.start'];
+
+export interface NarrationSetup {
+  deckPath: string;
+  cues: VoiceOverCue[];
+  outputDirectory: string;
+}
 
 /**
  * Merge the attributes of an enclosing <p> (class/data-fragment*) onto the
@@ -121,6 +134,7 @@ export class Conductor implements vscode.Disposable {
   private recordingOutputDirectory: string | undefined;
   private autoPilotRunning = false;
   private autoPilotConfig: AutoPilotConfig = resolveAutoPilotConfig();
+  private narrationTimings: readonly NarrationTiming[] = [];
   /** Pending slide render callback — resolved when webview confirms render complete */
   private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
   private videoPlaybackStatus = new Map<number, 'playing' | 'ended' | 'failed'>();
@@ -749,7 +763,7 @@ export class Conductor implements vscode.Disposable {
    * Optionally launches an external screen recorder if configured.
    * No-op if already recording or no deck is open.
    */
-  async startRecording(): Promise<void> {
+  async startRecording(outputDirectory?: string): Promise<void> {
     if (!this.deck) {
       return;
     }
@@ -773,8 +787,8 @@ export class Conductor implements vscode.Disposable {
       exportOutputDir: this.deck.metadata.export?.outputDir,
       recorderOutputDir: recorderConfig.outputDir,
     });
-    this.recordingOutputDirectory = outputLayout.sessionDirectory;
-    recorderConfig.outputDir = outputLayout.sessionDirectory;
+    this.recordingOutputDirectory = outputDirectory ?? outputLayout.sessionDirectory;
+    recorderConfig.outputDir = this.recordingOutputDirectory;
     this.outputChannel.appendLine(
       `[Recording] Recorder config — start: "${recorderConfig.startCommand}", stop: "${recorderConfig.stopCommand}", dir: "${recorderConfig.outputDir}"`,
     );
@@ -848,7 +862,9 @@ export class Conductor implements vscode.Disposable {
         cues,
         this.deck.slides,
         session.ignoredIntervals,
+        this.narrationTimings,
       );
+      this.narrationTimings = [];
       this.outputChannel.appendLine(
         `[Recording] Session stopped — ${session.events.length} events, ` +
         `${session.segments.length} segments, ${session.durationMs ?? 0}ms`,
@@ -872,12 +888,35 @@ export class Conductor implements vscode.Disposable {
     return this.autoPilotRunning;
   }
 
+  createNarrationSetup(): NarrationSetup | undefined {
+    if (!this.deck) {
+      return undefined;
+    }
+    const startedAt = Date.now();
+    const recorderConfig = getRecorderConfig();
+    const outputLayout = resolveRecordingOutputLayout({
+      deckPath: this.deck.filePath,
+      sessionId: randomUUID(),
+      startedAt,
+      exportOutputDir: this.deck.metadata.export?.outputDir,
+      recorderOutputDir: recorderConfig.outputDir,
+    });
+    return {
+      deckPath: this.deck.filePath,
+      cues: parseCues(this.deck.slides),
+      outputDirectory: outputLayout.sessionDirectory,
+    };
+  }
+
   /**
    * Auto-record the entire deck: start recording, drive the presentation
-   * at a pace calculated from voice cue text, then stop recording.
+   * using measured narration timing, then stop recording.
    * Returns the final session artifact when complete.
    */
-  async autoRecord(): Promise<RecordingSession | undefined> {
+  async autoRecord(
+    narrationTimings: readonly NarrationTiming[] = [],
+    outputDirectory?: string,
+  ): Promise<RecordingSession | undefined> {
     if (!this.deck) {
       return undefined;
     }
@@ -907,14 +946,19 @@ export class Conductor implements vscode.Disposable {
     }
 
     // Build the plan from slides
-    const plan = buildAutoPilotPlan(this.deck.slides, this.autoPilotConfig);
+    const plan = buildAutoPilotPlan(
+      this.deck.slides,
+      this.autoPilotConfig,
+      narrationTimings,
+    );
+    this.narrationTimings = narrationTimings;
     this.outputChannel.appendLine(`[AutoPilot] Plan: ${plan.length} steps`);
     for (const step of plan) {
       this.outputChannel.appendLine(`  ${step.type} (${step.durationMs}ms) — ${step.label}`);
     }
 
     // Start recording (with external recorder if configured)
-    await this.startRecording();
+    await this.startRecording(outputDirectory);
 
     // Re-enter the first item after recording starts. This is required when
     // the deck begins with a video that may already have previewed on open.
@@ -990,7 +1034,14 @@ export class Conductor implements vscode.Disposable {
         break;
 
       case 'play-video':
-        await this.waitForVideoPlayback(step.slideIndex);
+        {
+          const startedAt = Date.now();
+          await this.waitForVideoPlayback(step.slideIndex);
+          const remainingMs = step.durationMs - (Date.now() - startedAt);
+          if (remainingMs > 0) {
+            await this.delay(remainingMs);
+          }
+        }
         break;
 
       case 'close-panel':
