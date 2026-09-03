@@ -19,6 +19,19 @@ interface AutoRecordHarness {
   isAutoPilotActive: Conductor['isAutoPilotActive'];
 }
 
+interface AdvanceHarness {
+  currentSlideIndex: number;
+  webviewProvider: { sendAdvancePresentation(): void };
+  recordingState: { isRecording(): boolean };
+  waitForAdvance(): Promise<boolean>;
+  onFragmentRevealed(
+    slideIndex: number,
+    fragmentIndex: number,
+    fragmentCount: number,
+    timestamp?: number,
+  ): void;
+}
+
 describe('Conductor Auto-Record lifecycle', () => {
   it('clears the running flag when recorder startup throws', async () => {
     const harness = Object.create(Conductor.prototype) as AutoRecordHarness;
@@ -51,5 +64,23 @@ describe('Conductor Auto-Record lifecycle', () => {
     }
 
     expect(startupAttempts).to.equal(2);
+  });
+});
+
+describe('Conductor Auto-Record fragment timing', () => {
+  it('resolves an advance from the fragment-rendered callback', async () => {
+    const harness = Object.create(Conductor.prototype) as AdvanceHarness;
+    harness.currentSlideIndex = 0;
+    harness.webviewProvider = { sendAdvancePresentation: () => undefined };
+    harness.recordingState = { isRecording: () => false };
+
+    const advanced = harness.waitForAdvance();
+    setTimeout(() => harness.onFragmentRevealed(0, 1, 2), 10);
+    const result = await Promise.race([
+      advanced,
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 200)),
+    ]);
+
+    expect(result).to.equal(true);
   });
 });

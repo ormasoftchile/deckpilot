@@ -149,6 +149,7 @@ export class Conductor implements vscode.Disposable {
   private narrationTimings: readonly NarrationTiming[] = [];
   /** Pending slide render callback — resolved when webview confirms render complete */
   private pendingSlideRender: { slideIndex: number; resolve: () => void } | undefined;
+  private pendingAdvance: ((advanced: boolean) => void) | undefined;
   private videoPlaybackStatus = new Map<number, 'playing' | 'ended' | 'failed'>();
   private videoPlaybackWaiters = new Map<number, (error?: string) => void>();
 
@@ -1089,6 +1090,7 @@ export class Conductor implements vscode.Disposable {
    */
   cancelAutoPilot(): void {
     this.autoPilotRunning = false;
+    this.pendingAdvance?.(false);
   }
 
   /**
@@ -1236,27 +1238,28 @@ export class Conductor implements vscode.Disposable {
       const prevSlide = this.currentSlideIndex;
       let resolved = false;
 
+      const finish = (advanced: boolean): void => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(checkInterval);
+        clearTimeout(timeout);
+        if (this.pendingAdvance === finish) {
+          this.pendingAdvance = undefined;
+        }
+        resolve(advanced);
+      };
+      this.pendingAdvance = finish;
+
       // Listen for the slide index to change (confirms navigation happened)
       const checkInterval = setInterval(() => {
-        if (this.currentSlideIndex !== prevSlide || resolved) {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve(true);
-          }
+        if (this.currentSlideIndex !== prevSlide) {
+          finish(true);
         }
       }, 100);
 
-      // For fragment advances, the slide index doesn't change.
-      // Just use a fixed delay since there's no fragment counter on the host.
       const timeout = setTimeout(() => {
-        clearInterval(checkInterval);
-        if (!resolved) {
-          resolved = true;
-          resolve(true); // Assume it worked
-        }
-      }, 800);
+        finish(false);
+      }, 3000);
 
       this.webviewProvider.sendAdvancePresentation();
     });
@@ -1291,6 +1294,7 @@ export class Conductor implements vscode.Disposable {
         createFragmentRevealedEvent(slideIndex, fragmentIndex, fragmentCount, timestamp),
       );
     }
+    this.pendingAdvance?.(true);
   }
 
   /**

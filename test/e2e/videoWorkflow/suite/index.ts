@@ -136,6 +136,7 @@ export async function run(): Promise<void> {
     const narrationEvents = session.events.filter(
       event => event.type === 'narration.cue.started',
     );
+    const revealToNarrationGapsMs: number[] = [];
     for (const cue of narrationEvents) {
       const slide = parsed.deck.slides[cue.slideIndex];
       const visible = session.events.find(event =>
@@ -153,10 +154,12 @@ export async function run(): Promise<void> {
         event.type === 'fragment.revealed' && event.slideIndex === cue.slideIndex);
       if (!slide.video && cuesOnSlide.length === 1 && fragmentEvents.length > 0) {
         const finalRevealMs = Math.max(...fragmentEvents.map(event => event.relativeTimeMs));
-        if (cue.relativeTimeMs < finalRevealMs) {
+        const revealToNarrationMs = cue.relativeTimeMs - finalRevealMs;
+        revealToNarrationGapsMs.push(revealToNarrationMs);
+        if (revealToNarrationMs < 0 || revealToNarrationMs > 250) {
           throw new Error(
-            `Narration cue ${String(cue.metadata?.['cueIndex'])} started at ` +
-            `${cue.relativeTimeMs}ms before final content reveal at ${finalRevealMs}ms`,
+            `Narration cue ${String(cue.metadata?.['cueIndex'])} started ` +
+            `${revealToNarrationMs}ms after final content reveal`,
           );
         }
       }
@@ -256,6 +259,7 @@ export async function run(): Promise<void> {
       runtimeVideoStarts: videoStartEvents.map(event => event.relativeTimeMs),
       outputDurationMs: session.durationMs,
       firstNarrationStartMs: narrationEvents[0]?.relativeTimeMs,
+      revealToNarrationGapsMs,
       repeatSessionDirectory: repeatSession.outputDirectory,
       firstVideoGeometry: session.events.find(event => event.type === 'video.started')?.metadata,
     }, null, 2));
