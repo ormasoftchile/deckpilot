@@ -423,22 +423,44 @@
    */
   function revealNextFragment() {
     if (currentFragment >= totalFragments) return;
-    
+
     currentFragment++;
     const frags = slideContent.querySelectorAll(`[data-fragment="${currentFragment}"]`);
     frags.forEach(function(f) { f.classList.add('visible'); });
-    // Notify extension host for recording timeline.
-    // Delay by the fragment fade-in duration (400 ms) so the recorded
-    // timestamp reflects when the element is fully visible on screen,
-    // not when the animation starts — this keeps SRT captions in sync.
-    vscode.postMessage({
-      type: 'fragmentRevealed',
-      payload: {
-        slideIndex: currentSlide,
-        fragmentIndex: currentFragment,
-        fragmentCount: totalFragments,
-        timestamp: Date.now(),
-      },
+    const revealedSlide = currentSlide;
+    const revealedFragment = currentFragment;
+    const notify = function() {
+      vscode.postMessage({
+        type: 'fragmentRevealed',
+        payload: {
+          slideIndex: revealedSlide,
+          fragmentIndex: revealedFragment,
+          fragmentCount: totalFragments,
+          timestamp: Date.now(),
+        },
+      });
+    };
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        const animations = Array.from(frags).flatMap(function(f) {
+          return typeof f.getAnimations === 'function'
+            ? f.getAnimations({ subtree: true })
+            : [];
+        });
+        if (animations.length === 0) {
+          notify();
+          return;
+        }
+        let notified = false;
+        const notifyOnce = function() {
+          if (notified) return;
+          notified = true;
+          notify();
+        };
+        Promise.allSettled(animations.map(function(animation) { return animation.finished; }))
+          .then(notifyOnce);
+        setTimeout(notifyOnce, 500);
+      });
     });
     updateNavigationButtons();
   }
