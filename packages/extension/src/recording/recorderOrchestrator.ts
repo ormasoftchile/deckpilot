@@ -45,7 +45,7 @@ export function getRecorderConfig(): RecorderConfig {
     stopCommand: get('stopCommand', ''),
     outputDir: get('outputDir', ''),
     outputExtension: get('outputExtension', 'mp4'),
-    screenDevice: get('screenDevice', '0:none'),
+    screenDevice: get('screenDevice', process.platform === 'darwin' ? '1:none' : '0:none'),
   };
 }
 
@@ -123,15 +123,23 @@ export class RecorderOrchestrator {
         stdio: ['pipe', 'ignore', 'pipe'],
       });
 
-      // Log stderr to output channel for diagnostics
+      // Log stderr to output channel for diagnostics and capture last message
+      let lastStderr = '';
       if (this.process.stderr) {
         this.process.stderr.on('data', (data: Buffer) => {
           const msg = data.toString().trim();
           if (msg.length > 0) {
+            lastStderr = msg;
             this.outputChannel.appendLine(`[Recorder] ${msg}`);
           }
         });
       }
+
+      this.process.on('close', (code: number | null) => {
+        if (code !== 0 && code !== null && !this.stopped) {
+          this.error = `Recorder process exited prematurely with code ${code}${lastStderr ? `: ${lastStderr}` : ''}`;
+        }
+      });
 
       // Handle spawn errors
       return await new Promise<boolean>((resolve) => {

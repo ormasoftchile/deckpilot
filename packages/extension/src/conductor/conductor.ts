@@ -754,6 +754,13 @@ export class Conductor implements vscode.Disposable {
     return this.webviewProvider.isOpen();
   }
 
+  /**
+   * Return the currently active deck, if any.
+   */
+  getDeck(): Deck | undefined {
+    return this.deck;
+  }
+
   // ============================================================================
   // Recording control (Feature: Recording Mode — Phase 1)
   // ============================================================================
