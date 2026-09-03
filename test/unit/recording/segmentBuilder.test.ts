@@ -41,10 +41,14 @@ describe('SegmentBuilder', () => {
       ];
       const slides = [createMockSlide({ index: 0 })];
 
-      const segments = buildSegments(events, cues, slides);
+      const segments = buildSegments(events, cues, slides, [], [
+        { cueIndex: 1, text: 'Opening narration', durationMs: 1200 },
+      ]);
 
       expect(segments).to.have.length(1);
       expect(segments[0].cueText).to.equal('Opening narration');
+      expect(segments[0].startTimeMs).to.equal(900);
+      expect(segments[0].endTimeMs).to.equal(2100);
     });
 
     it('should create segments at fragment boundaries', () => {
@@ -95,6 +99,31 @@ describe('SegmentBuilder', () => {
       expect(segments[0].durationMs).to.equal(4123);
     });
 
+    it('should not truncate a planned cue at a late runtime event', () => {
+      const events: RecordingEvent[] = [
+        createMockEvent({
+          type: 'narration.cue.started',
+          slideIndex: 0,
+          relativeTimeMs: 1500,
+          metadata: { cueIndex: 1 },
+        }),
+        createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 3500 }),
+        createMockEvent({ type: 'slide.exited', slideIndex: 0, relativeTimeMs: 6000 }),
+      ];
+      const cues: VoiceOverCue[] = [
+        { slideIndex: 0, text: 'Opening cue', source: 'frontmatter' },
+      ];
+
+      const segments = buildSegments(events, cues, [createMockSlide({ index: 0 })], [], [
+        { cueIndex: 1, text: 'Opening cue', durationMs: 3773 },
+      ]);
+      const narration = segments.find(segment => segment.cueText === 'Opening cue');
+
+      expect(narration?.startTimeMs).to.equal(1500);
+      expect(narration?.endTimeMs).to.equal(5273);
+      expect(narration?.durationMs).to.equal(3773);
+    });
+
     it('should map ordered sidecar narration to completed actions', () => {
       const events: RecordingEvent[] = [
         createMockEvent({ type: 'slide.entered', slideIndex: 0, relativeTimeMs: 0 }),
@@ -131,8 +160,10 @@ describe('SegmentBuilder', () => {
       })];
 
       const segments = buildSegments(events, cues, slides);
+      const entry = segments.find(segment => segment.cueText === 'Introduce the clip');
       const timed = segments.find(segment => segment.cueText === 'Point out the output');
 
+      expect(entry?.startTimeMs).to.equal(5100);
       expect(timed?.startTimeMs).to.equal(7600);
     });
 

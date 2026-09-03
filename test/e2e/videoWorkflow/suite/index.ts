@@ -9,6 +9,7 @@ import { CaptionsScaffoldGenerator } from '../../../../packages/extension/src/re
 import {
   createNarrationProject,
   loadNarrationTimings,
+  stageNarrationProjectForSession,
 } from '../../../../packages/extension/src/dubbing/narrationProject';
 import {
   assembleNarrationProject,
@@ -59,13 +60,29 @@ export async function run(): Promise<void> {
 
   const conductor = new Conductor(extension.extensionUri);
   try {
+    const deckDocument = await vscode.workspace.openTextDocument(deckPath);
+    await vscode.window.showTextDocument(deckDocument);
+    const terminalCount = vscode.window.terminals.length;
+    const narrationCommand = vscode.commands.executeCommand('deckPilot.recordNarration');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const narrationTerminal = vscode.window.terminals.find(
+      terminal => terminal.name === 'Deckpilot Narration',
+    );
+    if (!narrationTerminal || vscode.window.terminals.length !== terminalCount + 1) {
+      throw new Error('Deckpilot did not launch standalone narration from the deck');
+    }
+    const narrationProcessId = await narrationTerminal.processId;
+    narrationTerminal.dispose();
+    await narrationCommand;
+
     await conductor.openDeck(parsed.deck);
+    await conductor.refreshDeckFromDisk();
     const setup = conductor.createNarrationSetup();
     if (!setup || setup.cues.length !== 8) {
       throw new Error(`Expected eight narration cues, got ${setup?.cues.length ?? 0}`);
     }
-    const narrationProject = await createNarrationProject(setup.cues, setup.outputDirectory);
-    const projectTakesDirectory = path.join(setup.outputDirectory, 'takes');
+    const narrationProject = await createNarrationProject(setup.cues, setup.narrationDirectory);
+    const projectTakesDirectory = path.join(setup.narrationDirectory, 'takes');
     await fs.promises.mkdir(projectTakesDirectory, { recursive: true });
     const projectEntries = [];
     for (let cueOffset = 0; cueOffset < setup.cues.length; cueOffset++) {
@@ -92,7 +109,6 @@ export async function run(): Promise<void> {
     );
     await prepareNarrationProject(narrationProject.srtPath, fixtureRoot);
     const narrationTimings = await loadNarrationTimings(narrationProject, setup.cues);
-
     const session = await conductor.autoRecord(narrationTimings, setup.outputDirectory);
     if (!session?.recorder?.outputPath || !session.recorder.started || !session.recorder.stopped) {
       throw new Error(`Auto-Record did not complete: ${JSON.stringify(session?.recorder)}`);
@@ -105,6 +121,45 @@ export async function run(): Promise<void> {
         `Expected three composed video items: ${session.compositionError ?? 'no composition output'}; ` +
         `events=${session.events.map(event => `${event.type}:${JSON.stringify(event.metadata ?? {})}`).join(',')}`,
       );
+    }
+    const videoStartEvents = session.events.filter(event => event.type === 'video.started');
+    for (const decision of session.composition.decisions) {
+      const start = videoStartEvents.find(event =>
+        event.metadata?.['videoId'] === decision.videoId);
+      if (!start || start.relativeTimeMs !== decision.outputStartMs) {
+        throw new Error(
+          `Video composition did not use its mapped runtime event: ${decision.videoId} ` +
+          `event=${start?.relativeTimeMs}, output=${decision.outputStartMs}`,
+        );
+      }
+    }
+    const narrationEvents = session.events.filter(
+      event => event.type === 'narration.cue.started',
+    );
+    for (const cue of narrationEvents) {
+      const slide = parsed.deck.slides[cue.slideIndex];
+      const visible = session.events.find(event =>
+        event.slideIndex === cue.slideIndex &&
+        event.type === (slide.video ? 'video.started' : 'slide.entered') &&
+        event.relativeTimeMs <= cue.relativeTimeMs);
+      if (!visible) {
+        throw new Error(
+          `Narration cue ${String(cue.metadata?.['cueIndex'])} started before item ` +
+          `${cue.slideIndex + 1} was visible`,
+        );
+      }
+      const cuesOnSlide = setup.cues.filter(item => item.slideIndex === cue.slideIndex);
+      const fragmentEvents = session.events.filter(event =>
+        event.type === 'fragment.revealed' && event.slideIndex === cue.slideIndex);
+      if (!slide.video && cuesOnSlide.length === 1 && fragmentEvents.length > 0) {
+        const finalRevealMs = Math.max(...fragmentEvents.map(event => event.relativeTimeMs));
+        if (cue.relativeTimeMs < finalRevealMs) {
+          throw new Error(
+            `Narration cue ${String(cue.metadata?.['cueIndex'])} started at ` +
+            `${cue.relativeTimeMs}ms before final content reveal at ${finalRevealMs}ms`,
+          );
+        }
+      }
     }
     const resolvedRecorderCommand = session.recorder.startCommand ?? '';
     const captureSize = resolvedRecorderCommand.match(/-video_size (\d+)x(\d+)/);
@@ -120,10 +175,21 @@ export async function run(): Promise<void> {
     }
     const sessionFiles = await serializer.exportSession(session, sessionDirectory);
     const scriptFiles = await scriptGenerator.exportScripts(session, sessionDirectory);
-    const srtPath = narrationProject.srtPath;
-    await fs.promises.writeFile(srtPath, captionGenerator.generateSrt(session), 'utf8');
-    const legacySrtPath = await captionGenerator.exportSrt(session, sessionDirectory);
-    for (const artifact of [videoPath, srtPath, legacySrtPath, ...sessionFiles, ...scriptFiles]) {
+    const videoBasename = path.basename(videoPath, path.extname(videoPath));
+    const sessionProject = await stageNarrationProjectForSession(
+      narrationProject,
+      sessionDirectory,
+      captionGenerator.generateSrt(session),
+      videoBasename,
+    );
+    const srtPath = sessionProject.srtPath;
+    for (const artifact of [
+      videoPath,
+      srtPath,
+      sessionProject.projectPath,
+      ...sessionFiles,
+      ...scriptFiles,
+    ]) {
       if (path.dirname(artifact) !== sessionDirectory) {
         throw new Error(`Artifact was written outside the session directory: ${artifact}`);
       }
@@ -140,22 +206,26 @@ export async function run(): Promise<void> {
     const finalVideoPath = await assembleNarrationProject(srtPath, videoPath, fixtureRoot);
     await fs.promises.access(finalVideoPath);
 
-    const deckDocument = await vscode.workspace.openTextDocument(deckPath);
-    await vscode.window.showTextDocument(deckDocument);
-    const terminalCount = vscode.window.terminals.length;
-    await vscode.commands.executeCommand('deckPilot.recordNarration');
-    const narrationTerminal = vscode.window.terminals.find(
-      terminal => terminal.name === 'Deckpilot Narration',
+    if (conductor.isRecording() || conductor.isAutoPilotActive()) {
+      throw new Error('First Auto-Record left the conductor busy');
+    }
+    const repeatSetup = conductor.createNarrationSetup();
+    if (!repeatSetup) {
+      throw new Error('Could not create output layout for repeated Auto-Record');
+    }
+    const repeatSession = await conductor.autoRecord(
+      narrationTimings,
+      repeatSetup.outputDirectory,
     );
-    if (!narrationTerminal || vscode.window.terminals.length !== terminalCount + 1) {
-      throw new Error('Deckpilot did not launch srt-dubber in a VS Code terminal');
+    if (!repeatSession?.recorder?.stopped || conductor.isRecording() || conductor.isAutoPilotActive()) {
+      throw new Error(
+        `Repeated Auto-Record did not finish cleanly: ${JSON.stringify(repeatSession?.recorder)}`,
+      );
     }
-    const narrationProcessId = await narrationTerminal.processId;
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (narrationProcessId === undefined || narrationTerminal.exitStatus !== undefined) {
-      throw new Error('The srt-dubber terminal process did not stay running');
+    if (repeatSession.outputDirectory === session.outputDirectory) {
+      throw new Error('Repeated Auto-Record reused the first session directory');
     }
-    narrationTerminal.dispose();
+
     await fs.promises.writeFile(resultPath, JSON.stringify({
       fixtureRoot,
       outputRoot,
@@ -170,10 +240,24 @@ export async function run(): Promise<void> {
       narrationProcessId,
       narrationTimings,
       captionCount,
+      narrationSegments: session.segments
+        .filter(segment => segment.cueText)
+        .map(segment => ({
+          text: segment.cueText,
+          startTimeMs: segment.startTimeMs,
+          endTimeMs: segment.endTimeMs,
+          durationMs: segment.durationMs,
+        })),
+      sessionStoppedMs: session.events.find(event => event.type === 'session.stopped')?.relativeTimeMs,
       segmentCount: session.segments.length,
       eventCount: session.events.length,
       compositionDecisionCount: session.composition.decisions.length,
       compositionDecisions: session.composition.decisions,
+      runtimeVideoStarts: videoStartEvents.map(event => event.relativeTimeMs),
+      outputDurationMs: session.durationMs,
+      firstNarrationStartMs: narrationEvents[0]?.relativeTimeMs,
+      repeatSessionDirectory: repeatSession.outputDirectory,
+      firstVideoGeometry: session.events.find(event => event.type === 'video.started')?.metadata,
     }, null, 2));
   } finally {
     await conductor.close();

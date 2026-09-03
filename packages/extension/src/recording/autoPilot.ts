@@ -56,6 +56,10 @@ export interface AutoPilotStep {
   actionId?: string;
   /** Description for logging */
   label: string;
+  /** Intentional start on the published presentation timeline. */
+  timelineStartMs?: number;
+  /** Narration cues starting during this step, relative to its start. */
+  narrationCues?: Array<{ cueIndex: number; offsetMs: number }>;
 }
 
 export interface NarrationTiming {
@@ -82,6 +86,7 @@ export function buildAutoPilotPlan(
   slides: Slide[],
   config: Partial<AutoPilotConfig> = {},
   narrationTimings: readonly NarrationTiming[] = [],
+  videoDurations: ReadonlyMap<number, number> = new Map(),
 ): AutoPilotStep[] {
   const cfg = resolveAutoPilotConfig(config);
   const cues = parseCues(slides);
@@ -110,33 +115,50 @@ export function buildAutoPilotPlan(
     }
 
     if (slide.video) {
+      const videoCues = cues.filter(cue => cue.slideIndex === si);
+      const narrationSchedule = buildVideoNarrationSchedule(videoCues, measuredDurations);
       steps.push({
         type: 'play-video',
-        durationMs: calculateVideoNarrationWindow(
-          cues.filter(cue => cue.slideIndex === si),
-          measuredDurations,
+        durationMs: Math.max(
+          videoDurations.get(si) ?? 0,
+          narrationSchedule.reduce(
+            (latest, item) => Math.max(latest, item.offsetMs + item.durationMs),
+            0,
+          ),
         ),
         slideIndex: si,
         label: `Play video: ${slide.video.id}`,
+        narrationCues: narrationSchedule.map(item => ({
+          cueIndex: cues.indexOf(item.cue) + 1,
+          offsetMs: item.offsetMs,
+        })),
       });
       continue;
     }
 
-    // Slide-level cue wait
-    const slideCue = findCue(cues, si, undefined);
-    const slideWait = calculateDisplayTime(
-      slideCue?.text,
-      cfg,
-      slideCue ? measuredDurations.get(slideCue) : undefined,
-    );
-    steps.push({
-      type: 'wait',
-      durationMs: slideWait,
-      slideIndex: si,
-      label: slideCue
-        ? `Slide ${si + 1}: "${truncate(slideCue.text, 40)}"`
-        : `Slide ${si + 1}: display`,
-    });
+    const slideCues = cues.filter(cue => cue.slideIndex === si && cue.offsetMs === undefined);
+    const sequenceCuesAfterReveals = slide.fragmentCount > 0 &&
+      slideCues.length > 0 &&
+      slideCues.every(cue => cue.source !== 'comment');
+    if (!sequenceCuesAfterReveals) {
+      const slideCue = findCue(cues, si, undefined);
+      const slideWait = calculateDisplayTime(
+        slideCue?.text,
+        cfg,
+        slideCue ? measuredDurations.get(slideCue) : undefined,
+      );
+      steps.push({
+        type: 'wait',
+        durationMs: slideWait,
+        slideIndex: si,
+        label: slideCue
+          ? `Slide ${si + 1}: "${truncate(slideCue.text, 40)}"`
+          : `Slide ${si + 1}: display`,
+        ...(slideCue ? {
+          narrationCues: [{ cueIndex: cues.indexOf(slideCue) + 1, offsetMs: 0 }],
+        } : {}),
+      });
+    }
 
     // Track ordinal of notable events on this slide (fragment reveals and
     // action result events), matching the same ordinal scheme used by
@@ -161,7 +183,9 @@ export function buildAutoPilotPlan(
       const entryElements = allElements.filter(el => !fragMap.has(el.action.id));
       for (const el of entryElements) {
         notableOrdinal++;
-        const actionCue = findCue(cues, si, notableOrdinal);
+        const actionCue = sequenceCuesAfterReveals
+          ? undefined
+          : findCue(cues, si, notableOrdinal);
         addActionSteps(
           steps,
           el,
@@ -170,6 +194,7 @@ export function buildAutoPilotPlan(
           cfg,
           actionCue?.text,
           actionCue ? measuredDurations.get(actionCue) : undefined,
+          actionCue ? cues.indexOf(actionCue) + 1 : undefined,
         );
       }
 
@@ -185,27 +210,36 @@ export function buildAutoPilotPlan(
         });
 
         // Fragment cue wait — looked up by ordinal, not by fi
-        const fragCue = findCue(cues, si, notableOrdinal);
+        const fragCue = sequenceCuesAfterReveals
+          ? slideCues.length > 1 ? slideCues[fi - 1] : undefined
+          : findCue(cues, si, notableOrdinal);
         const fragWait = calculateDisplayTime(
           fragCue?.text,
           cfg,
           fragCue ? measuredDurations.get(fragCue) : undefined,
         );
-        steps.push({
-          type: 'wait',
-          durationMs: fragWait,
-          slideIndex: si,
-          fragmentIndex: fi,
-          label: fragCue
-            ? `Fragment ${fi}: "${truncate(fragCue.text, 40)}"`
-            : `Fragment ${fi}: display`,
-        });
+        if (fragCue || !sequenceCuesAfterReveals) {
+          steps.push({
+            type: 'wait',
+            durationMs: fragWait,
+            slideIndex: si,
+            fragmentIndex: fi,
+            label: fragCue
+              ? `Fragment ${fi}: "${truncate(fragCue.text, 40)}"`
+              : `Fragment ${fi}: display`,
+            ...(fragCue ? {
+              narrationCues: [{ cueIndex: cues.indexOf(fragCue) + 1, offsetMs: 0 }],
+            } : {}),
+          });
+        }
 
         // Fire all elements whose button is inside this specific fragment
         const fragElements = allElements.filter(el => fragMap.get(el.action.id) === fi);
         for (const el of fragElements) {
           notableOrdinal++;
-          const actionCue = findCue(cues, si, notableOrdinal);
+          const actionCue = sequenceCuesAfterReveals
+            ? undefined
+            : findCue(cues, si, notableOrdinal);
           addActionSteps(
             steps,
             el,
@@ -214,7 +248,24 @@ export function buildAutoPilotPlan(
             cfg,
             actionCue?.text,
             actionCue ? measuredDurations.get(actionCue) : undefined,
+            actionCue ? cues.indexOf(actionCue) + 1 : undefined,
           );
+        }
+      }
+
+      if (sequenceCuesAfterReveals) {
+        const trailingCues = slideCues.length === 1
+          ? slideCues
+          : slideCues.slice(slide.fragmentCount);
+        for (const cue of trailingCues) {
+          steps.push({
+            type: 'wait',
+            durationMs: calculateDisplayTime(cue.text, cfg, measuredDurations.get(cue)),
+            slideIndex: si,
+            fragmentIndex: slide.fragmentCount,
+            label: `Slide ${si + 1}: "${truncate(cue.text, 40)}"`,
+            narrationCues: [{ cueIndex: cues.indexOf(cue) + 1, offsetMs: 0 }],
+          });
         }
       }
     } else {
@@ -230,6 +281,7 @@ export function buildAutoPilotPlan(
           cfg,
           actionCue?.text,
           actionCue ? measuredDurations.get(actionCue) : undefined,
+          actionCue ? cues.indexOf(actionCue) + 1 : undefined,
         );
       }
     }
@@ -243,6 +295,11 @@ export function buildAutoPilotPlan(
     label: 'Final delay',
   });
 
+  let timelineStartMs = 0;
+  for (const step of steps) {
+    step.timelineStartMs = timelineStartMs;
+    timelineStartMs += step.durationMs;
+  }
   return steps;
 }
 
@@ -294,6 +351,7 @@ function addActionSteps(
   cfg: AutoPilotConfig,
   cueText?: string,
   measuredDurationMs?: number,
+  cueIndex?: number,
 ): void {
   steps.push({
     type: 'trigger-action',
@@ -308,6 +366,9 @@ function addActionSteps(
   // For actions that open a panel or file, also respect fileViewMs.
   const cueMs = calculateDisplayTime(cueText, cfg, measuredDurationMs);
   const viewMs = Math.max(cfg.fileViewMs, cueMs);
+  const narrationCues = cueIndex !== undefined
+    ? [{ cueIndex, offsetMs: 0 }]
+    : undefined;
 
   if (el.action.type === 'terminal.run') {
     // Let the terminal command execute and output be visible
@@ -316,6 +377,7 @@ function addActionSteps(
       durationMs: viewMs,
       slideIndex,
       label: `View terminal output (${el.label})`,
+      narrationCues,
     });
     steps.push({
       type: 'close-panel',
@@ -329,6 +391,7 @@ function addActionSteps(
       durationMs: viewMs,
       slideIndex,
       label: `View file (${el.label}) then return to deck`,
+      narrationCues,
     });
   } else {
     // debug.start, vscode.command, sequence, etc. — no panel to view,
@@ -338,6 +401,7 @@ function addActionSteps(
       durationMs: cueMs,
       slideIndex,
       label: `Post-action pause (${el.label})`,
+      narrationCues,
     });
   }
 }
@@ -383,10 +447,11 @@ function normalizeCueText(text: string): string {
   return text.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function calculateVideoNarrationWindow(
+function buildVideoNarrationSchedule(
   cues: VoiceOverCue[],
   measuredDurations: ReadonlyMap<VoiceOverCue, number>,
-): number {
+): Array<{ cue: VoiceOverCue; offsetMs: number; durationMs: number }> {
+  const schedule: Array<{ cue: VoiceOverCue; offsetMs: number; durationMs: number }> = [];
   let latestEndMs = 0;
   for (const cue of cues) {
     const durationMs = measuredDurations.get(cue);
@@ -394,9 +459,10 @@ function calculateVideoNarrationWindow(
       continue;
     }
     const startMs = cue.offsetMs ?? latestEndMs;
+    schedule.push({ cue, offsetMs: startMs, durationMs });
     latestEndMs = Math.max(latestEndMs, startMs + durationMs);
   }
-  return latestEndMs;
+  return schedule;
 }
 
 /**

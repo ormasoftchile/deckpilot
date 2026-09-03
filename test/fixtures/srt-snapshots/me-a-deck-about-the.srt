@@ -1,5 +1,5 @@
 1
-00:00:00,000 --> 00:00:05,600
+00:00:01,000 --> 00:00:06,600
 Welcome to this presentation on the Bring
 Your Own Key feature in Copilot CLI.
 

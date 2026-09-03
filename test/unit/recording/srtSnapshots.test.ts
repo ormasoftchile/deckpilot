@@ -60,6 +60,13 @@ function synthesiseEvents(
   let currentSlide = -1;
 
   for (const step of plan) {
+    if (step.type === 'wait' && currentSlide === -1 && step.label === 'Initial delay') {
+      clock += step.durationMs;
+      push('slide.entered', step.slideIndex);
+      currentSlide = step.slideIndex;
+      continue;
+    }
+
     if (step.type === 'advance') {
       if (step.fragmentIndex !== undefined) {
         // Fragment advance — emit fragment.revealed
@@ -72,12 +79,6 @@ function synthesiseEvents(
         push('slide.entered', step.slideIndex);
         currentSlide = step.slideIndex;
       }
-    }
-
-    if (step.type === 'wait' && currentSlide === -1) {
-      // Initial wait before first slide
-      push('slide.entered', step.slideIndex);
-      currentSlide = step.slideIndex;
     }
 
     if (step.type === 'trigger-action') {

@@ -51,12 +51,17 @@ export class RecordingController {
    * @param deckTitle - Optional deck title from frontmatter
    * @param slideIndex - Current slide index at start (default 0)
    */
-  startRecording(deckPath: string, deckTitle?: string, slideIndex = 0): void {
+  startRecording(
+    deckPath: string,
+    deckTitle?: string,
+    slideIndex = 0,
+    sessionId: string = randomUUID(),
+  ): void {
     if (this.recording) {
       return; // already recording
     }
 
-    this.sessionId = randomUUID();
+    this.sessionId = sessionId;
     this.deckPath = deckPath;
     this.deckTitle = deckTitle;
     this.startTime = Date.now();
@@ -97,6 +102,13 @@ export class RecordingController {
       return;
     }
     event.relativeTimeMs = event.timestamp - this.startTime;
+    this.timeline.addEvent(event);
+  }
+
+  recordEventAt(event: RecordingEvent, relativeTimeMs: number): void {
+    if (!this.recording) return;
+    event.relativeTimeMs = Math.max(0, Math.round(relativeTimeMs));
+    event.timestamp = this.startTime + event.relativeTimeMs;
     this.timeline.addEvent(event);
   }
 

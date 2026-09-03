@@ -1,11 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { VoiceOverCue } from '@deckpilot/core/models/recording';
+import { parseDeck } from '@deckpilot/core/parser';
 import type { NarrationTiming } from '../recording/autoPilot';
+import { parseCues } from '../recording/cueParser';
+import { resolveRecordingOutputLayout } from '../recording/outputLayout';
 
 export interface NarrationProjectArtifacts {
   srtPath: string;
   projectPath: string;
+  hadExistingProject: boolean;
+}
+
+export interface DeckNarrationSetup {
+  deckPath: string;
+  cues: VoiceOverCue[];
+  narrationDirectory: string;
 }
 
 interface NarrationProjectEntry {
@@ -13,6 +23,34 @@ interface NarrationProjectEntry {
   text: string;
   processed_take_path?: string;
   processed_duration_ms?: number;
+}
+
+export async function loadDeckNarrationSetup(
+  deckPath: string,
+  content: string,
+  recorderOutputDir = '',
+): Promise<DeckNarrationSetup> {
+  const result = await parseDeck(content, deckPath);
+  if (result.error || !result.deck) {
+    throw new Error(result.error || 'Failed to parse presentation.');
+  }
+
+  const cues = parseCues(result.deck.slides);
+  if (cues.length === 0) {
+    throw new Error('This deck has no narration cues to record.');
+  }
+  const layout = resolveRecordingOutputLayout({
+    deckPath: result.deck.filePath,
+    sessionId: 'narration',
+    startedAt: 0,
+    exportOutputDir: result.deck.metadata.export?.outputDir,
+    recorderOutputDir,
+  });
+  return {
+    deckPath: result.deck.filePath,
+    cues,
+    narrationDirectory: layout.narrationDirectory,
+  };
 }
 
 export async function createNarrationProject(
@@ -26,8 +64,51 @@ export async function createNarrationProject(
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   const srtPath = path.join(outputDirectory, 'narration.srt');
   const projectPath = path.join(outputDirectory, 'narration-project.json');
+  const hadExistingProject = await fs.promises.access(projectPath)
+    .then(() => true)
+    .catch(() => false);
   await fs.promises.writeFile(srtPath, createCueScaffold(cues), 'utf8');
-  return { srtPath, projectPath };
+  return { srtPath, projectPath, hadExistingProject };
+}
+
+export async function seedNarrationProject(
+  narrationDirectory: string,
+  sourceSrtPath: string,
+): Promise<boolean> {
+  const targetProjectPath = path.join(narrationDirectory, 'narration-project.json');
+  const sourceProjectPath = path.join(
+    path.dirname(sourceSrtPath),
+    `${path.basename(sourceSrtPath, path.extname(sourceSrtPath))}-project.json`,
+  );
+  const targetExists = await fs.promises.access(targetProjectPath)
+    .then(() => true)
+    .catch(() => false);
+  if (targetExists) return false;
+
+  try {
+    await fs.promises.access(sourceProjectPath);
+  } catch {
+    return false;
+  }
+  await fs.promises.mkdir(narrationDirectory, { recursive: true });
+  await fs.promises.copyFile(sourceProjectPath, targetProjectPath);
+  return true;
+}
+
+export async function stageNarrationProjectForSession(
+  project: NarrationProjectArtifacts,
+  sessionDirectory: string,
+  srtContent: string,
+  projectName = 'narration',
+): Promise<NarrationProjectArtifacts> {
+  await fs.promises.mkdir(sessionDirectory, { recursive: true });
+  const srtPath = path.join(sessionDirectory, `${projectName}.srt`);
+  const projectPath = path.join(sessionDirectory, `${projectName}-project.json`);
+  await Promise.all([
+    fs.promises.writeFile(srtPath, srtContent, 'utf8'),
+    fs.promises.copyFile(project.projectPath, projectPath),
+  ]);
+  return { srtPath, projectPath, hadExistingProject: true };
 }
 
 export async function loadNarrationTimings(
@@ -93,7 +174,7 @@ function createCueScaffold(cues: readonly VoiceOverCue[]): string {
     const endMs = startMs + durationMs;
     lines.push(String(cueOffset + 1));
     lines.push(`${formatSrtTimestamp(startMs)} --> ${formatSrtTimestamp(endMs)}`);
-    lines.push(normalizeText(cue.text));
+    lines.push(formatCueText(cue.text));
     lines.push('');
     startMs = endMs;
   }
@@ -101,7 +182,7 @@ function createCueScaffold(cues: readonly VoiceOverCue[]): string {
 }
 
 function estimateCueDuration(text: string): number {
-  const words = normalizeText(text).split(' ').filter(Boolean).length;
+  const words = formatCueText(text).split(' ').filter(Boolean).length;
   return Math.max(2500, Math.round((words / 150) * 60 * 1000));
 }
 
@@ -116,5 +197,9 @@ function formatSrtTimestamp(milliseconds: number): string {
 }
 
 function normalizeText(text: string): string {
+  return formatCueText(text).toLowerCase();
+}
+
+function formatCueText(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
 }

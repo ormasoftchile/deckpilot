@@ -50,14 +50,17 @@ export class VoiceOverScriptGenerator {
           lines.push(`> Events: ${seg.eventSummary}`);
         }
       } else {
-        // Multiple fragments
+        // Multiple narration/event beats on one slide.
         for (let i = 0; i < segments.length; i++) {
           const seg = segments[i];
           const fragStart = formatTimestamp(seg.startTimeMs);
           const fragEnd = formatTimestamp(seg.endTimeMs);
+          const label = seg.fragmentIndex !== undefined
+            ? `Fragment ${seg.fragmentIndex}`
+            : `Cue ${i + 1}`;
 
           lines.push('');
-          lines.push(`### Fragment ${i + 1} [${fragStart} → ${fragEnd}]`);
+          lines.push(`### ${label} [${fragStart} → ${fragEnd}]`);
 
           if (seg.cueText) {
             lines.push('');
@@ -115,10 +118,12 @@ export class VoiceOverScriptGenerator {
 // ============================================================================
 
 function formatDuration(ms: number): string {
-  const totalSec = Math.round(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  const totalMs = Math.max(0, Math.round(ms));
+  const min = Math.floor(totalMs / 60000);
+  const sec = Math.floor((totalMs % 60000) / 1000);
+  const millis = totalMs % 1000;
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.` +
+    String(millis).padStart(3, '0');
 }
 
 function formatTimestamp(ms: number): string {
@@ -128,6 +133,9 @@ function formatTimestamp(ms: number): string {
 function groupSegmentsBySlide(segments: RecordingSegment[]): Map<number, RecordingSegment[]> {
   const map = new Map<number, RecordingSegment[]>();
   for (const seg of segments) {
+    if (!seg.cueText?.trim() && !seg.draftNarration.trim() && !seg.eventSummary.trim()) {
+      continue;
+    }
     const arr = map.get(seg.slideIndex) ?? [];
     arr.push(seg);
     map.set(seg.slideIndex, arr);

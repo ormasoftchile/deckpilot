@@ -29,8 +29,20 @@ import {
 } from './dubbing/dubbingLauncher';
 import {
     createNarrationProject,
+    loadDeckNarrationSetup,
     loadNarrationTimings,
+    seedNarrationProject,
+    stageNarrationProjectForSession,
 } from './dubbing/narrationProject';
+import { getRecorderConfig } from './recording/recorderOrchestrator';
+import { recordingDeckName } from './recording/outputLayout';
+import { isExplicitDeckPath } from './deckRecognition';
+import {
+    offerNarrationPreparation,
+    requiresNarrationUpdate,
+    runAutoRecordPreflight,
+    selectAutoRecordDeckPath,
+} from './recording/autoRecordPrerequisite';
 
 let conductor: Conductor | undefined;
 let previewProvider: PreviewProvider | undefined;
@@ -68,8 +80,9 @@ async function showRecordingComplete(
  * - `.deck.yaml` with a sibling `.deck.md` → the paired `.deck.md` (sidecar).
  * - `.deck.yaml` with no sibling `.deck.md` but a `content:` pointer →
  *   itself (a standalone YAML-primary deck manifest).
- * - Any other file (e.g. a plain `.md`) → searches the workspace for a deck
- *   (`.deck.md` or `.deck.yaml`) whose `content:` resolves to the active file.
+ * - Plain `.md` with a companion `.deck.yaml` → returned as-is.
+ * - Any other file → searches the workspace for a deck whose `content:`
+ *   resolves to the active file.
  */
 async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vscode.Uri | undefined> {
     if (!editor) {
@@ -105,9 +118,17 @@ async function resolveDeckUri(editor: vscode.TextEditor | undefined): Promise<vs
         return undefined;
     }
 
+    if (isMarkdown && isExplicitDeckPath(filePath)) {
+        return doc.uri;
+    }
+
     const importer = await findDeckImporting(filePath);
     if (importer) {
         return importer;
+    }
+
+    if (isMarkdown && treatAllMarkdownAsDeck(doc.uri)) {
+        return doc.uri;
     }
 
     // If the file is inside recordings/ or is an exported script, resolve the source deck
@@ -194,7 +215,8 @@ async function resolveDeckUriFromArg(resource: vscode.Uri | undefined): Promise<
  * Resolve a deck URI from a concrete file URI (open or on disk):
  *  - `.deck.md` → itself.
  *  - `.deck.yaml` → sibling `.deck.md` or `.md`, else itself when it declares `content:`.
- *  - any other file → the deck whose `content:` imports it, or itself if `.md`.
+ *  - any other file → the deck whose `content:` imports it, or itself when it
+ *    is allowed by explicit-deck recognition or `treatAllMarkdownAsDeck`.
  */
 async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
     if (uri.scheme === 'untitled') {
@@ -226,11 +248,14 @@ async function resolveDeckUriForResource(uri: vscode.Uri): Promise<vscode.Uri | 
         }
         return raw && readDeckContentImport(raw, filePath) ? uri : undefined;
     }
+    if (filePath.endsWith('.md') && isExplicitDeckPath(filePath)) {
+        return uri;
+    }
     const importer = await findDeckImporting(filePath);
     if (importer) {
         return importer;
     }
-    if (filePath.endsWith('.md')) {
+    if (filePath.endsWith('.md') && treatAllMarkdownAsDeck(uri)) {
         return uri;
     }
     return undefined;
@@ -305,16 +330,10 @@ async function updateDeckContextKeys(editor: vscode.TextEditor | undefined): Pro
     const filePath = doc?.uri.fsPath;
     const isMarkdown = doc?.languageId === 'markdown' || doc?.languageId === 'deck-markdown';
     const isUntitled = doc?.uri.scheme === 'untitled';
-    let isDeck = (isUntitled && isMarkdown) || (!!filePath && (
-        filePath.endsWith('.deck.md') ||
-        filePath.endsWith('.deck.yaml') ||
-        filePath.endsWith('.md') ||
-        isMarkdown
+    const isDeck = (isUntitled && isMarkdown) || (!!filePath && (
+        isExplicitDeckPath(filePath) ||
+        (isMarkdown && treatAllMarkdownAsDeck(doc?.uri))
     ));
-    // If treatAllMarkdownAsDeck is explicitly disabled, check if it's an explicit deck
-    if (isMarkdown && !treatAllMarkdownAsDeck(doc?.uri)) {
-        isDeck = !!filePath && (filePath.endsWith('.deck.md') || filePath.endsWith('.deck.yaml'));
-    }
     const isContent = !!filePath && !isDeck && deckContentFiles.has(path.normalize(filePath));
     await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeck', isDeck);
     await vscode.commands.executeCommand('setContext', 'deckPilot.activeIsDeckContent', isContent);
@@ -599,55 +618,120 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
     const autoRecordDisposable = vscode.commands.registerCommand(
         'deckPilot.autoRecord',
         async () => {
-            if (!conductor?.isActive()) {
-                await vscode.window.showErrorMessage('Start a presentation first before auto-recording.', { modal: true });
-                return;
-            }
-            if (conductor.isRecording() || conductor.isAutoPilotActive() || narrationWorkflowRunning) {
+            if (conductor?.isRecording() || conductor?.isAutoPilotActive() || narrationWorkflowRunning) {
                 await vscode.window.showErrorMessage('A recording or narration workflow is already running.', { modal: true });
-                return;
-            }
-
-            const confirm = await vscode.window.showWarningMessage(
-                'Auto-Record will record narration first, then drive and capture the presentation using the measured take durations.',
-                { modal: true },
-                'Start'
-            );
-            if (confirm !== 'Start') {
                 return;
             }
 
             narrationWorkflowRunning = true;
             try {
+                const presentedDeckPath = conductor?.isActive() &&
+                    fs.existsSync(conductor.getDeck()?.filePath ?? '')
+                    ? conductor.getDeck()?.filePath
+                    : undefined;
+                const editorDeckUri = presentedDeckPath
+                    ? undefined
+                    : await resolveDeckUri(vscode.window.activeTextEditor);
+                const selectedDeckPath = selectAutoRecordDeckPath(
+                    presentedDeckPath,
+                    editorDeckUri?.fsPath,
+                );
+                const deckUri = presentedDeckPath && selectedDeckPath
+                    ? vscode.Uri.file(selectedDeckPath)
+                    : editorDeckUri;
+                if (!deckUri) {
+                    void vscode.window.showWarningMessage(
+                        'Open the deck you want to auto-record.',
+                    );
+                    return;
+                }
+
+                const targetDeckUri = deckUri;
+                const redirectToNarration = async (): Promise<void> => {
+                    narrationWorkflowRunning = false;
+                    await offerNarrationPreparation({
+                        showWarning: (message, action) =>
+                            vscode.window.showWarningMessage(message, { modal: true }, action),
+                        executeCommand: command => vscode.commands.executeCommand(command),
+                    });
+                };
+                const prepared = await runAutoRecordPreflight({
+                    loadNarration: async () => {
+                        const document = await vscode.workspace.openTextDocument(targetDeckUri);
+                        const narrationSetup = await loadDeckNarrationSetup(
+                            targetDeckUri.fsPath,
+                            document.getText(),
+                            getRecorderConfig().outputDir,
+                        );
+                        const project = await createNarrationProject(
+                            narrationSetup.cues,
+                            narrationSetup.narrationDirectory,
+                        );
+                        if (!project.hadExistingProject) {
+                            await redirectToNarration();
+                            return undefined;
+                        }
+
+                        try {
+                            await resyncNarrationProject(
+                                project.srtPath,
+                                path.dirname(narrationSetup.deckPath),
+                            );
+                            const timings = await vscode.window.withProgress(
+                                {
+                                    location: vscode.ProgressLocation.Notification,
+                                    title: 'Preparing narration takes',
+                                },
+                                async () => {
+                                    await prepareNarrationProject(
+                                        project.srtPath,
+                                        path.dirname(narrationSetup.deckPath),
+                                    );
+                                    return loadNarrationTimings(project, narrationSetup.cues);
+                                },
+                            );
+                            return { project, timings };
+                        } catch (error) {
+                            if (!requiresNarrationUpdate(error)) {
+                                throw error;
+                            }
+                            await redirectToNarration();
+                            return undefined;
+                        }
+                    },
+                    confirmStart: async () => {
+                        const choice = await vscode.window.showWarningMessage(
+                            'Auto-Record will drive and capture the presentation using your prepared narration timings.',
+                            { modal: true },
+                            'Start',
+                        );
+                        return choice === 'Start';
+                    },
+                    openPresentation: async () => {
+                        const activeDeckPath = conductor?.getDeck()?.filePath;
+                        if (conductor?.isActive() && activeDeckPath &&
+                            path.normalize(activeDeckPath) === path.normalize(targetDeckUri.fsPath)) {
+                            await conductor.refreshDeckFromDisk();
+                        } else {
+                            await vscode.commands.executeCommand(
+                                'deckPilot.openPresentation',
+                                targetDeckUri,
+                            );
+                        }
+                        return conductor?.isActive() === true &&
+                            path.normalize(conductor.getDeck()?.filePath ?? '') ===
+                                path.normalize(targetDeckUri.fsPath);
+                    },
+                });
+                if (!prepared || !conductor?.isActive()) {
+                    return;
+                }
+
                 const setup = conductor.createNarrationSetup();
                 if (!setup) {
                     throw new Error('The active presentation has no loaded deck.');
                 }
-                const project = await createNarrationProject(setup.cues, setup.outputDirectory);
-                void vscode.window.showInformationMessage(
-                    'Record every narration cue in srt-dubber, then quit to continue with presentation capture.',
-                );
-                const recorded = await recordNarrationProject(
-                    project.srtPath,
-                    path.dirname(setup.deckPath),
-                );
-                if (!recorded) {
-                    throw new Error('Narration recording did not complete successfully.');
-                }
-
-                const timings = await vscode.window.withProgress(
-                    {
-                        location: vscode.ProgressLocation.Notification,
-                        title: 'Preparing narration takes',
-                    },
-                    async () => {
-                        await prepareNarrationProject(
-                            project.srtPath,
-                            path.dirname(setup.deckPath),
-                        );
-                        return loadNarrationTimings(project, setup.cues);
-                    },
-                );
+                const { project, timings } = prepared;
 
                 void vscode.window.showInformationMessage('Auto-pilot started using measured narration timing.');
                 const session = await conductor.autoRecord(timings, setup.outputDirectory);
@@ -665,8 +749,6 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
 
                 const sessionFiles = await serializer.exportSession(session, outputDir);
                 const scriptFiles = await scriptGen.exportScripts(session, outputDir);
-                const captionFile = project.srtPath;
-                await fs.promises.writeFile(captionFile, captionGen.generateSrt(session), 'utf8');
 
                 const recordedVideo = session.composition?.outputPath ?? session.recorder?.outputPath;
                 if (!recordedVideo) {
@@ -675,11 +757,14 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     );
                 }
 
-                const videoBasename = path.basename(recordedVideo, path.extname(recordedVideo));
-                const pairedSrt = path.join(outputDir, `${videoBasename}.srt`);
-                if (pairedSrt !== captionFile) {
-                    await fs.promises.copyFile(captionFile, pairedSrt).catch(() => {});
-                }
+                const videoBasename = recordingDeckName(setup.deckPath);
+                const sessionProject = await stageNarrationProjectForSession(
+                    project,
+                    outputDir,
+                    captionGen.generateSrt(session),
+                    videoBasename,
+                );
+                const captionFile = sessionProject.srtPath;
 
                 try {
                     await fs.promises.access(recordedVideo);
@@ -708,14 +793,20 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                     },
                 );
 
-                const allFiles = [...sessionFiles, ...scriptFiles, captionFile, dubbedVideo];
+                const allFiles = [
+                    ...sessionFiles,
+                    ...scriptFiles,
+                    captionFile,
+                    sessionProject.projectPath,
+                    dubbedVideo,
+                ];
                 await showRecordingComplete(
                     `Auto-record complete: ${allFiles.length} files exported`,
                     allFiles,
                     captionFile,
                     path.dirname(session.deckPath),
                     dubbedVideo,
-                    true,
+                    false,
                 );
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
@@ -747,7 +838,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                             description: path.relative(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '', d.fsPath),
                             uri: d,
                         })),
-                        { placeHolder: 'Select the deck whose latest recording you want to narrate' },
+                        { placeHolder: 'Select the deck whose narration you want to record or update' },
                     );
                     if (pick) {
                         deckUri = pick.uri;
@@ -756,33 +847,72 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
             }
             if (!deckUri) {
                 void vscode.window.showWarningMessage(
-                    'Open the deck whose latest recording you want to narrate.',
+                    'Open the deck whose narration you want to record or update.',
                 );
                 return;
             }
 
-            const deckDirectory = path.dirname(deckUri.fsPath);
-            const recorderOutput = vscode.workspace
-                .getConfiguration('deckPilot.recording', deckUri)
-                .get<string>('outputDir', '')
-                .trim();
-            const outputDirectory = recorderOutput
-                ? path.isAbsolute(recorderOutput)
-                    ? recorderOutput
-                    : path.resolve(deckDirectory, recorderOutput)
-                : deckDirectory;
-            const artifacts = await findLatestNarrationArtifacts([
-                outputDirectory,
-                path.join(deckDirectory, 'recordings'),
-                deckDirectory,
-            ]);
-            if (!artifacts) {
-                void vscode.window.showWarningMessage(
-                    'No matching MP4 and SRT export was found for this deck.',
-                );
+            if (narrationWorkflowRunning) {
+                await vscode.window.showErrorMessage('A narration workflow is already running.', { modal: true });
                 return;
             }
-            await launchNarration(artifacts, deckDirectory);
+
+            narrationWorkflowRunning = true;
+            try {
+                const document = await vscode.workspace.openTextDocument(deckUri);
+                const setup = await loadDeckNarrationSetup(
+                    deckUri.fsPath,
+                    document.getText(),
+                    getRecorderConfig().outputDir,
+                );
+                const persistentProjectPath = path.join(
+                    setup.narrationDirectory,
+                    'narration-project.json',
+                );
+                if (!fs.existsSync(persistentProjectPath)) {
+                    const latest = await findLatestNarrationArtifacts([
+                        path.dirname(setup.narrationDirectory),
+                    ]);
+                    if (latest) {
+                        await seedNarrationProject(setup.narrationDirectory, latest.srtPath);
+                    }
+                }
+                const project = await createNarrationProject(setup.cues, setup.narrationDirectory);
+                if (project.hadExistingProject) {
+                    await resyncNarrationProject(project.srtPath, path.dirname(setup.deckPath));
+                }
+
+                void vscode.window.showInformationMessage(
+                    project.hadExistingProject
+                        ? 'Existing takes were matched by cue text. Record only pending or changed cues.'
+                        : 'Record the narration cues in srt-dubber, then quit to save the project.',
+                );
+                const recorded = await recordNarrationProject(
+                    project.srtPath,
+                    path.dirname(setup.deckPath),
+                );
+                if (!recorded) {
+                    throw new Error('Narration recording did not complete successfully.');
+                }
+
+                try {
+                    await prepareNarrationProject(project.srtPath, path.dirname(setup.deckPath));
+                    const timings = await loadNarrationTimings(project, setup.cues);
+                    void vscode.window.showInformationMessage(
+                        `Narration ready: ${timings.length} cue${timings.length === 1 ? '' : 's'} prepared.`,
+                    );
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    void vscode.window.showWarningMessage(
+                        `Narration project saved, but some cues still need recording. ${message}`,
+                    );
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                await vscode.window.showErrorMessage(`Narration update failed: ${message}`, { modal: true });
+            } finally {
+                narrationWorkflowRunning = false;
+            }
         },
     );
 

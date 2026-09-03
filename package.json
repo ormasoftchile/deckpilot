@@ -123,7 +123,7 @@
       },
       {
         "command": "deckPilot.recordNarration",
-        "title": "Deckpilot: Record Narration for Latest Export"
+        "title": "Deckpilot: Record or Update Narration"
       },
       {
         "command": "deckPilot.cancelAutoRecord",
@@ -220,36 +220,36 @@
       "editor/title": [
         {
           "command": "deckPilot.openPresentation",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "navigation@1"
         },
         {
           "command": "deckPilot.openPreview",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "navigation@2"
         }
       ],
       "editor/title/context": [
         {
           "command": "deckPilot.openPresentation",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "deckpilot@1"
         },
         {
           "command": "deckPilot.openPreview",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "deckpilot@2"
         }
       ],
       "editor/context": [
         {
           "command": "deckPilot.openPresentation",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "deckpilot@1"
         },
         {
           "command": "deckPilot.openPreview",
-          "when": "editorLangId == markdown || editorLangId == deck-markdown || resourceFilename =~ /\\.deck\\.(md|yaml)$/ || deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
+          "when": "deckPilot.activeIsDeck || deckPilot.activeIsDeckContent",
           "group": "deckpilot@2"
         }
       ],

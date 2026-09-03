@@ -1,7 +1,6 @@
 1
-00:01:52,000 --> 00:01:54,800
-Introduce how executable talk handles
-speaker context.
+00:01:52,000 --> 00:01:54,500
+...
 
 2
 00:01:59,800 --> 00:02:04,200
