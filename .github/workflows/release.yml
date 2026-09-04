@@ -105,7 +105,18 @@ jobs:
       run: |
         if [ -n "$VSCE_PAT" ]; then
           for VSIX_FILE in *.vsix; do
-            npx vsce publish --no-dependencies --packagePath "$VSIX_FILE" -p "$VSCE_PAT"
+            for ATTEMPT in 1 2 3; do
+              if npx vsce publish --no-dependencies --packagePath "$VSIX_FILE" -p "$VSCE_PAT"; then
+                break
+              fi
+              if [ "$ATTEMPT" -eq 3 ]; then
+                echo "::error::Failed to publish $VSIX_FILE after $ATTEMPT attempts"
+                exit 1
+              fi
+              DELAY_SECONDS=$((ATTEMPT * 15))
+              echo "Marketplace publish attempt $ATTEMPT failed for $VSIX_FILE; retrying in ${DELAY_SECONDS}s"
+              sleep "$DELAY_SECONDS"
+            done
           done
         else
           echo "Skipping VS Code Marketplace publish - VSCE_PAT not configured"
