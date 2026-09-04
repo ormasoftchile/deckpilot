@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Windows Auto-Record capture and pacing**: Focused recordings now retain the invoking VS Code window, wait for recorder output before starting the timeline, resolve video sources relative to the deck, and preserve breathing room between narration cues.
+
 - **Live Preview Cursor Sync**: Corrected slide source line ranges when deck frontmatter and multiline blocks (such as diagrams or code blocks) are present, ensuring moving through text within a slide does not jump preview to the next slide prematurely.
 
 ## [0.9.36] - 2026-05-24
