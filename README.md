@@ -146,7 +146,123 @@ Open the file and run **Deckpilot: Start Presentation** from the command palette
 
 ---
 
-## Example workflow: record a demo
+## Narrated video setup
+
+Narrated recording is optional and uses two external tools that Deckpilot does
+not install:
+
+- [FFmpeg](https://ffmpeg.org/download.html) provides `ffmpeg` for screen
+  capture and media processing, plus `ffprobe` for inspecting media.
+- [srt-dubber](https://github.com/ormasoftchile/srt-dubber) records and prepares
+  microphone takes for the narration cues.
+
+Both tools run locally and must be available to the VS Code extension host.
+Use the narration commands only in a trusted workspace.
+
+### 1. Install FFmpeg
+
+On Windows, install the full Gyan build from a PowerShell terminal:
+
+```powershell
+winget install --id Gyan.FFmpeg --exact
+```
+
+On macOS with Homebrew:
+
+```bash
+brew install ffmpeg
+```
+
+On Debian or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+Restart VS Code after installation so the extension host receives the updated
+`PATH`, then verify both commands in a new VS Code terminal:
+
+```text
+ffmpeg -version
+ffprobe -version
+```
+
+The packages above include the `libx264` encoder used by the recording example
+and final video assembly.
+
+### 2. Install srt-dubber
+
+On Windows x64, download
+[srt-dubber-0.1.0-windows-x64.msi](https://github.com/ormasoftchile/srt-dubber/releases/download/Release/srt-dubber-0.1.0-windows-x64.msi)
+from the [srt-dubber release](https://github.com/ormasoftchile/srt-dubber/releases/tag/Release)
+and run the installer. It installs for the current user under
+`%LOCALAPPDATA%\Programs\srt-dubber` and adds that directory to the user
+`PATH`; administrator access is not required. FFmpeg is not included in the
+installer, so complete step 1 separately.
+
+Restart VS Code after installation, then verify the executable in a new VS
+Code terminal:
+
+```text
+srt-dubber --version
+```
+
+Prebuilt packages are not currently available for macOS or Linux. Clone the
+repository to build it from source:
+
+```text
+git clone https://github.com/ormasoftchile/srt-dubber.git
+cd srt-dubber
+```
+
+On macOS, install the compiler and build tools before using the common build
+commands below:
+
+```bash
+xcode-select --install
+brew install cmake
+```
+
+On Debian or Ubuntu, install the build tools with:
+
+```bash
+sudo apt install cmake g++ git curl patch
+```
+
+Then build on macOS or Linux:
+
+```bash
+curl -L https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h \
+  -o vendor/miniaudio.h
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/srt-dubber --version
+```
+
+See the [srt-dubber build instructions](https://github.com/ormasoftchile/srt-dubber#readme)
+for Windows source builds, troubleshooting, and other build configurations.
+
+### 3. Connect srt-dubber to Deckpilot
+
+If `srt-dubber --version` works in a newly opened VS Code terminal, no Deckpilot
+setting is needed. This is the expected result after using the Windows
+installer. For a custom or source-built installation, set **Deckpilot ›
+Dubbing: Executable** to the absolute executable path when it is not on `PATH`.
+For example, the Windows installer's default path is:
+
+```json
+{
+  "deckPilot.dubbing.executable": "C:\\Users\\your-name\\AppData\\Local\\Programs\\srt-dubber\\srt-dubber.exe"
+}
+```
+
+On macOS or Linux, use the corresponding path such as
+`/opt/srt-dubber/build/srt-dubber`. Deckpilot passes narration files directly to
+this executable; the terminal stays visible because microphone recording is
+interactive.
+
+### 4. Record a narrated demo
 
 1. Write a `.deck.md` deck and put ordered narration cues in its `.deck.yaml` sidecar
 2. Configure an external recorder in VS Code settings (e.g. ffmpeg)
@@ -241,17 +357,8 @@ Each visual recording is isolated under `recordings/<deck>/<timestamp-session>/`
 The session folder contains the recoverable
 `session-*.mp4` capture, composed `<deck>.mp4`, final `narration.srt`, recording
 manifest, voice-over scripts, a staged narration project, and the final
-`output/<deck>-dubbed.mp4`. Deckpilot resolves `srt-dubber` from `PATH` by
-default; configure an explicit executable when needed:
-
-```json
-{
-  "deckPilot.dubbing.executable": "C:\\tools\\srt-dubber.exe"
-}
-```
-
-The terminal remains visible because narration recording is interactive, but
-you do not need to type or construct the command.
+`output/<deck>-dubbed.mp4`. You do not need to type or construct the
+`srt-dubber` commands; Deckpilot runs each stage automatically.
 
 ### Record only the VS Code window on Windows
 
