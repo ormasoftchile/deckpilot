@@ -78,8 +78,8 @@ Fragment content
       step.label.includes('Second narration beat.'));
     const closingWait = plan.find(step => step.label === 'Slide 2: display');
 
-    expect(openingWait?.durationMs).to.equal(4123);
-    expect(narratedFragmentWait?.durationMs).to.equal(2789);
+    expect(openingWait?.durationMs).to.equal(4523);
+    expect(narratedFragmentWait?.durationMs).to.equal(3189);
     expect(closingWait?.durationMs).to.equal(900);
   });
 
@@ -106,7 +106,7 @@ src: ./clip.mp4
     ], new Map([[1, 4000]]));
 
     const video = plan.find(step => step.type === 'play-video');
-    expect(video?.timelineStartMs).to.equal(5273);
+    expect(video?.timelineStartMs).to.equal(5673);
     expect(video?.durationMs).to.equal(4000);
   });
 });

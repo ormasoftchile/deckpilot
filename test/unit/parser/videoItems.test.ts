@@ -107,6 +107,6 @@ src: ./clips/execution.mp4
     ]);
     const videoStep = plan.find(step => step.type === 'play-video');
 
-    expect(videoStep?.durationMs).to.equal(4900);
+    expect(videoStep?.durationMs).to.equal(5300);
   });
 });

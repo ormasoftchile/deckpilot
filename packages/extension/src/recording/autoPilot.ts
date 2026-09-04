@@ -20,6 +20,8 @@ export interface AutoPilotConfig {
   minDisplayMs: number;
   /** Extra delay after an action executes in ms (default: 1500) */
   actionDelayMs: number;
+  /** Breathing room after measured narration in ms (default: 400) */
+  narrationGapMs: number;
   /** Time to show a file/editor before returning to the deck in ms (default: 3000) */
   fileViewMs: number;
   /** Delay before first slide in ms (default: 1000) */
@@ -34,6 +36,7 @@ const DEFAULT_CONFIG: AutoPilotConfig = {
   wordsPerMinute: 150,
   minDisplayMs: 2500,
   actionDelayMs: 1500,
+  narrationGapMs: 400,
   fileViewMs: 3000,
   initialDelayMs: 1000,
   finalDelayMs: 2000,
@@ -116,13 +119,20 @@ export function buildAutoPilotPlan(
 
     if (slide.video) {
       const videoCues = cues.filter(cue => cue.slideIndex === si);
-      const narrationSchedule = buildVideoNarrationSchedule(videoCues, measuredDurations);
+      const narrationSchedule = buildVideoNarrationSchedule(
+        videoCues,
+        measuredDurations,
+        cfg.narrationGapMs,
+      );
       steps.push({
         type: 'play-video',
         durationMs: Math.max(
           videoDurations.get(si) ?? 0,
           narrationSchedule.reduce(
-            (latest, item) => Math.max(latest, item.offsetMs + item.durationMs),
+            (latest, item) => Math.max(
+              latest,
+              item.offsetMs + item.durationMs + Math.max(0, cfg.narrationGapMs),
+            ),
             0,
           ),
         ),
@@ -415,7 +425,7 @@ export function calculateDisplayTime(
   measuredDurationMs?: number,
 ): number {
   if (measuredDurationMs !== undefined) {
-    return measuredDurationMs;
+    return measuredDurationMs + Math.max(0, config.narrationGapMs);
   }
   if (!text || text.trim().length === 0) {
     return config.minDisplayMs;
@@ -450,6 +460,7 @@ function normalizeCueText(text: string): string {
 function buildVideoNarrationSchedule(
   cues: VoiceOverCue[],
   measuredDurations: ReadonlyMap<VoiceOverCue, number>,
+  narrationGapMs: number,
 ): Array<{ cue: VoiceOverCue; offsetMs: number; durationMs: number }> {
   const schedule: Array<{ cue: VoiceOverCue; offsetMs: number; durationMs: number }> = [];
   let latestEndMs = 0;
@@ -460,7 +471,10 @@ function buildVideoNarrationSchedule(
     }
     const startMs = cue.offsetMs ?? latestEndMs;
     schedule.push({ cue, offsetMs: startMs, durationMs });
-    latestEndMs = Math.max(latestEndMs, startMs + durationMs);
+    latestEndMs = Math.max(
+      latestEndMs,
+      startMs + durationMs + Math.max(0, narrationGapMs),
+    );
   }
   return schedule;
 }

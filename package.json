@@ -208,6 +208,15 @@
           "default": "1:none",
           "description": "Screen device identifier for {{screenDevice}} in the start command. For avfoundation (macOS) use '1:none' for screen capture ('0:none' is usually the webcam). For directshow (Windows) use the display name."
         },
+        "deckPilot.recording.windowScope": {
+          "type": "string",
+          "enum": [
+            "focused",
+            "screen"
+          ],
+          "default": "focused",
+          "description": "Capture only the VS Code window where recording starts, or the full screen. On Windows, focused scope automatically constrains plain gdigrab desktop commands."
+        },
         "deckPilot.dubbing.executable": {
           "type": "string",
           "default": "srt-dubber",

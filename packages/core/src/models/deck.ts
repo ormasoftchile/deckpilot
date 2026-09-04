@@ -135,6 +135,7 @@ export interface DeckMetadata {
     wordsPerMinute?: number;
     minDisplayMs?: number;
     actionDelayMs?: number;
+    narrationGapMs?: number;
     fileViewMs?: number;
     initialDelayMs?: number;
     finalDelayMs?: number;

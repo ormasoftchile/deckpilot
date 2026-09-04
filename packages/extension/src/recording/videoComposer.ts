@@ -18,6 +18,16 @@ export interface CompositionResult {
   plan: VideoCompositionPlan;
 }
 
+export function resolveVideoBaseDirectory(
+  deckPath: string,
+  configuredBasePath?: string,
+): string {
+  const deckDirectory = path.dirname(deckPath);
+  return configuredBasePath
+    ? path.resolve(deckDirectory, configuredBasePath)
+    : deckDirectory;
+}
+
 export async function probeRecordedMediaDuration(filePath: string): Promise<number> {
   return (await probeMedia(filePath)).durationMs;
 }
