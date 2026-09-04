@@ -1,7 +1,10 @@
 import { expect } from 'chai';
+import * as path from 'path';
 import { createDeck } from '../../../packages/core/src/models/deck';
 import { createSlide } from '../../../packages/core/src/models/slide';
+import type { RecordingSession } from '../../../packages/core/src/models/recording';
 import { Conductor } from '../../../packages/extension/src/conductor/conductor';
+import { resolveVideoBaseDirectory } from '../../../packages/extension/src/recording/videoComposer';
 
 interface AutoRecordHarness {
   deck: ReturnType<typeof createDeck>;
@@ -30,6 +33,19 @@ interface AdvanceHarness {
     fragmentCount: number,
     timestamp?: number,
   ): void;
+}
+
+interface StopRecordingHarness {
+  deck: undefined;
+  currentSlideIndex: number;
+  recordingState: {
+    getSession(): RecordingSession;
+    stopRecording(slideIndex?: number): RecordingSession;
+  };
+  recorderOrchestrator: {
+    stop(sessionId: string): Promise<void>;
+  };
+  stopRecording: Conductor['stopRecording'];
 }
 
 describe('Conductor Auto-Record lifecycle', () => {
@@ -64,6 +80,60 @@ describe('Conductor Auto-Record lifecycle', () => {
     }
 
     expect(startupAttempts).to.equal(2);
+  });
+
+  it('stops the event clock before awaiting recorder shutdown', async () => {
+    const order: string[] = [];
+    const session: RecordingSession = {
+      sessionId: 'session',
+      deckPath: '/deck.md',
+      recordingStartTime: 1000,
+      events: [],
+      segments: [],
+      ignoredIntervals: [],
+      manualMarkers: [],
+      exportMetadata: {
+        generatedAt: 0,
+        extensionVersion: '',
+        platform: 'test',
+        exportFormats: [],
+      },
+    };
+    const harness = Object.create(Conductor.prototype) as StopRecordingHarness;
+    harness.deck = undefined;
+    harness.currentSlideIndex = 0;
+    harness.recordingState = {
+      getSession: () => session,
+      stopRecording: () => {
+        order.push('timeline');
+        return session;
+      },
+    };
+    harness.recorderOrchestrator = {
+      stop: async () => {
+        order.push('recorder-start');
+        await Promise.resolve();
+        order.push('recorder-end');
+      },
+    };
+
+    await harness.stopRecording();
+
+    expect(order).to.deep.equal(['timeline', 'recorder-start', 'recorder-end']);
+  });
+});
+
+describe('Conductor Auto-Record video paths', () => {
+  const deckPath = path.resolve('examples', 'video-workflow', 'video-workflow.deck.md');
+
+  it('resolves relative video sources from the deck directory by default', () => {
+    expect(resolveVideoBaseDirectory(deckPath)).to.equal(path.dirname(deckPath));
+  });
+
+  it('resolves an explicit basePath from the deck directory', () => {
+    expect(resolveVideoBaseDirectory(deckPath, '..')).to.equal(
+      path.resolve(path.dirname(deckPath), '..'),
+    );
   });
 });
 

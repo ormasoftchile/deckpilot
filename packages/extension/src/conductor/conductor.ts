@@ -40,7 +40,12 @@ import {
 } from '../recording/recordingEventFactory';
 import { parseCues } from '../recording/cueParser';
 import { buildSegments } from '../recording/segmentBuilder';
-import { RecorderOrchestrator, getRecorderConfig } from '../recording/recorderOrchestrator';
+import {
+  RecorderOrchestrator,
+  RecorderWindowTarget,
+  captureActiveRecordingWindow,
+  getRecorderConfig,
+} from '../recording/recorderOrchestrator';
 import {
   buildAutoPilotPlan,
   AutoPilotStep,
@@ -52,6 +57,7 @@ import { resolveRecordingOutputLayout } from '../recording/outputLayout';
 import {
   composeRecordedVideo,
   probeRecordedMediaDuration,
+  resolveVideoBaseDirectory,
   validateVideoSources,
 } from '../recording/videoComposer';
 import { alignRecordingSessionToCapture } from '../recording/videoCompositionPlan';
@@ -783,14 +789,19 @@ export class Conductor implements vscode.Disposable {
    * Optionally launches an external screen recorder if configured.
    * No-op if already recording or no deck is open.
    */
-  async startRecording(outputDirectory?: string): Promise<void> {
+  async startRecording(
+    outputDirectory?: string,
+    windowTarget?: RecorderWindowTarget,
+  ): Promise<void> {
     if (!this.deck) {
       return;
     }
+    const recordingWindowTarget = windowTarget ?? await captureActiveRecordingWindow();
 
     const sessionId = randomUUID();
     const startedAt = Date.now();
     const recorderConfig = getRecorderConfig();
+    recorderConfig.windowScope = this.deck.metadata.recording?.windowScope ?? recorderConfig.windowScope;
     const outputLayout = resolveRecordingOutputLayout({
       deckPath: this.deck.filePath,
       sessionId,
@@ -801,12 +812,16 @@ export class Conductor implements vscode.Disposable {
     this.recordingOutputDirectory = outputDirectory ?? outputLayout.sessionDirectory;
     recorderConfig.outputDir = this.recordingOutputDirectory;
     this.outputChannel.appendLine(
-      `[Recording] Recorder config — start: "${recorderConfig.startCommand}", stop: "${recorderConfig.stopCommand}", dir: "${recorderConfig.outputDir}"`,
+      `[Recording] Recorder config — start: "${recorderConfig.startCommand}", stop: "${recorderConfig.stopCommand}", dir: "${recorderConfig.outputDir}", scope: "${recorderConfig.windowScope}"`,
     );
     this.recorderOrchestrator = new RecorderOrchestrator(recorderConfig, this.outputChannel);
     if (this.recorderOrchestrator.isConfigured()) {
       this.outputChannel.appendLine(`[Recording] Launching recorder for session ${sessionId}`);
-      const started = await this.recorderOrchestrator.start(sessionId, this.deck.filePath);
+      const started = await this.recorderOrchestrator.start(
+        sessionId,
+        this.deck.filePath,
+        recordingWindowTarget,
+      );
       if (!started) {
         void vscode.window.showWarningMessage(
           'External recorder failed to start. Timeline logging continues.',
@@ -835,10 +850,10 @@ export class Conductor implements vscode.Disposable {
     const activeSession = this.recordingState.getSession();
     if (!activeSession) return undefined;
 
+    const session = this.recordingState.stopRecording(this.currentSlideIndex);
     if (this.recorderOrchestrator) {
       await this.recorderOrchestrator.stop(activeSession.sessionId);
     }
-    const session = this.recordingState.stopRecording(this.currentSlideIndex);
     if (session && this.deck) {
       session.outputDirectory = this.recordingOutputDirectory;
 
@@ -865,7 +880,7 @@ export class Conductor implements vscode.Disposable {
 
       if (session.recorder?.stopped && this.deck.slides.some(slide => slide.video)) {
         try {
-          const baseDirectory = this.resolvedBasePath();
+          const baseDirectory = this.resolvedVideoBasePath();
           const composed = await composeRecordedVideo(
             session,
             baseDirectory,
@@ -968,6 +983,7 @@ export class Conductor implements vscode.Disposable {
   async autoRecord(
     narrationTimings: readonly NarrationTiming[] = [],
     outputDirectory?: string,
+    windowTarget?: RecorderWindowTarget,
   ): Promise<RecordingSession | undefined> {
     if (!this.deck) {
       return undefined;
@@ -978,7 +994,7 @@ export class Conductor implements vscode.Disposable {
 
     let videoDurations: Map<number, number>;
     try {
-      videoDurations = await validateVideoSources(this.deck.slides, this.resolvedBasePath());
+      videoDurations = await validateVideoSources(this.deck.slides, this.resolvedVideoBasePath());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.outputChannel.appendLine(`[AutoPilot] Video preflight failed: ${message}`);
@@ -1018,9 +1034,12 @@ export class Conductor implements vscode.Disposable {
     }
 
     // Start recording (with external recorder if configured)
-    await this.startRecording(outputDirectory);
+    await this.startRecording(outputDirectory, windowTarget);
 
-    if (this.recorderOrchestrator?.getMetadata().started) {
+    if (
+      this.recorderOrchestrator?.getMetadata().started &&
+      !this.recorderOrchestrator.hasConfirmedOutputReady()
+    ) {
       this.outputChannel.appendLine(
         `[AutoPilot] Waiting ${RECORDER_STARTUP_ALLOWANCE_MS}ms for recorder media startup`,
       );
@@ -1385,6 +1404,13 @@ export class Conductor implements vscode.Disposable {
       return path.resolve(deckDir, deckBasePath);
     }
     return workspaceRoot;
+  }
+
+  private resolvedVideoBasePath(): string {
+    if (!this.deck) {
+      return '';
+    }
+    return resolveVideoBaseDirectory(this.deck.filePath, this.deck.metadata.basePath);
   }
 
   /**

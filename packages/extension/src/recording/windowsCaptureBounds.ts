@@ -5,7 +5,11 @@ export interface WindowBounds {
   height: number;
 }
 
-export function buildWindowsBoundsScript(): string {
+export function buildWindowsBoundsScript(windowHandle?: string): string {
+  const handleExpression = windowHandle && /^\d+$/.test(windowHandle) && windowHandle !== '0'
+    ? `[IntPtr]${windowHandle}`
+    : '[WinCaptureBounds]::GetForegroundWindow()';
+
   return [
     'Add-Type @"',
     'using System;',
@@ -28,7 +32,7 @@ export function buildWindowsBoundsScript(): string {
     '}',
     '"@',
     '[WinCaptureBounds]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null',
-    '$hwnd = [WinCaptureBounds]::GetForegroundWindow()',
+    `$hwnd = ${handleExpression}`,
     'if ($hwnd -eq [IntPtr]::Zero) { throw "No foreground window" }',
     '$rect = New-Object WinCaptureBounds+RECT',
     '$result = [WinCaptureBounds]::DwmGetWindowAttribute(',

@@ -25,9 +25,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ..\..\..\srt-dubber\scripts\
 
 ## Run the example
 
-1. Open `video-workflow.code-workspace` in the Extension Development Host. When
-   developing Deckpilot, open this repository and press `F5`, then open the
-   example workspace in the new window.
+1. Open this repository and run the **Run Extension** launch configuration. It
+  opens `video-workflow.code-workspace` in the Extension Development Host.
 2. Open `video-workflow.deck.md`.
 3. Run **Deckpilot: Record or Update Narration**. No presentation needs to be running.
 4. In srt-dubber, record pending cues and review or redo takes as needed, then quit.

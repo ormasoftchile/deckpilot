@@ -3,13 +3,32 @@
   "configurations": [
     {
       "name": "Run Extension",
-      "type": "extensionHost",
+      "type": "pwa-extensionHost",
+      "request": "launch",
+      "noDebug": true,
+      "args": [
+        "--disable-extensions",
+        "--disable-extension=GitHub.copilot",
+        "--disable-extension=GitHub.copilot-chat",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/examples/video-workflow/video-workflow.code-workspace"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js",
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "build extension host"
+    },
+    {
+      "name": "Debug Extension (Inspector)",
+      "type": "pwa-extensionHost",
       "request": "launch",
       "args": [
         "--disable-extensions",
         "--disable-extension=GitHub.copilot",
         "--disable-extension=GitHub.copilot-chat",
-        "--extensionDevelopmentPath=${workspaceFolder}"
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/examples/video-workflow/video-workflow.code-workspace"
       ],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js",
@@ -19,7 +38,7 @@
     },
     {
       "name": "Run All Extensions (Triton + Mermaid)",
-      "type": "extensionHost",
+      "type": "pwa-extensionHost",
       "request": "launch",
       "args": [
         "--disable-extensions",
@@ -39,7 +58,7 @@
     },
     {
       "name": "Debug Deckpilot + Triton (local Triton)",
-      "type": "extensionHost",
+      "type": "pwa-extensionHost",
       "request": "launch",
       "args": [
         "--disable-extensions",
@@ -59,7 +78,7 @@
     },
     {
       "name": "Extension Tests",
-      "type": "extensionHost",
+      "type": "pwa-extensionHost",
       "request": "launch",
       "extensionDevelopmentPath": "${workspaceFolder}",
       "args": [

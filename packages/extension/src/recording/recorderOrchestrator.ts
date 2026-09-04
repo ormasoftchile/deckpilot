@@ -13,7 +13,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as cp from 'child_process';
-import * as os from 'os';
 import * as fs from 'fs';
 import { RecorderMetadata } from '@deckpilot/core/models/recording';
 import {
@@ -30,6 +29,93 @@ export interface RecorderConfig {
   outputExtension: string;
   /** avfoundation / directshow screen device identifier, e.g. "0:none" or "1" */
   screenDevice: string;
+  windowScope: RecordingWindowScope;
+}
+
+export type RecordingWindowScope = 'focused' | 'screen';
+
+const RECORDER_OUTPUT_READY_TIMEOUT_MS = 10_000;
+const RECORDER_OUTPUT_POLL_MS = 50;
+
+export interface RecorderWindowTarget {
+  windowsHandle?: string;
+}
+
+export async function waitForRecorderOutput(
+  outputPath: string,
+  timeoutMs = RECORDER_OUTPUT_READY_TIMEOUT_MS,
+  pollMs = RECORDER_OUTPUT_POLL_MS,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    try {
+      const output = await fs.promises.stat(outputPath);
+      if (output.isFile() && output.size > 0) {
+        return true;
+      }
+    } catch {
+      // The recorder may not have created its output yet.
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, pollMs));
+  }
+  return false;
+}
+
+export function applyWindowScopeToCommand(
+  template: string,
+  platform: NodeJS.Platform,
+  windowScope: RecordingWindowScope,
+): string {
+  if (platform !== 'win32' || windowScope !== 'focused') {
+    return template;
+  }
+  if (!/(?:^|\s)-f\s+gdigrab(?:\s|$)/i.test(template)) {
+    return template;
+  }
+  if (/(?:^|\s)-(?:offset_x|offset_y|video_size)(?:\s|$)/i.test(template)) {
+    return template;
+  }
+
+  return template.replace(
+    /-i\s+(?:"desktop"|'desktop'|desktop)/i,
+    match => '-offset_x {{windowX}} -offset_y {{windowY}} ' +
+      `-video_size {{windowWidth}}x{{windowHeight}} ${match}`,
+  );
+}
+
+export async function captureActiveRecordingWindow(): Promise<RecorderWindowTarget | undefined> {
+  if (process.platform !== 'win32') {
+    return undefined;
+  }
+
+  const script = [
+    'Add-Type @"',
+    'using System;',
+    'using System.Runtime.InteropServices;',
+    'public class ActiveWindow {',
+    '  [DllImport("user32.dll")]',
+    '  public static extern IntPtr GetForegroundWindow();',
+    '}',
+    '"@',
+    '$windowHandle = [ActiveWindow]::GetForegroundWindow()',
+    'if ($windowHandle -eq [IntPtr]::Zero) { exit 1 }',
+    'Write-Output $windowHandle.ToInt64()',
+  ].join('\n');
+  const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
+
+  return new Promise(resolve => {
+    cp.execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedScript],
+      { timeout: 5000, windowsHide: true },
+      (error, stdout) => {
+        const windowHandle = stdout.trim();
+        resolve(!error && /^\d+$/.test(windowHandle) && windowHandle !== '0'
+          ? { windowsHandle: windowHandle }
+          : undefined);
+      },
+    );
+  });
 }
 
 /**
@@ -52,6 +138,7 @@ export function getRecorderConfig(): RecorderConfig {
     outputDir: get('outputDir', ''),
     outputExtension: get('outputExtension', 'mp4'),
     screenDevice: get('screenDevice', process.platform === 'darwin' ? '1:none' : '0:none'),
+    windowScope: get<RecordingWindowScope>('windowScope', 'focused'),
   };
 }
 
@@ -65,6 +152,7 @@ export class RecorderOrchestrator {
   private resolvedStopCmd: string | undefined;
   private started = false;
   private stopped = false;
+  private outputReady = false;
   private error: string | undefined;
 
   constructor(
@@ -84,7 +172,11 @@ export class RecorderOrchestrator {
    * Returns true if the process spawned successfully, false otherwise.
    * Never throws — failures are captured in metadata.
    */
-  async start(sessionId: string, deckPath: string): Promise<boolean> {
+  async start(
+    sessionId: string,
+    deckPath: string,
+    windowTarget?: RecorderWindowTarget,
+  ): Promise<boolean> {
     if (!this.isConfigured()) {
       return false;
     }
@@ -97,14 +189,23 @@ export class RecorderOrchestrator {
       this.outputPath = path.join(dir, filename);
 
       // Ensure output directory exists
-      const fs = await import('fs');
       await fs.promises.mkdir(dir, { recursive: true });
 
       // Interpolate template variables (may resolve window bounds)
-      this.resolvedStartCmd = await this.interpolate(
+      const scopedStartCommand = applyWindowScopeToCommand(
         this.config.startCommand,
+        process.platform,
+        this.config.windowScope,
+      );
+      const expectsOutputFile = scopedStartCommand.includes('{{outputPath}}');
+      if (scopedStartCommand !== this.config.startCommand) {
+        this.outputChannel.appendLine('[Recorder] Applied focused-window capture to gdigrab command');
+      }
+      this.resolvedStartCmd = await this.interpolate(
+        scopedStartCommand,
         sessionId,
         this.outputPath,
+        windowTarget,
       );
 
       this.outputChannel.appendLine(
@@ -148,7 +249,7 @@ export class RecorderOrchestrator {
       });
 
       // Handle spawn errors
-      return await new Promise<boolean>((resolve) => {
+      const spawned = await new Promise<boolean>((resolve) => {
         const proc = this.process!;
 
         const onError = (err: Error) => {
@@ -185,6 +286,20 @@ export class RecorderOrchestrator {
         proc.once('spawn', onSpawn);
         proc.once('close', onClose);
       });
+      if (!spawned || !expectsOutputFile) {
+        return spawned;
+      }
+
+      this.outputChannel.appendLine('[Recorder] Waiting for output media');
+      const outputReady = await waitForRecorderOutput(this.outputPath);
+      if (!outputReady) {
+        this.error = `Recorder output was not ready after ${RECORDER_OUTPUT_READY_TIMEOUT_MS}ms`;
+        this.outputChannel.appendLine(`[Recorder] Error: ${this.error}`);
+        return false;
+      }
+      this.outputReady = true;
+      this.outputChannel.appendLine('[Recorder] Output media ready');
+      return true;
     } catch (err) {
       this.error = `Recorder start failed: ${err instanceof Error ? err.message : String(err)}`;
       this.outputChannel.appendLine(`[Recorder] ${this.error}`);
@@ -300,6 +415,10 @@ export class RecorderOrchestrator {
     };
   }
 
+  hasConfirmedOutputReady(): boolean {
+    return this.outputReady;
+  }
+
   /**
    * Dispose of the recorder process if still running.
    */
@@ -315,6 +434,7 @@ export class RecorderOrchestrator {
     template: string,
     sessionId: string,
     outputPath: string,
+    windowTarget?: RecorderWindowTarget,
   ): Promise<string> {
     let result = template
       .replace(/\{\{outputPath\}\}/g, outputPath)
@@ -323,7 +443,7 @@ export class RecorderOrchestrator {
 
     // Resolve window bounds if any window template vars are present
     if (/\{\{window(X|Y|Width|Height)\}\}/.test(result)) {
-      const bounds = await this.getWindowBounds();
+      const bounds = await this.getWindowBounds(windowTarget);
       if (bounds) {
         result = resolveWindowPlaceholders(result, bounds);
         this.outputChannel.appendLine(
@@ -340,9 +460,11 @@ export class RecorderOrchestrator {
   /**
    * Get the VS Code window bounds using platform-specific methods.
    */
-  private async getWindowBounds(): Promise<WindowBounds | undefined> {
+  private async getWindowBounds(
+    windowTarget?: RecorderWindowTarget,
+  ): Promise<WindowBounds | undefined> {
     if (process.platform === 'win32') {
-      return this.getWindowBoundsWindows();
+      return this.getWindowBoundsWindows(windowTarget?.windowsHandle);
     }
     if (process.platform === 'darwin') {
       return this.getWindowBoundsMac();
@@ -388,18 +510,19 @@ export class RecorderOrchestrator {
 
   /**
    * Get the VS Code window bounds on Windows using a PowerShell script.
-   * Finds the foreground window and reads its rect.
+   * Uses the HWND captured when recording was invoked, before focus can move.
    */
-  private getWindowBoundsWindows(): Promise<WindowBounds | undefined> {
+  private getWindowBoundsWindows(
+    windowHandle?: string,
+  ): Promise<WindowBounds | undefined> {
     return new Promise((resolve) => {
-      const script = buildWindowsBoundsScript();
+      const script = buildWindowsBoundsScript(windowHandle);
+      const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
 
-      const tmpFile = path.join(os.tmpdir(), 'et-window-bounds.ps1');
-      fs.writeFileSync(tmpFile, script, 'utf-8');
-
-      cp.exec(
-        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpFile}"`,
-        { timeout: 5000 },
+      cp.execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedScript],
+        { timeout: 5000, windowsHide: true },
         (err, stdout) => {
           if (err) {
             this.outputChannel.appendLine(`[Recorder] Window bounds error: ${err.message}`);

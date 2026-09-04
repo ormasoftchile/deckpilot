@@ -34,7 +34,10 @@ import {
     seedNarrationProject,
     stageNarrationProjectForSession,
 } from './dubbing/narrationProject';
-import { getRecorderConfig } from './recording/recorderOrchestrator';
+import {
+    captureActiveRecordingWindow,
+    getRecorderConfig,
+} from './recording/recorderOrchestrator';
 import { recordingDeckName } from './recording/outputLayout';
 import { isExplicitDeckPath } from './deckRecognition';
 import {
@@ -538,7 +541,8 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 void vscode.window.showWarningMessage('Recording is already active.');
                 return;
             }
-            await conductor.startRecording();
+            const windowTarget = await captureActiveRecordingWindow();
+            await conductor.startRecording(undefined, windowTarget);
             void vscode.window.showInformationMessage('🔴 Recording started');
         }
     );
@@ -623,6 +627,7 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 return;
             }
 
+            const windowTarget = await captureActiveRecordingWindow();
             narrationWorkflowRunning = true;
             try {
                 const presentedDeckPath = conductor?.isActive() &&
@@ -734,9 +739,9 @@ export function activate(context: vscode.ExtensionContext): DeckpilotDiagramAPI 
                 const { project, timings } = prepared;
 
                 void vscode.window.showInformationMessage('Auto-pilot started using measured narration timing.');
-                const session = await conductor.autoRecord(timings, setup.outputDirectory);
+                const session = await conductor.autoRecord(timings, setup.outputDirectory, windowTarget);
                 if (!session) {
-                    throw new Error('Presentation capture did not produce a recording session.');
+                    return;
                 }
                 const { RecordingSerializer } = await import('./recording/recordingSerializer');
                 const { VoiceOverScriptGenerator } = await import('./recording/voiceOverScriptGenerator');

@@ -8,9 +8,68 @@
  */
 
 import { expect } from 'chai';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { RecorderMetadata } from '../../../packages/core/src/models/recording';
+import {
+  applyWindowScopeToCommand,
+  waitForRecorderOutput,
+} from '../../../packages/extension/src/recording/recorderOrchestrator';
+import { buildWindowsBoundsScript } from '../../../packages/extension/src/recording/windowsCaptureBounds';
 
 describe('RecorderOrchestrator — metadata model', () => {
+  describe('recorder readiness', () => {
+    it('waits until the output file contains media bytes', async () => {
+      const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'deckpilot-recorder-'));
+      const outputPath = path.join(directory, 'capture.mp4');
+      let settled = false;
+
+      try {
+        const ready = waitForRecorderOutput(outputPath, 500, 10)
+          .then(result => {
+            settled = true;
+            return result;
+          });
+        await new Promise(resolve => setTimeout(resolve, 25));
+        expect(settled).to.equal(false);
+
+        await fs.promises.writeFile(outputPath, Buffer.from('media'));
+        expect(await ready).to.equal(true);
+      } finally {
+        await fs.promises.rm(directory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('Windows capture target selection', () => {
+    it('should constrain a plain gdigrab desktop command to the focused window', () => {
+      const command = applyWindowScopeToCommand(
+        'ffmpeg -y -f gdigrab -framerate 30 -i desktop -c:v libx264 {{outputPath}}',
+        'win32',
+        'focused',
+      );
+
+      expect(command).to.include('-offset_x {{windowX}}');
+      expect(command).to.include('-offset_y {{windowY}}');
+      expect(command).to.include('-video_size {{windowWidth}}x{{windowHeight}}');
+      expect(command.indexOf('-video_size')).to.be.lessThan(command.indexOf('-i desktop'));
+    });
+
+    it('should preserve full-desktop capture when screen scope is explicit', () => {
+      const template = 'ffmpeg -f gdigrab -i desktop {{outputPath}}';
+
+      expect(applyWindowScopeToCommand(template, 'win32', 'screen')).to.equal(template);
+    });
+
+    it('should use the exact window handle captured by the invoking VS Code window', () => {
+      const script = buildWindowsBoundsScript('4242');
+
+      expect(script).to.include('$hwnd = [IntPtr]4242');
+      expect(script).not.to.include('ParentProcessId');
+    });
+  });
+
   describe('RecorderMetadata', () => {
     it('should represent unconfigured state', () => {
       const meta: RecorderMetadata = {
