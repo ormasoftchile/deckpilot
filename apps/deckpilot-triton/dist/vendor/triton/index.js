@@ -110,7 +110,8 @@ var MERMAID_PATTERNS = [
   [/^behaviortree\b/i, "behaviortree"],
   [/^quadtree\b/i, "quadtree"],
   [/^treap\b/i, "treap"],
-  [/^(2-3-4tree|234tree)\b/i, "234tree"]
+  [/^(2-3-4tree|234tree)\b/i, "234tree"],
+  [/^platform\b/i, "platform"]
 ];
 function matchMermaid(text) {
   for (const [pattern, type] of MERMAID_PATTERNS) {
@@ -800,7 +801,9 @@ function getRouter(style) {
   return registry3.get(style);
 }
 var StraightRouter = class {
-  route({ from, to, obstacles, padding }) {
+  route(req) {
+    const { from, to, obstacles, padding } = req;
+    const noWarn = req.noWarn;
     const pad = padding ?? 12;
     if (!obstacles || obstacles.length === 0 || !straightHitsObstacles(from, to, obstacles, pad)) {
       return {
@@ -832,6 +835,11 @@ var StraightRouter = class {
         }
       }
     }
+    if (!noWarn && obstacles && obstacles.length > 0 && straightHitsObstacles(from, to, obstacles, pad)) {
+      console.warn(
+        `[routing] No clear route between (${from.x}, ${from.y}) and (${to.x}, ${to.y}): route intersects obstacles.`
+      );
+    }
     return {
       points: [from, to],
       path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
@@ -858,7 +866,9 @@ function straightHitsObstacles(from, to, obstacles, pad) {
   return false;
 }
 var OrthogonalRouter = class {
-  route({ from, to, fromDir, toDir, obstacles, padding }) {
+  route(req) {
+    const { from, to, fromDir, toDir, obstacles, padding } = req;
+    const noWarn = req.noWarn;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const midX = (from.x + to.x) / 2;
@@ -959,16 +969,23 @@ var OrthogonalRouter = class {
           points2 = directRoute;
         } else {
           const sign = fromDir === "E" ? 1 : -1;
-          const obsEdge = obstacles && obstacles.length > 0 ? fromDir === "E" ? Math.max(...obstacles.map((o) => o.x + o.width)) : Math.min(...obstacles.map((o) => o.x)) : from.x;
-          const span = Math.abs(to.y - from.y);
-          const spanOffset = Math.min(20, Math.max(0, (span - 100) * 0.08));
-          const baseX = fromDir === "E" ? Math.max(from.x + STUB, obsEdge + pad) + spanOffset : Math.min(from.x - STUB, obsEdge - pad) - spanOffset;
+          const baseX = fromDir === "E" ? from.x + pad : from.x - pad;
           const bendX = clearBendXOutboard(baseX, from, to, obstacles, pad, sign);
-          const bendY = toDir === "N" ? to.y - STUB : to.y + STUB;
-          points2 = [from, { x: bendX, y: from.y }, { x: bendX, y: bendY }, { x: to.x, y: bendY }, to];
+          const bendY = toDir === "N" ? to.y - pad : to.y + pad;
+          points2 = [
+            from,
+            { x: bendX, y: from.y },
+            { x: bendX, y: bendY },
+            { x: to.x, y: bendY },
+            to
+          ];
         }
         path2 = points2.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-        return { points: points2, path: path2, labelPosition: { x: (points2[0].x + points2[1].x) / 2, y: points2[0].y } };
+        return {
+          points: points2,
+          path: path2,
+          labelPosition: { x: (points2[0].x + points2[1].x) / 2, y: points2[0].y }
+        };
       } else {
         const corner = { x: from.x, y: to.y };
         const leavesOk = fromDir === "S" ? to.y >= from.y : to.y <= from.y;
@@ -979,14 +996,23 @@ var OrthogonalRouter = class {
           points2 = directRoute;
         } else {
           const sign = fromDir === "S" ? 1 : -1;
-          const obsEdge = obstacles && obstacles.length > 0 ? fromDir === "S" ? Math.max(...obstacles.map((o) => o.y + o.height)) : Math.min(...obstacles.map((o) => o.y)) : from.y;
-          const baseY = fromDir === "S" ? Math.max(from.y + STUB, obsEdge + pad) : Math.min(from.y - STUB, obsEdge - pad);
+          const baseY = fromDir === "S" ? from.y + pad : from.y - pad;
           const bendY = clearBendYOutboard(baseY, from, to, obstacles, pad, sign);
-          const bendX = toDir === "W" ? to.x - STUB : to.x + STUB;
-          points2 = [from, { x: from.x, y: bendY }, { x: bendX, y: bendY }, { x: bendX, y: to.y }, to];
+          const bendX = toDir === "W" ? to.x - pad : to.x + pad;
+          points2 = [
+            from,
+            { x: from.x, y: bendY },
+            { x: bendX, y: bendY },
+            { x: bendX, y: to.y },
+            to
+          ];
         }
         path2 = points2.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-        return { points: points2, path: path2, labelPosition: { x: points2[0].x, y: (points2[0].y + points2[1].y) / 2 } };
+        return {
+          points: points2,
+          path: path2,
+          labelPosition: { x: points2[0].x, y: (points2[0].y + points2[1].y) / 2 }
+        };
       }
       return { points: points2, path: path2, labelPosition: { x: midX, y: midY } };
     }
@@ -1004,6 +1030,11 @@ var OrthogonalRouter = class {
       const v2 = { x: bendX, y: to.y };
       points = [from, v1, v2, to];
       path = `M ${from.x} ${from.y} L ${v1.x} ${v1.y} L ${v2.x} ${v2.y} L ${to.x} ${to.y}`;
+    }
+    if (!noWarn && obstacles && obstacles.length > 0 && countRouteCollisions(points, obstacles) > 0) {
+      console.warn(
+        `[routing] No clear route between (${from.x}, ${from.y}) and (${to.x}, ${to.y}): route intersects obstacles.`
+      );
     }
     return { points, path, labelPosition: { x: midX, y: midY } };
   }
@@ -1347,7 +1378,7 @@ function countRouteCollisions(points, obstacles) {
   return count;
 }
 function buildVVRouteWithStubs(from, to, fromDir, toDir, obstacles, pad) {
-  const stubLen = Math.max(pad, 24);
+  const stubLen = pad;
   const stub1 = {
     x: from.x + (fromDir === "W" ? -stubLen : fromDir === "E" ? stubLen : 0),
     y: from.y + (fromDir === "N" ? -stubLen : fromDir === "S" ? stubLen : 0)
@@ -1362,7 +1393,7 @@ function buildVVRouteWithStubs(from, to, fromDir, toDir, obstacles, pad) {
   return [from, stub1, { x: stub1.x, y: bendY }, { x: stub2.x, y: bendY }, stub2, to];
 }
 function buildHHRouteWithStubs(from, to, fromDir, toDir, obstacles, pad) {
-  const stubLen = Math.max(pad, 24);
+  const stubLen = pad;
   const stub1 = {
     x: from.x + (fromDir === "W" ? -stubLen : fromDir === "E" ? stubLen : 0),
     y: from.y + (fromDir === "N" ? -stubLen : fromDir === "S" ? stubLen : 0)
@@ -1395,9 +1426,9 @@ function pointDistance(a, b) {
 }
 function avoidObstaclesWithPortTangents(from, to, cp1, cp2, fromDir, toDir, basePull, obstacles, pad) {
   if (!fromDir && !toDir) return { cp1, cp2 };
-  if (!bezierSegmentsHitObstacles(from, cp1, cp2, to, obstacles, 96)) return { cp1, cp2 };
+  if (!bezierSegmentsHitObstacles(from, cp1, cp2, to, obstacles, 16)) return { cp1, cp2 };
   const maxPull = Math.max(basePull, Math.min(pointDistance(from, to) * 0.6, 600));
-  const step = Math.max(pad / 2, 6);
+  const step = Math.max(pad * 2, (maxPull - basePull) / 6, 24);
   const fromPulls = fromDir ? portPullCandidates(basePull, maxPull, step) : [basePull];
   const toPulls = toDir ? portPullCandidates(basePull, maxPull, step) : [basePull];
   const pairs = fromPulls.flatMap(
@@ -1410,7 +1441,7 @@ function avoidObstaclesWithPortTangents(from, to, cp1, cp2, fromDir, toDir, base
   for (const { fromPull, toPull } of pairs) {
     const candidateCp1 = fromDir ? controlPointForPort(from, fromDir, fromPull) : cp1;
     const candidateCp2 = toDir ? controlPointForPort(to, toDir, toPull) : cp2;
-    if (!bezierSegmentsHitObstacles(from, candidateCp1, candidateCp2, to, obstacles, 96)) {
+    if (!bezierSegmentsHitObstacles(from, candidateCp1, candidateCp2, to, obstacles, 16)) {
       return { cp1: candidateCp1, cp2: candidateCp2 };
     }
   }
@@ -1475,7 +1506,7 @@ var BezierRouter = class {
       );
       cp1 = portAdjusted.cp1;
       cp2 = portAdjusted.cp2;
-      if (bezierSegmentsHitObstacles(from, cp1, cp2, to, obstacles, 96)) {
+      if (bezierSegmentsHitObstacles(from, cp1, cp2, to, obstacles, 16)) {
         const fallbackRequest = {
           from,
           to,
@@ -2533,6 +2564,10 @@ function layoutFlowchart(ir, theme, options) {
       })
     );
   }
+  let sgMinX = Infinity;
+  let sgMaxX = -Infinity;
+  let sgMinY = Infinity;
+  let sgMaxY = -Infinity;
   for (const sg of ir.subgraphs) {
     const sgRects = sg.nodeIds.map((id) => nodePos.get(id)).filter((r) => r !== void 0);
     if (sgRects.length === 0) continue;
@@ -2541,6 +2576,10 @@ function layoutFlowchart(ir, theme, options) {
     const minY = Math.min(...sgRects.map((r) => r.y)) - pad - 20;
     const maxX = Math.max(...sgRects.map((r) => r.x + r.width)) + pad;
     const maxY = Math.max(...sgRects.map((r) => r.y + r.height)) + pad;
+    sgMinX = Math.min(sgMinX, minX);
+    sgMaxX = Math.max(sgMaxX, maxX);
+    sgMinY = Math.min(sgMinY, minY);
+    sgMaxY = Math.max(sgMaxY, maxY);
     elements.push(
       p.rect(
         { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
@@ -2554,8 +2593,11 @@ function layoutFlowchart(ir, theme, options) {
       p.text(sg.label, minX + 8, minY + 14, typography.smallFontSize, palette.textMuted)
     );
   }
+  let bowMinX = Infinity;
   let bowMaxX = -Infinity;
+  let bowMinY = Infinity;
   let bowMaxY = -Infinity;
+  let gutterLaneIdx = 0;
   const nodeLayerMap = /* @__PURE__ */ new Map();
   for (const [l, nodes] of orderedByLayer) {
     for (const n of nodes) nodeLayerMap.set(n.id, l);
@@ -2582,22 +2624,21 @@ function layoutFlowchart(ir, theme, options) {
     const fromPeerCoord = toWall === "N" || toWall === "S" ? fromRect.x + fromRect.width / 2 : fromRect.y + fromRect.height / 2;
     edgeWalls.set(ei, { fromWall, toWall, fromPeerCoord, toPeerCoord });
   }
-  const nodeWallOut = /* @__PURE__ */ new Map();
-  const nodeWallIn = /* @__PURE__ */ new Map();
+  const wallPorts = /* @__PURE__ */ new Map();
   for (const [ei, ew] of edgeWalls) {
     const edge = ir.edges[ei];
     const outKey = `${edge.from}:${ew.fromWall}`;
     const inKey = `${edge.to}:${ew.toWall}`;
-    if (!nodeWallOut.has(outKey)) nodeWallOut.set(outKey, []);
-    if (!nodeWallIn.has(inKey)) nodeWallIn.set(inKey, []);
-    nodeWallOut.get(outKey).push(ei);
-    nodeWallIn.get(inKey).push(ei);
+    if (!wallPorts.has(outKey)) wallPorts.set(outKey, []);
+    if (!wallPorts.has(inKey)) wallPorts.set(inKey, []);
+    wallPorts.get(outKey).push({ ei, role: "out", peerCoord: ew.toPeerCoord });
+    wallPorts.get(inKey).push({ ei, role: "in", peerCoord: ew.fromPeerCoord });
   }
-  for (const [, list2] of nodeWallOut) {
-    list2.sort((a, b) => edgeWalls.get(a).toPeerCoord - edgeWalls.get(b).toPeerCoord);
-  }
-  for (const [, list2] of nodeWallIn) {
-    list2.sort((a, b) => edgeWalls.get(a).fromPeerCoord - edgeWalls.get(b).fromPeerCoord);
+  for (const [, list2] of wallPorts) {
+    list2.sort((a, b) => {
+      if (Math.abs(a.peerCoord - b.peerCoord) > 0.5) return a.peerCoord - b.peerCoord;
+      return a.role === "out" ? -1 : 1;
+    });
   }
   for (let ei = 0; ei < ir.edges.length; ei++) {
     const edge = ir.edges[ei];
@@ -2633,7 +2674,15 @@ function layoutFlowchart(ir, theme, options) {
       continue;
     }
     if (backEdges.has(ei)) {
-      const bow = backEdgeRoute(fromRect, toRect2, isLR);
+      const allRects2 = [...nodePos.values()];
+      const obstacles2 = [];
+      for (const [id, r] of nodePos) {
+        if (id !== edge.from && id !== edge.to) {
+          obstacles2.push(r);
+        }
+      }
+      const bow = backEdgeRoute(fromRect, toRect2, isLR, allRects2, obstacles2, gutterLaneIdx);
+      if (bow.usedGutter) gutterLaneIdx++;
       elements.push(
         p.path(bow.path, color, sw, {
           ...edge.animation && edge.animation !== "none" ? { animated: edge.animation } : {},
@@ -2641,14 +2690,26 @@ function layoutFlowchart(ir, theme, options) {
           markerEnd: ARROW_MARKER_ID
         })
       );
+      bowMinX = Math.min(bowMinX, bow.minX);
       bowMaxX = Math.max(bowMaxX, bow.maxX);
+      bowMinY = Math.min(bowMinY, bow.minY);
       bowMaxY = Math.max(bowMaxY, bow.maxY);
       if (edge.label) {
+        const w = measureText(edge.label, edgeTheme.labelFontSize).width + 8;
+        elements.push(
+          p.rect(
+            { x: bow.labelPos.x - w / 2, y: bow.labelPos.y - 12, width: w, height: 16 },
+            palette.background,
+            palette.background,
+            0,
+            { rx: 3 }
+          )
+        );
         elements.push(
           p.text(
             edge.label,
             bow.labelPos.x,
-            bow.labelPos.y - 4,
+            bow.labelPos.y - 2,
             edgeTheme.labelFontSize,
             palette.textMuted,
             { anchor: "middle" }
@@ -2660,11 +2721,17 @@ function layoutFlowchart(ir, theme, options) {
     const fromNode = ir.nodes.find((n) => n.id === edge.from);
     const toNode = ir.nodes.find((n) => n.id === edge.to);
     const ew = edgeWalls.get(ei);
-    const outList = ew ? nodeWallOut.get(`${edge.from}:${ew.fromWall}`) : void 0;
-    const inList = ew ? nodeWallIn.get(`${edge.to}:${ew.toWall}`) : void 0;
-    const outIdx = outList && outList.length > 1 ? outList.indexOf(ei) : 0;
+    const outList = ew ? wallPorts.get(`${edge.from}:${ew.fromWall}`) : void 0;
+    const inList = ew ? wallPorts.get(`${edge.to}:${ew.toWall}`) : void 0;
+    const outIdx = outList && outList.length > 1 ? Math.max(
+      0,
+      outList.findIndex((x) => x.ei === ei && x.role === "out")
+    ) : 0;
     const outTot = outList ? outList.length : 1;
-    const inIdx = inList && inList.length > 1 ? inList.indexOf(ei) : 0;
+    const inIdx = inList && inList.length > 1 ? Math.max(
+      0,
+      inList.findIndex((x) => x.ei === ei && x.role === "in")
+    ) : 0;
     const inTot = inList ? inList.length : 1;
     const fromAnchor = edge.exitWall ? wallAnchor(fromRect, edge.exitWall, outIdx, outTot) : ew ? wallAnchor(fromRect, ew.fromWall, outIdx, outTot) : edgeAnchor(fromRect, ir.direction, "exit", toRect2, fromNode?.shape, outIdx, outTot);
     const toAnchor = edge.entryWall ? wallAnchor(toRect2, edge.entryWall, inIdx, inTot) : ew ? wallAnchor(toRect2, ew.toWall, inIdx, inTot) : edgeAnchor(toRect2, ir.direction, "enter", fromRect, toNode?.shape, inIdx, inTot);
@@ -2695,8 +2762,18 @@ function layoutFlowchart(ir, theme, options) {
     );
     if (edge.label) {
       const lp = route.labelPosition;
+      const w = measureText(edge.label, edgeTheme.labelFontSize).width + 8;
       elements.push(
-        p.text(edge.label, lp.x, lp.y - 4, edgeTheme.labelFontSize, palette.textMuted, {
+        p.rect(
+          { x: lp.x - w / 2, y: lp.y - 12, width: w, height: 16 },
+          palette.background,
+          palette.background,
+          0,
+          { rx: 3 }
+        )
+      );
+      elements.push(
+        p.text(edge.label, lp.x, lp.y - 2, edgeTheme.labelFontSize, palette.textMuted, {
           anchor: "middle"
         })
       );
@@ -2799,13 +2876,29 @@ function layoutFlowchart(ir, theme, options) {
     elements.push(p.group(nodeElements, { id: node.id }));
   }
   const allRects = [...nodePos.values()];
-  const nodeRight = Math.max(...allRects.map((r) => r.x + r.width));
-  const nodeBottom = Math.max(...allRects.map((r) => r.y + r.height));
-  const right = (Number.isFinite(bowMaxX) ? Math.max(nodeRight, bowMaxX) : nodeRight) + margin;
-  const bottom = (Number.isFinite(bowMaxY) ? Math.max(nodeBottom, bowMaxY) : nodeBottom) + margin;
+  const nodeMinX = allRects.length > 0 ? Math.min(...allRects.map((r) => r.x)) : margin;
+  const nodeRight = allRects.length > 0 ? Math.max(...allRects.map((r) => r.x + r.width)) : margin;
+  const nodeMinY = allRects.length > 0 ? Math.min(...allRects.map((r) => r.y)) : margin;
+  const nodeBottom = allRects.length > 0 ? Math.max(...allRects.map((r) => r.y + r.height)) : margin;
+  let minBoundX = nodeMinX;
+  if (Number.isFinite(bowMinX)) minBoundX = Math.min(minBoundX, bowMinX);
+  if (Number.isFinite(sgMinX)) minBoundX = Math.min(minBoundX, sgMinX);
+  let minBoundY = nodeMinY;
+  if (Number.isFinite(bowMinY)) minBoundY = Math.min(minBoundY, bowMinY);
+  if (Number.isFinite(sgMinY)) minBoundY = Math.min(minBoundY, sgMinY);
+  let maxBoundX = nodeRight;
+  if (Number.isFinite(bowMaxX)) maxBoundX = Math.max(maxBoundX, bowMaxX);
+  if (Number.isFinite(sgMaxX)) maxBoundX = Math.max(maxBoundX, sgMaxX);
+  let maxBoundY = nodeBottom;
+  if (Number.isFinite(bowMaxY)) maxBoundY = Math.max(maxBoundY, bowMaxY);
+  if (Number.isFinite(sgMaxY)) maxBoundY = Math.max(maxBoundY, sgMaxY);
+  const left = minBoundX < margin ? minBoundX - margin : 0;
+  const top = minBoundY < margin ? minBoundY - margin : 0;
+  const right = maxBoundX + margin;
+  const bottom = maxBoundY + margin;
   const titleOffset = ir.metadata.title ? typography.titleFontSize + 12 : 0;
   let scene = {
-    viewBox: { x: 0, y: 0, width: right, height: bottom + titleOffset },
+    viewBox: { x: left, y: top, width: right - left, height: bottom - top + titleOffset },
     background: palette.background,
     elements,
     defs: [arrowMarkerDef(palette.primary, edgeTheme.arrowSize)]
@@ -3106,6 +3199,24 @@ function assignCoordinatesBK(byLayer, edges2, backEdgeSet, isLR, isReverse, maxN
       });
     }
   }
+  if (nodePos.size > 0) {
+    const minCross = Math.min(...[...nodePos.values()].map((r) => isLR ? r.y : r.x));
+    const crossShift = margin - minCross;
+    const minMain = Math.min(...[...nodePos.values()].map((r) => isLR ? r.x : r.y));
+    const mainShift = margin - minMain;
+    if (crossShift !== 0 || mainShift !== 0) {
+      const shiftX = isLR ? mainShift : crossShift;
+      const shiftY = isLR ? crossShift : mainShift;
+      for (const [id, r] of nodePos) {
+        nodePos.set(id, {
+          x: r.x + shiftX,
+          y: r.y + shiftY,
+          width: r.width,
+          height: r.height
+        });
+      }
+    }
+  }
   return nodePos;
 }
 function renderNodeShape(node, r, fill, stroke, sw, theme) {
@@ -3254,7 +3365,7 @@ function edgeAnchor(r, dir, role, peer, nodeShape, portIndex = 0, portTotal = 1)
     if (offAxis > onAxis && offAxis > r.height / 2) {
       return dy > 0 ? getPort("S") : getPort("N");
     }
-    return role === "exit" ? getPort("E") : getPort("W");
+    return dx > 0 ? getPort("E") : getPort("W");
   } else {
     if (nodeShape === "diamond") {
       if (role === "exit") {
@@ -3272,40 +3383,173 @@ function edgeAnchor(r, dir, role, peer, nodeShape, portIndex = 0, portTotal = 1)
         return getPort("N");
       }
     }
-    const offAxis = Math.abs(dx);
-    const onAxis = Math.abs(dy);
-    if (offAxis > onAxis && offAxis > r.width / 2) {
+    const sameLayer = Math.abs(dy) <= r.height;
+    if (sameLayer && Math.abs(dx) > r.width / 2 || Math.abs(dx) > Math.abs(dy) * 2) {
       return dx > 0 ? getPort("E") : getPort("W");
     }
-    return role === "exit" ? getPort("S") : getPort("N");
+    return dy > 0 ? getPort("S") : getPort("N");
   }
 }
-function backEdgeRoute(from, to, isLR) {
+function backEdgeFilletV(start, end, gutterX, isWest) {
+  const R = Math.min(8, Math.abs(end.y - start.y) / 4);
+  const signY = end.y > start.y ? 1 : -1;
+  const gTurn1X = isWest ? gutterX + R : gutterX - R;
+  const gTurn2X = isWest ? gutterX + R : gutterX - R;
+  const path = `M ${start.x} ${start.y} L ${gTurn1X} ${start.y} C ${gutterX} ${start.y}, ${gutterX} ${start.y + signY * R}, ${gutterX} ${start.y + signY * R} L ${gutterX} ${end.y - signY * R} C ${gutterX} ${end.y}, ${gTurn2X} ${end.y}, ${gTurn2X} ${end.y} L ${end.x} ${end.y}`;
+  const labelPos = { x: gutterX, y: (start.y + end.y) / 2 };
+  return { path, labelPos };
+}
+function backEdgeFilletH(start, end, gutterY, isNorth) {
+  const R = Math.min(8, Math.abs(end.x - start.x) / 4);
+  const signX = end.x > start.x ? 1 : -1;
+  const gTurn1Y = isNorth ? gutterY + R : gutterY - R;
+  const gTurn2Y = isNorth ? gutterY + R : gutterY - R;
+  const path = `M ${start.x} ${start.y} L ${start.x} ${gTurn1Y} C ${start.x} ${gutterY}, ${start.x + signX * R} ${gutterY}, ${start.x + signX * R} ${gutterY} L ${end.x - signX * R} ${gutterY} C ${end.x} ${gutterY}, ${end.x} ${gTurn2Y}, ${end.x} ${gTurn2Y} L ${end.x} ${end.y}`;
+  const labelPos = { x: (start.x + end.x) / 2, y: gutterY };
+  return { path, labelPos };
+}
+function backEdgeRoute(from, to, isLR, allRects, obstacles, laneIndex = 0) {
+  const laneOffset = laneIndex * 16;
+  const allR = allRects && allRects.length > 0 ? allRects : [from, to];
+  const obs = obstacles ?? [];
   if (isLR) {
-    const start2 = { x: from.x + from.width / 2, y: from.y + from.height };
-    const end2 = { x: to.x + to.width / 2, y: to.y + to.height };
-    const span2 = Math.abs(end2.x - start2.x);
-    const bow2 = Math.max(NODE_H * 0.9, span2 * 0.35);
-    const c12 = { x: start2.x, y: start2.y + bow2 };
-    const c22 = { x: end2.x, y: end2.y + bow2 };
+    const minY = Math.min(...allR.map((r) => r.y));
+    const maxY = Math.max(...allR.map((r) => r.y + r.height));
+    const midY = (minY + maxY) / 2;
+    const edgeMidY = (from.y + from.height / 2 + to.y + to.height / 2) / 2;
+    const s_start = { x: from.x + from.width / 2, y: from.y + from.height };
+    const s_end = { x: to.x + to.width / 2, y: to.y + to.height };
+    const s_gutter = maxY + 32 + laneOffset;
+    const n_start = { x: from.x + from.width / 2, y: from.y };
+    const n_end = { x: to.x + to.width / 2, y: to.y };
+    const n_gutter = minY - 32 - laneOffset;
+    const useNorth = edgeMidY < midY;
+    const chosenGutter2 = useNorth ? n_gutter : s_gutter;
+    const startPt2 = useNorth ? n_start : s_start;
+    const endPt2 = useNorth ? n_end : s_end;
+    const fillet2 = backEdgeFilletH(startPt2, endPt2, chosenGutter2, useNorth);
     return {
-      path: `M ${start2.x} ${start2.y} C ${c12.x} ${c12.y}, ${c22.x} ${c22.y}, ${end2.x} ${end2.y}`,
-      labelPos: { x: (start2.x + end2.x) / 2, y: Math.max(start2.y, end2.y) + bow2 * 0.75 },
-      maxX: Math.max(start2.x, end2.x),
-      maxY: Math.max(c12.y, c22.y)
+      path: fillet2.path,
+      labelPos: fillet2.labelPos,
+      minX: Math.min(startPt2.x, endPt2.x),
+      maxX: Math.max(startPt2.x, endPt2.x),
+      minY: Math.min(startPt2.y, endPt2.y, chosenGutter2),
+      maxY: Math.max(startPt2.y, endPt2.y, chosenGutter2),
+      usedGutter: true
     };
   }
-  const start = { x: from.x + from.width, y: from.y + from.height / 2 };
-  const end = { x: to.x + to.width, y: to.y + to.height / 2 };
-  const span = Math.abs(end.y - start.y);
-  const bow = Math.max(NODE_W * 0.75, span * 0.35);
-  const c1 = { x: start.x + bow, y: start.y };
-  const c2 = { x: end.x + bow, y: end.y };
+  const minX = Math.min(...allR.map((r) => r.x));
+  const maxX = Math.max(...allR.map((r) => r.x + r.width));
+  const midX = (minX + maxX) / 2;
+  const edgeMidX = (from.x + from.width / 2 + to.x + to.width / 2) / 2;
+  const targetIsWest = to.x + to.width <= from.x - 24;
+  const targetIsEast = from.x + from.width <= to.x - 24;
+  function segmentIntersectsRect(p1, p2, r) {
+    const minX2 = Math.min(p1.x, p2.x);
+    const maxX2 = Math.max(p1.x, p2.x);
+    const minY = Math.min(p1.y, p2.y);
+    const maxY = Math.max(p1.y, p2.y);
+    if (maxX2 <= r.x || minX2 >= r.x + r.width || maxY <= r.y || minY >= r.y + r.height) {
+      return false;
+    }
+    if (Math.abs(p1.x - p2.x) < 1e-3) {
+      return p1.x > r.x && p1.x < r.x + r.width && minY < r.y + r.height && maxY > r.y;
+    }
+    if (Math.abs(p1.y - p2.y) < 1e-3) {
+      return p1.y > r.y && p1.y < r.y + r.height && minX2 < r.x + r.width && maxX2 > r.x;
+    }
+    return true;
+  }
+  function pathIntersectsObstacles(points, obs2) {
+    for (const r of obs2) {
+      for (let i = 0; i < points.length - 1; i++) {
+        if (segmentIntersectsRect(points[i], points[i + 1], r)) return true;
+      }
+    }
+    return false;
+  }
+  if (targetIsWest) {
+    const cStartX = from.x;
+    const cStartY = from.y + from.height * 0.35;
+    const cEndX = to.x + to.width;
+    const cEndY = to.y + to.height * 0.65;
+    const xMin = cEndX + 10;
+    const xMax = cStartX - 10;
+    if (xMax >= xMin) {
+      const candidates = [(xMin + xMax) / 2, xMax - 8, xMin + 8];
+      for (const midXCandidate of candidates) {
+        const testPoints = [
+          { x: cStartX, y: cStartY },
+          { x: midXCandidate, y: cStartY },
+          { x: midXCandidate, y: cEndY },
+          { x: cEndX, y: cEndY }
+        ];
+        if (!pathIntersectsObstacles(testPoints, obs)) {
+          const R = 8;
+          const path = `M ${cStartX} ${cStartY} L ${midXCandidate + R} ${cStartY} C ${midXCandidate} ${cStartY}, ${midXCandidate} ${cStartY - R}, ${midXCandidate} ${cStartY - R} L ${midXCandidate} ${cEndY + R} C ${midXCandidate} ${cEndY}, ${midXCandidate - R} ${cEndY}, ${midXCandidate - R} ${cEndY} L ${cEndX} ${cEndY}`;
+          return {
+            path,
+            labelPos: { x: (cEndX + midXCandidate) / 2, y: cEndY },
+            minX: cEndX,
+            maxX: cStartX,
+            minY: Math.min(cStartY, cEndY),
+            maxY: Math.max(cStartY, cEndY),
+            usedGutter: false
+          };
+        }
+      }
+    }
+  } else if (targetIsEast) {
+    const cStartX = from.x + from.width;
+    const cStartY = from.y + from.height * 0.35;
+    const cEndX = to.x;
+    const cEndY = to.y + to.height * 0.65;
+    const xMin = cStartX + 10;
+    const xMax = cEndX - 10;
+    if (xMax >= xMin) {
+      const candidates = [(xMin + xMax) / 2, xMin + 8, xMax - 8];
+      for (const midXCandidate of candidates) {
+        const testPoints = [
+          { x: cStartX, y: cStartY },
+          { x: midXCandidate, y: cStartY },
+          { x: midXCandidate, y: cEndY },
+          { x: cEndX, y: cEndY }
+        ];
+        if (!pathIntersectsObstacles(testPoints, obs)) {
+          const R = 8;
+          const path = `M ${cStartX} ${cStartY} L ${midXCandidate - R} ${cStartY} C ${midXCandidate} ${cStartY}, ${midXCandidate} ${cStartY - R}, ${midXCandidate} ${cStartY - R} L ${midXCandidate} ${cEndY + R} C ${midXCandidate} ${cEndY}, ${midXCandidate + R} ${cEndY}, ${midXCandidate + R} ${cEndY} L ${cEndX} ${cEndY}`;
+          return {
+            path,
+            labelPos: { x: (cStartX + midXCandidate) / 2, y: cStartY },
+            minX: cStartX,
+            maxX: cEndX,
+            minY: Math.min(cStartY, cEndY),
+            maxY: Math.max(cStartY, cEndY),
+            usedGutter: false
+          };
+        }
+      }
+    }
+  }
+  const useWest = edgeMidX <= midX;
+  const w_start = { x: from.x, y: from.y + from.height / 2 };
+  const w_end = { x: to.x, y: to.y + to.height / 2 };
+  const w_gutter = minX - 32 - laneOffset;
+  const e_start = { x: from.x + from.width, y: from.y + from.height / 2 };
+  const e_end = { x: to.x + to.width, y: to.y + to.height / 2 };
+  const e_gutter = maxX + 32 + laneOffset;
+  const chosenGutter = useWest ? w_gutter : e_gutter;
+  const startPt = useWest ? w_start : e_start;
+  const endPt = useWest ? w_end : e_end;
+  const fillet = backEdgeFilletV(startPt, endPt, chosenGutter, useWest);
   return {
-    path: `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`,
-    labelPos: { x: Math.max(start.x, end.x) + bow * 0.75, y: (start.y + end.y) / 2 },
-    maxX: Math.max(c1.x, c2.x),
-    maxY: Math.max(start.y, end.y)
+    path: fillet.path,
+    labelPos: fillet.labelPos,
+    minX: Math.min(startPt.x, endPt.x, chosenGutter),
+    maxX: Math.max(startPt.x, endPt.x, chosenGutter),
+    minY: Math.min(startPt.y, endPt.y),
+    maxY: Math.max(startPt.y, endPt.y),
+    usedGutter: true
   };
 }
 function selfLoopRoute(r, isLR) {
@@ -3317,7 +3561,9 @@ function selfLoopRoute(r, isLR) {
     return {
       path: `M ${x1} ${sy} C ${x1 - loop2} ${sy + loop2}, ${x2 + loop2} ${sy + loop2}, ${x2} ${sy}`,
       labelPos: { x: r.x + r.width / 2, y: sy + loop2 + 4 },
+      minX: x1 - loop2,
       maxX: x2 + loop2,
+      minY: sy,
       maxY: sy + loop2
     };
   }
@@ -3327,7 +3573,9 @@ function selfLoopRoute(r, isLR) {
   return {
     path: `M ${ex} ${y1} C ${ex + loop2} ${y1 - loop2}, ${ex + loop2} ${y2 + loop2}, ${ex} ${y2}`,
     labelPos: { x: ex + loop2, y: r.y + r.height / 2 },
+    minX: ex,
     maxX: ex + loop2,
+    minY: y1 - loop2,
     maxY: y2 + loop2
   };
 }
@@ -12777,14 +13025,23 @@ function routeAndRenderCrossLinks3(links2, theme, anchors, intraPorts, occupiedR
       cellRects,
       committed,
       intraPorts ?? [],
-      hint
+      hint,
+      occupiedRects
     );
     if (!best) continue;
+    if (countRouteCollisions(best.committed.points, allNodeBounds) > 0) {
+      console.warn(
+        `[routing] No clear route for cross-link between ${addrKey(link.from)} and ${addrKey(link.to)}: route intersects obstacles.`
+      );
+    }
     committed.push(best.committed);
     let color;
     const explicitColor = typeof link.props?.color === "string" ? link.props.color : void 0;
+    const isMono = theme.name.startsWith("bw-") || theme.name.includes("mono");
     if (explicitColor) {
       color = explicitColor;
+    } else if (isMono) {
+      color = palette.primary;
     } else {
       color = PALETTE[explicitColorIdx % PALETTE.length];
       explicitColorIdx++;
@@ -12828,7 +13085,8 @@ function routeAndRenderCrossLinks3(links2, theme, anchors, intraPorts, occupiedR
     workingByOriginalIdx,
     links2,
     portHints,
-    resolvable
+    resolvable,
+    occupiedRects
   );
   const workingRoutes = [];
   for (let i = 0; i < links2.length; i++) {
@@ -12914,6 +13172,19 @@ function routeAndRenderCrossLinks3(links2, theme, anchors, intraPorts, occupiedR
     const l = pendingLabels[i];
     const r = labelRects[i];
     elements.push({
+      type: "rect",
+      bounds: {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height
+      },
+      fill: palette.background,
+      stroke: "none",
+      strokeWidth: 0,
+      rx: 3
+    });
+    elements.push({
       type: "text",
       content: l.content,
       position: { x: r.x + r.width / 2, y: r.y + r.height - LABEL_PAD },
@@ -12940,7 +13211,7 @@ function routeAndRenderCrossLinks3(links2, theme, anchors, intraPorts, occupiedR
   }
   return { defs, elements };
 }
-function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committed, intraPorts, portHint) {
+function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committed, intraPorts, portHint, occupiedRects) {
   const addrKey = (addr) => [...addr.cellPath, addr.nodeId].join(".");
   const srcKey = addrKey(link.from);
   const dstKey = addrKey(link.to);
@@ -12959,9 +13230,18 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
   const dstCellId = link.to.cellPath.join(".");
   const sameSourceCell = (key) => srcCellId.length > 0 && key.startsWith(srcCellId + ".");
   const sameTargetCell = (key) => dstCellId.length > 0 && key.startsWith(dstCellId + ".");
-  const linkObstacles = Object.entries(anchors).filter(
-    ([key]) => !sameSourceCell(key) && !sameTargetCell(key) && key !== srcKey && key !== dstKey
-  ).map(([, a]) => a.bounds);
+  const linkObstacles = Object.entries(anchors).filter(([key]) => key !== srcKey && key !== dstKey).map(([key, a]) => {
+    if (sameSourceCell(key) || sameTargetCell(key)) {
+      const pad = 2;
+      return {
+        x: a.bounds.x + pad,
+        y: a.bounds.y + pad,
+        width: Math.max(0, a.bounds.width - 2 * pad),
+        height: Math.max(0, a.bounds.height - 2 * pad)
+      };
+    }
+    return a.bounds;
+  });
   if (cellRects) {
     for (const [cellId, r] of cellRects) {
       if (cellId === srcCellId || cellId === dstCellId) continue;
@@ -12972,12 +13252,26 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
       }
     }
   }
+  if (occupiedRects && occupiedRects.length > 0) {
+    linkObstacles.push(...occupiedRects);
+  }
   const routeStyle = link.routing ?? "orthogonal";
+  const isStraight = routeStyle === "straight";
   const sides = ["N", "S", "E", "W"];
-  const srcWalls = link.exitWall ? [link.exitWall] : portHint?.srcWall ? [portHint.srcWall] : sides;
-  const dstWalls = link.entryWall ? [link.entryWall] : portHint?.dstWall ? [portHint.dstWall] : sides;
-  const srcTs = portHint?.srcT !== void 0 ? [portHint.srcT] : WALL_TS;
-  const dstTs = portHint?.dstT !== void 0 ? [portHint.dstT] : WALL_TS;
+  const srcWalls = link.exitWall ? [link.exitWall] : portHint?.srcWall ? [portHint.srcWall] : isStraight ? [idealSrcWall(srcCenter, dstCenter)] : sides;
+  const dstWalls = link.entryWall ? [link.entryWall] : portHint?.dstWall ? [portHint.dstWall] : isStraight ? [idealDstWall(srcCenter, dstCenter)] : sides;
+  const srcTs = portHint?.srcT !== void 0 ? [portHint.srcT] : isStraight ? [0.5] : WALL_TS;
+  const dstTs = portHint?.dstT !== void 0 ? [portHint.dstT] : isStraight ? [0.5] : WALL_TS;
+  let gridMinX = Infinity, gridMaxX = -Infinity, gridMinY = Infinity, gridMaxY = -Infinity;
+  if (cellRects && cellRects.size > 0) {
+    for (const r of cellRects.values()) {
+      if (r.x < gridMinX) gridMinX = r.x;
+      if (r.x + r.width > gridMaxX) gridMaxX = r.x + r.width;
+      if (r.y < gridMinY) gridMinY = r.y;
+      if (r.y + r.height > gridMaxY) gridMaxY = r.y + r.height;
+    }
+  }
+  const hasGridBounds = gridMinX < gridMaxX;
   let bestScore = Infinity;
   let bestCommitted;
   let bestRawPts;
@@ -13017,13 +13311,18 @@ function findBestRoute(linkIdx, link, anchors, allNodeBounds, cellRects, committ
             obstacles: routeObstacles,
             padding: routePadding,
             fromDir: ss,
-            toDir: ds
+            toDir: ds,
+            noWarn: true
           });
           const rawPts = route.points;
           const isBez = routeStyle === "bezier" && rawPts.length === 4;
           const pts = isBez ? sampleCubicBezier(rawPts[0], rawPts[1], rawPts[2], rawPts[3], 12) : rawPts;
           const { hSegs, vSegs } = decomposeHV(pts, routeStyle);
-          const score = sidePenalty(ss, ds, srcCenter, dstCenter) + crossingScore(pts, hSegs, vSegs, isBez, committed) + portConflictScore(
+          const collisions = countRouteCollisions(pts, routeObstacles);
+          const marginPenalty = hasGridBounds && pts.some(
+            (p) => p.x < gridMinX - 1 || p.x > gridMaxX + 1 || p.y < gridMinY - 1 || p.y > gridMaxY + 1
+          ) ? 5e4 : 0;
+          const score = collisions * 1e5 + marginPenalty + sidePenalty(ss, ds, srcCenter, dstCenter) + crossingScore(pts, hSegs, vSegs, isBez, committed) + portConflictScore(
             srcKey,
             ss,
             sp,
@@ -13086,7 +13385,7 @@ function wallFacesAway(wall, fromCenter, toCenter) {
   const vy = toCenter.y - fromCenter.y;
   return vx * nx + vy * ny < 0;
 }
-function repairCrossings(committed, sortedLinks, anchors, allNodeBounds, cellRects, intraPorts, workingByOrigIdx, links2, portHints, resolvable) {
+function repairCrossings(committed, sortedLinks, anchors, allNodeBounds, cellRects, intraPorts, workingByOrigIdx, links2, portHints, resolvable, occupiedRects) {
   for (let j = 1; j < committed.length; j++) {
     const crJ = committed[j];
     let jCrossings = 0;
@@ -13107,7 +13406,8 @@ function repairCrossings(committed, sortedLinks, anchors, allNodeBounds, cellRec
       cellRects,
       committedWithoutJ,
       intraPorts,
-      hint
+      hint,
+      occupiedRects
     );
     if (!result) continue;
     let newCrossings = 0;
@@ -13435,6 +13735,10 @@ function nudgeOffBorders(routes, borders) {
   const TOLERANCE = 3, NUDGE = 8;
   const hBorderYs = borders.filter((b) => b.width > b.height).map((b) => b.y + b.height / 2);
   const vBorderXs = borders.filter((b) => b.height >= b.width).map((b) => b.x + b.width / 2);
+  const minBorderX = vBorderXs.length > 0 ? Math.min(...vBorderXs) : -Infinity;
+  const maxBorderX = vBorderXs.length > 0 ? Math.max(...vBorderXs) : Infinity;
+  const minBorderY = hBorderYs.length > 0 ? Math.min(...hBorderYs) : -Infinity;
+  const maxBorderY = hBorderYs.length > 0 ? Math.max(...hBorderYs) : Infinity;
   for (const route of routes) {
     if (route.isBezier) continue;
     const pts = route.points;
@@ -13443,8 +13747,15 @@ function nudgeOffBorders(routes, borders) {
       if (Math.abs(b.y - a.y) < 1 && Math.abs(b.x - a.x) > 1) {
         for (const borderY of hBorderYs) {
           if (Math.abs(a.y - borderY) < TOLERANCE) {
-            const midY = (Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2;
-            const nd = a.y < midY ? -NUDGE : NUDGE;
+            let nd;
+            if (Math.abs(borderY - minBorderY) < TOLERANCE) {
+              nd = NUDGE;
+            } else if (Math.abs(borderY - maxBorderY) < TOLERANCE) {
+              nd = -NUDGE;
+            } else {
+              const midY = (Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2;
+              nd = a.y < midY ? -NUDGE : NUDGE;
+            }
             pts[i] = { x: a.x, y: a.y + nd };
             pts[i + 1] = { x: b.x, y: b.y + nd };
             break;
@@ -13453,8 +13764,15 @@ function nudgeOffBorders(routes, borders) {
       } else if (Math.abs(b.x - a.x) < 1 && Math.abs(b.y - a.y) > 1) {
         for (const borderX of vBorderXs) {
           if (Math.abs(a.x - borderX) < TOLERANCE) {
-            const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
-            const nd = a.x < midX ? -NUDGE : NUDGE;
+            let nd;
+            if (Math.abs(borderX - minBorderX) < TOLERANCE) {
+              nd = NUDGE;
+            } else if (Math.abs(borderX - maxBorderX) < TOLERANCE) {
+              nd = -NUDGE;
+            } else {
+              const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+              nd = a.x < midX ? -NUDGE : NUDGE;
+            }
             pts[i] = { x: a.x + nd, y: a.y };
             pts[i + 1] = { x: b.x + nd, y: b.y };
             break;
@@ -13469,7 +13787,7 @@ function separateChannels(routes) {
   for (let ri = 0; ri < routes.length; ri++) {
     if (routes[ri].isBezier) continue;
     const pts = routes[ri].points;
-    for (let si = 0; si < pts.length - 1; si++) {
+    for (let si = 1; si < pts.length - 2; si++) {
       const a = pts[si], b = pts[si + 1];
       const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
       if (dx < 1 && dy > 1) {
@@ -14626,7 +14944,11 @@ function layoutPoster(ir, theme) {
     let childScene = result.scene;
     if (result.reveal?.steps.length) {
       const prefixIds = (ids) => ids.map((id) => `${cellId}.${id}`);
-      const prefixGroups = (element) => element.type === "group" ? { ...element, ...element.id ? { id: `${cellId}.${element.id}` } : {}, children: element.children.map(prefixGroups) } : element;
+      const prefixGroups = (element) => element.type === "group" ? {
+        ...element,
+        ...element.id ? { id: `${cellId}.${element.id}` } : {},
+        children: element.children.map(prefixGroups)
+      } : element;
       childScene = { ...result.scene, elements: result.scene.elements.map(prefixGroups) };
       for (const step of result.reveal.steps) {
         revealSteps.push({
@@ -14729,8 +15051,8 @@ function layoutPoster(ir, theme) {
         allDefs.push(def);
       }
     }
-    const linkPaths = linkElements.filter((e) => e.type !== "text");
-    const linkLabels = linkElements.filter((e) => e.type === "text");
+    const linkPaths = linkElements.filter((e) => e.type === "path");
+    const linkLabels = linkElements.filter((e) => e.type !== "path");
     const ext = connectorResult.extents;
     if (ext.maxX > finalW) finalW = ext.maxX + padding;
     if (ext.maxY > finalH) finalH = ext.maxY + padding;
@@ -15080,7 +15402,11 @@ function buildCellTitle(title, cellX, cellY, cellW, theme) {
       anchor
     });
   }
-  return { elements, occupied: { x: boxX, y: boxTop, width: boxW, height: boxH } };
+  const occX = anchor === "start" ? cellX : boxX;
+  const occW = anchor === "start" ? boxW + (boxX - cellX) : boxW;
+  const occY = Math.min(cellY, boxTop);
+  const occH = boxH + (boxTop - occY);
+  return { elements, occupied: { x: occX, y: occY, width: occW, height: occH } };
 }
 function assignPositions(cells2, columns) {
   const occupied = /* @__PURE__ */ new Set();
@@ -18314,7 +18640,8 @@ var DEFAULT_HEADERS = {
   quadtree: "quadtree\n",
   treap: "treap\n",
   "234tree": "234tree\n",
-  "2-3-4tree": "234tree\n"
+  "2-3-4tree": "234tree\n",
+  platform: "platform\n"
 };
 function canonicalDiagramKind(rawKind) {
   if (!rawKind) return void 0;
@@ -30013,13 +30340,15 @@ function makeDummy(edgeIdx, segIdx) {
     segmentIndex: segIdx
   };
 }
-function assignLayers2(nodes, edges2) {
+function assignLayers2(nodes, edges2, backEdgeSet) {
   const layer = /* @__PURE__ */ new Map();
   for (const n of nodes) layer.set(n.id, 0);
   const present = (id) => layer.has(id);
   for (let pass = 0; pass < nodes.length; pass++) {
     let changed = false;
-    for (const e of edges2) {
+    for (let i = 0; i < edges2.length; i++) {
+      if (backEdgeSet?.has(i)) continue;
+      const e = edges2[i];
       if (!present(e.from) || !present(e.to)) continue;
       const want = layer.get(e.from) + 1;
       if (layer.get(e.to) < want) {
@@ -30551,8 +30880,8 @@ function layeredLayout(nodes, edges2, options = {}) {
       dummySweepXs: /* @__PURE__ */ new Map(),
       dummyChainIds: /* @__PURE__ */ new Map()
     };
-  const layer = assignLayers2(nodes, edges2);
   const backEdges = detectBackEdges(nodes, edges2);
+  const layer = assignLayers2(nodes, edges2, backEdges);
   const { newNodes, newEdges, newBackEdgeSet, dummyChains } = insertDummyNodes(
     nodes,
     edges2,
@@ -46442,10 +46771,17 @@ function layoutArchitecture(ir, theme, options) {
       );
     }
     elements.push(
-      p.text(g.label, rhu(header.label.x), rhu(header.label.y), typography.smallFontSize, groupLabelColor, {
-        weight: "bold",
-        anchor: header.label.anchor
-      })
+      p.text(
+        g.label,
+        rhu(header.label.x),
+        rhu(header.label.y),
+        typography.smallFontSize,
+        groupLabelColor,
+        {
+          weight: "bold",
+          anchor: header.label.anchor
+        }
+      )
     );
   });
   const allBoxes = [];
@@ -46514,14 +46850,36 @@ function layoutArchitecture(ir, theme, options) {
       const targetKey = `${e.to}:${toSide}`;
       const sourceCount = endpointGroups.get(sourceKey)?.length ?? 1;
       const targetCount = endpointGroups.get(targetKey)?.length ?? 1;
-      const slot = endpointSlots.get(edgeIndex);
-      if (sourceCount > 1 && targetCount === 1 && slot?.sourceT !== void 0) {
-        endpointSlots.set(edgeIndex, { ...slot, targetT: slot.sourceT });
-      } else if (targetCount > 1 && sourceCount === 1 && slot?.targetT !== void 0) {
-        endpointSlots.set(edgeIndex, { ...slot, sourceT: slot.targetT });
-      }
     }
   });
+  const fanBendOffsets = /* @__PURE__ */ new Map();
+  for (const [key, members] of endpointGroups) {
+    if (members.length < 2) continue;
+    const sources = members.filter((m) => m.isSource);
+    if (sources.length < 2) continue;
+    const [, side] = key.split(":");
+    const isVertical = side === "B" || side === "T";
+    const N = sources.length;
+    const ranked = sources.map((m) => {
+      const e = ir.edges[m.edgeIndex];
+      const fR = endpointRect(e, true);
+      const tR = endpointRect(e, false);
+      if (!fR || !tR) return { edgeIndex: m.edgeIndex, dist: 0, dir: 1 };
+      const fC = rectCenter2(fR);
+      const tC = rectCenter2(tR);
+      const dist = isVertical ? Math.abs(tC.x - fC.x) : Math.abs(tC.y - fC.y);
+      const dir = isVertical ? tC.y >= fC.y ? 1 : -1 : tC.x >= fC.x ? 1 : -1;
+      return { edgeIndex: m.edgeIndex, dist, dir };
+    }).sort((a, b) => b.dist - a.dist);
+    for (let r = 0; r < N; r++) {
+      const item = ranked[r];
+      const laneOffset = (r - (N - 1) / 2) * 12 * item.dir;
+      fanBendOffsets.set(item.edgeIndex, {
+        axis: isVertical ? "y" : "x",
+        offset: laneOffset
+      });
+    }
+  }
   for (let edgeIndex = 0; edgeIndex < ir.edges.length; edgeIndex++) {
     const e = ir.edges[edgeIndex];
     let fromRect = endpointRect(e, true);
@@ -46544,8 +46902,37 @@ function layoutArchitecture(ir, theme, options) {
       fromDir,
       toDir
     });
-    const routedPoints = routing === "orthogonal" && isHorizontalDir(fromDir) !== isHorizontalDir(toDir) ? mixedOrthogonalRoutePoints(pa, pb, fromDir, toDir, obstacles, 10) : route.points;
+    let routedPoints = routing === "orthogonal" && isHorizontalDir(fromDir) !== isHorizontalDir(toDir) ? mixedOrthogonalRoutePoints(pa, pb, fromDir, toDir, obstacles, 10) : route.points;
+    const fanOffset = fanBendOffsets.get(edgeIndex);
+    if (fanOffset && routing === "orthogonal" && route.points.length === 4 && isHorizontalDir(fromDir) === isHorizontalDir(toDir)) {
+      const p0 = route.points[0];
+      const p1 = { ...route.points[1] };
+      const p2 = { ...route.points[2] };
+      const p3 = route.points[3];
+      if (fanOffset.axis === "y") {
+        const newY = p1.y + fanOffset.offset;
+        const testCandidate = [p0, { x: p1.x, y: newY }, { x: p2.x, y: newY }, p3];
+        if (countRouteCollisions(testCandidate, obstacles) === 0) {
+          p1.y = newY;
+          p2.y = newY;
+          routedPoints = [p0, p1, p2, p3];
+        }
+      } else {
+        const newX = p1.x + fanOffset.offset;
+        const testCandidate = [p0, { x: newX, y: p1.y }, { x: newX, y: p2.y }, p3];
+        if (countRouteCollisions(testCandidate, obstacles) === 0) {
+          p1.x = newX;
+          p2.x = newX;
+          routedPoints = [p0, p1, p2, p3];
+        }
+      }
+    }
     const routePoints = cleanRoutePoints(routedPoints);
+    if (countRouteCollisions(routePoints, obstacles) > 0) {
+      console.warn(
+        `[routing] No clear route between ${e.from} and ${e.to}: route intersects obstacles.`
+      );
+    }
     const style = e.style ?? "solid";
     const pathOpts = {};
     if (e.endMarker === "arrow" || !e.endMarker && e.arrowRight)
@@ -46676,8 +47063,8 @@ function cleanRoutePoints(points) {
 }
 function routePointsToPath(points, fallback) {
   if (points.length === 0) return fallback;
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  if (points.length === 1) return `M ${rhu(points[0].x)} ${rhu(points[0].y)}`;
+  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${rhu(p.x)} ${rhu(p.y)}`).join(" ");
 }
 function isHorizontalDir(dir) {
   return dir === "E" || dir === "W";
@@ -56069,12 +56456,12 @@ function layoutMemory(doc, theme) {
     if (item.kind === "var") {
       return { w: Math.max(130, measureText(item.name, font).width + 56), h: 34 };
     }
-    const titleW = measureText(item.title, font).width;
+    const titleW = measureText(item.title, font).width * 1.1;
     const fieldW = Math.max(
       0,
       ...item.fields.map((f2) => measureText(`${f2.k}: ${f2.v}`, small).width)
     );
-    return { w: Math.max(120, titleW + 24, fieldW + 24), h: 24 + item.fields.length * 20 + 8 };
+    return { w: Math.max(120, titleW + 28, fieldW + 32), h: 24 + item.fields.length * 20 + 8 };
   };
   const elements = [];
   if (doc.title)
@@ -56167,24 +56554,66 @@ function layoutMemory(doc, theme) {
     maxBottom2 = Math.max(maxBottom2, regionTop + regionH);
     regionX += regionW + REGION_GAP;
   }
-  for (const { from, target } of pending) {
+  const resolvedPending = pending.map(({ from, target }) => {
     const key = target.includes(".") ? target.slice(target.indexOf(".") + 1) : target;
     const to = idBox.get(key);
-    if (!to) continue;
-    const startX = from.x + from.width - 12;
-    const startY = from.y + from.height / 2;
-    const start = { x: startX, y: startY };
-    const endX = startX <= to.x ? to.x : to.x + to.width;
-    const endY = to.y + Math.min(to.height / 2, 18);
-    const end = { x: endX, y: endY };
-    elements.push(
-      p.path(
-        `M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`,
-        palette.primary,
-        1.5,
-        { markerEnd: ARROW_ID2 }
-      )
-    );
+    return to ? { from, to, target } : null;
+  }).filter((p2) => p2 !== null);
+  const allObstacles = [...idBox.values()];
+  const corridorGroups = /* @__PURE__ */ new Map();
+  for (const p2 of resolvedPending) {
+    const isForward = p2.from.x + p2.from.width <= p2.to.x;
+    const key = isForward ? `${Math.round(p2.from.x + p2.from.width)}:${Math.round(p2.to.x)}` : `${Math.round(p2.to.x + p2.to.width)}:${Math.round(p2.from.x)}`;
+    if (!corridorGroups.has(key)) corridorGroups.set(key, []);
+    corridorGroups.get(key).push(p2);
+  }
+  for (const group of corridorGroups.values()) {
+    const N = group.length;
+    for (let i = 0; i < N; i++) {
+      const { from, to, target } = group[i];
+      const startX = from.x + from.width - 12;
+      const startY = from.y + from.height / 2;
+      const start = { x: startX, y: startY };
+      const isForward = startX <= to.x;
+      const endX = isForward ? to.x : to.x + to.width;
+      const targetHeaderY = to.y + Math.min(to.height / 2, 18);
+      const endY = startY >= to.y + 6 && startY <= to.y + 24 ? startY : targetHeaderY;
+      const end = { x: endX, y: endY };
+      const obstacles = allObstacles.filter((b) => b !== from && b !== to);
+      const hitsObstacles = countRouteCollisions([start, end], obstacles) > 0;
+      let points;
+      let d;
+      if (!hitsObstacles) {
+        points = [start, end];
+        d = `M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(end.x)} ${rhu(end.y)}`;
+      } else {
+        const corridorLeft = isForward ? from.x + from.width : to.x + to.width;
+        const corridorRight = isForward ? to.x : from.x;
+        const corridorCenter = (corridorLeft + corridorRight) / 2;
+        const laneSpacing = Math.min(
+          10,
+          Math.max(6, (corridorRight - corridorLeft - 16) / (N + 1))
+        );
+        const laneX = corridorCenter + (i - (N - 1) / 2) * laneSpacing;
+        points = [start, { x: laneX, y: start.y }, { x: laneX, y: end.y }, end];
+        const R = Math.min(
+          6,
+          Math.abs(end.y - start.y) / 3,
+          Math.abs(laneX - start.x) / 2,
+          Math.abs(end.x - laneX) / 2
+        );
+        const signY = end.y > start.y ? 1 : -1;
+        const sx = isForward ? laneX - R : laneX + R;
+        const ex = isForward ? laneX + R : laneX - R;
+        d = `M ${rhu(start.x)} ${rhu(start.y)} L ${rhu(sx)} ${rhu(start.y)} Q ${rhu(laneX)} ${rhu(start.y)}, ${rhu(laneX)} ${rhu(start.y + signY * R)} L ${rhu(laneX)} ${rhu(end.y - signY * R)} Q ${rhu(laneX)} ${rhu(end.y)}, ${rhu(ex)} ${rhu(end.y)} L ${rhu(end.x)} ${rhu(end.y)}`;
+      }
+      if (countRouteCollisions(points, obstacles) > 0) {
+        console.warn(
+          `[routing] No clear route between var and ${target}: route intersects rendered objects.`
+        );
+      }
+      elements.push(p.path(d, palette.primary, 1.5, { markerEnd: ARROW_ID2 }));
+    }
   }
   const scene = {
     viewBox: { x: 0, y: 0, width: regionX - REGION_GAP + margin, height: maxBottom2 + margin },
@@ -57855,9 +58284,13 @@ function layoutGraph(doc, theme) {
   const sizeOf = (n) => Math.max(64, measureText(n.label, font).width + 28);
   const gNodes = doc.nodes.map((n) => ({ id: n.id, width: sizeOf(n), height: nodeH }));
   const gEdges = doc.edges.map((e) => ({ from: e.from, to: e.to }));
+  const hasOpposingEdges = doc.edges.some(
+    (e, i) => doc.edges.some((other, j) => i !== j && e.from === other.to && e.to === other.from)
+  );
+  const layerGap = hasOpposingEdges ? 88 : doc.edges.some((e) => e.label) ? 72 : 64;
   const placed = layeredLayout(gNodes, gEdges, {
     direction: "TB",
-    layerGap: 64,
+    layerGap,
     nodeGap: 44,
     margin
   });
@@ -57866,26 +58299,33 @@ function layoutGraph(doc, theme) {
     return { x: b.x, y: b.y + titleH, width: b.width, height: b.height };
   };
   const pathData = (points) => points.map((pt, i) => `${i === 0 ? "M" : "L"} ${rhu(pt.x)} ${rhu(pt.y)}`).join(" ");
-  const pathMidpoint = (points) => {
-    if (points.length === 0) return { x: 0, y: 0 };
+  const pathPointAtFraction = (points, frac = 0.5) => {
+    if (points.length === 0) return { pt: { x: 0, y: 0 }, normal: { x: 0, y: 0 } };
     let total = 0;
     for (let i = 1; i < points.length; i++) {
       total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
     }
-    if (total === 0) return points[0];
+    if (total === 0) return { pt: points[0], normal: { x: 0, y: 0 } };
     let walked = 0;
-    const target = total / 2;
+    const target = total * frac;
     for (let i = 1; i < points.length; i++) {
       const from = points[i - 1];
       const to = points[i];
       const segment = Math.hypot(to.x - from.x, to.y - from.y);
       if (walked + segment >= target && segment > 0) {
         const t = (target - walked) / segment;
-        return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+        const dx = (to.x - from.x) / segment;
+        const dy = (to.y - from.y) / segment;
+        return {
+          pt: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+          normal: { x: dy, y: -dx }
+          // right-hand normal
+        };
       }
       walked += segment;
     }
-    return points[points.length - 1];
+    const last = points[points.length - 1];
+    return { pt: last, normal: { x: 0, y: 0 } };
   };
   const dirForWall = (wall) => {
     switch (wall) {
@@ -58014,15 +58454,37 @@ function layoutGraph(doc, theme) {
     skipLaneX.set(i, right + SKIP_LANE_CLEARANCE + skipLaneOrdinal * SKIP_LANE_GAP);
     skipLaneOrdinal++;
   }
-  const fromGroups = /* @__PURE__ */ new Map();
-  const toGroups = /* @__PURE__ */ new Map();
+  const opposingEdges = /* @__PURE__ */ new Map();
+  for (let i = 0; i < doc.edges.length; i++) {
+    for (let j = i + 1; j < doc.edges.length; j++) {
+      const e1 = doc.edges[i], e2 = doc.edges[j];
+      if (e1.from === e2.to && e1.to === e2.from) {
+        opposingEdges.set(i, j);
+        opposingEdges.set(j, i);
+      }
+    }
+  }
+  const wallGroups = /* @__PURE__ */ new Map();
   const fromWallByEdge = /* @__PURE__ */ new Map();
   const toWallByEdge = /* @__PURE__ */ new Map();
   const groupKey = (id, wall) => `${id}\0${wall}`;
-  const axisIdeal = (wall, other, edgeIndex) => {
+  const axisIdeal = (wall, self, other, edgeIndex, isSource) => {
     const lane = skipLaneX.get(edgeIndex);
     if (lane !== void 0 && (wall === "top" || wall === "bottom")) return lane;
-    return wall === "top" || wall === "bottom" ? other.x + other.width / 2 : other.y + other.height / 2;
+    const isOpposing = opposingEdges.has(edgeIndex);
+    if (wall === "top" || wall === "bottom") {
+      const mid = other.x + other.width / 2;
+      if (!isOpposing) return mid;
+      const dy = other.y + other.height / 2 - (self.y + self.height / 2);
+      const sign = isSource ? dy >= 0 ? 1 : -1 : dy >= 0 ? -1 : 1;
+      return mid + sign * 14;
+    } else {
+      const mid = other.y + other.height / 2;
+      if (!isOpposing) return mid;
+      const dx = other.x + other.width / 2 - (self.x + self.width / 2);
+      const sign = isSource ? dx >= 0 ? -1 : 1 : dx >= 0 ? 1 : -1;
+      return mid + sign * 14;
+    }
   };
   for (const [i, e] of doc.edges.entries()) {
     const a = placed.boxes.has(e.from) ? box(e.from) : void 0;
@@ -58035,20 +58497,18 @@ function layoutGraph(doc, theme) {
     toWallByEdge.set(i, tw);
     const fk = groupKey(e.from, fw);
     const tk = groupKey(e.to, tw);
-    if (!fromGroups.has(fk)) fromGroups.set(fk, []);
-    if (!toGroups.has(tk)) toGroups.set(tk, []);
-    fromGroups.get(fk).push({ edgeIndex: i, ideal: axisIdeal(fw, b, i) });
-    toGroups.get(tk).push({ edgeIndex: i, ideal: axisIdeal(tw, a, i) });
+    if (!wallGroups.has(fk)) wallGroups.set(fk, []);
+    if (!wallGroups.has(tk)) wallGroups.set(tk, []);
+    wallGroups.get(fk).push({ edgeIndex: i, ideal: axisIdeal(fw, a, b, i, true) });
+    wallGroups.get(tk).push({ edgeIndex: i, ideal: axisIdeal(tw, b, a, i, false) });
   }
   const fromPorts = /* @__PURE__ */ new Map();
   const toPorts = /* @__PURE__ */ new Map();
-  for (const [key, group] of fromGroups) {
+  for (const [key, group] of wallGroups) {
     const [id, wall] = key.split("\0");
-    fromPorts.set(key, assignPorts(box(id), wall, group));
-  }
-  for (const [key, group] of toGroups) {
-    const [id, wall] = key.split("\0");
-    toPorts.set(key, assignPorts(box(id), wall, group));
+    const ports = assignPorts(box(id), wall, group);
+    fromPorts.set(key, ports);
+    toPorts.set(key, ports);
   }
   const elements = [];
   const labelElements = [];
@@ -58084,20 +58544,29 @@ function layoutGraph(doc, theme) {
         toPt
       ]);
     })() : hasBends ? (() => {
-      const obstacles = [...placed.boxes.values()].filter((ob) => ob.id !== e.from && ob.id !== e.to).map((ob) => ({ x: ob.x, y: ob.y + titleH, width: ob.width, height: ob.height }));
+      const obstacles2 = [...placed.boxes.values()].filter((ob) => ob.id !== e.from && ob.id !== e.to).map((ob) => ({ x: ob.x, y: ob.y + titleH, width: ob.width, height: ob.height }));
       return orthogonalRouter.route({
         from: fromPt,
         to: toPt,
         style: "orthogonal",
-        obstacles,
+        obstacles: obstacles2,
         padding: 10,
         fromDir: dirForWall(fw),
         toDir: dirForWall(tw)
       }).points;
     })() : (() => {
+      if (fromPt && toPt) {
+        return [fromPt, toPt];
+      }
       const { start, end } = connectSlots(a, b);
       return [start, end];
     })();
+    const obstacles = [...placed.boxes.values()].filter((ob) => ob.id !== e.from && ob.id !== e.to).map((ob) => ({ x: ob.x, y: ob.y + titleH, width: ob.width, height: ob.height }));
+    if (countRouteCollisions(points, obstacles) > 0) {
+      console.warn(
+        `[routing] No clear route between ${e.from} and ${e.to}: route intersects obstacles.`
+      );
+    }
     maxRouteX = Math.max(maxRouteX, ...points.map((pt) => pt.x));
     const isActive = e.kind === "active";
     const edgeColor = isActive ? palette.primary : palette.textMuted;
@@ -58108,13 +58577,18 @@ function layoutGraph(doc, theme) {
     };
     elements.push(p.path(pathData(points), edgeColor, edgeWidth, pathOpts));
     if (e.label) {
-      const { x: mx, y: my } = pathMidpoint(points);
+      const isOpposing = opposingEdges.has(i);
+      const frac = isOpposing ? 0.28 : 0.5;
+      const { pt, normal } = pathPointAtFraction(points, frac);
+      const lateralShift = isOpposing ? 16 : 0;
+      const mx = pt.x + normal.x * lateralShift;
+      const my = pt.y + normal.y * lateralShift;
       const edgeFont = theme.edges?.labelFontSize ?? 12;
       const w = measureText(e.label, edgeFont).width + 8;
       maxRouteX = Math.max(maxRouteX, mx + w / 2);
       labelElements.push(
         p.rect(
-          { x: mx - w / 2, y: my - 9, width: w, height: 16 },
+          { x: mx - w / 2, y: my - 9, width: w, height: 18 },
           palette.background,
           palette.background,
           0,
@@ -58122,7 +58596,7 @@ function layoutGraph(doc, theme) {
         )
       );
       labelElements.push(
-        p.text(e.label, mx, my + 3, edgeFont, isActive ? palette.primary : palette.textMuted, {
+        p.text(e.label, mx, my + 4, edgeFont, isActive ? palette.primary : palette.textMuted, {
           anchor: "middle"
         })
       );
@@ -61007,6 +61481,1635 @@ var loop = {
   },
   layout: layoutLoop
 };
+function stripQuotes2(str) {
+  return str.replace(/^["']|["']$/g, "").trim();
+}
+function parseCardLine(line) {
+  const cardMatch = line.match(/^card\s+([\w-]+)\s+(.+)$/i);
+  if (!cardMatch) return null;
+  const id = cardMatch[1];
+  let rest = cardMatch[2].trim();
+  let icon;
+  const iconMatch = rest.match(/@icon:([\w:-]+)/i);
+  if (iconMatch) {
+    icon = iconMatch[1];
+    rest = rest.replace(/@icon:[\w:-]+/i, "").trim();
+  }
+  const quoted = [...rest.matchAll(/"([^"]*)"|'([^']*)'/g)].map((m) => m[1] ?? m[2] ?? "");
+  let title = "";
+  let subtitle;
+  if (quoted.length >= 2) {
+    title = quoted[0];
+    subtitle = quoted[1];
+  } else if (quoted.length === 1) {
+    title = quoted[0];
+    const bracketMatch = rest.match(/\[([^\]]+)\]/);
+    if (bracketMatch) {
+      subtitle = bracketMatch[1].trim();
+    }
+  } else {
+    const bracketMatch = rest.match(/^([^[]+)\[([^\]]+)\]/);
+    if (bracketMatch) {
+      title = bracketMatch[1].trim();
+      subtitle = bracketMatch[2].trim();
+    } else {
+      title = rest;
+    }
+  }
+  return {
+    id,
+    title: stripQuotes2(title),
+    ...subtitle ? { subtitle: stripQuotes2(subtitle) } : {},
+    ...icon ? { icon } : {}
+  };
+}
+function parsePlatform(input) {
+  const { metadata, body } = extractFrontmatter(input);
+  const lines2 = body.split(/\r?\n/);
+  let title = typeof metadata.title === "string" ? metadata.title : void 0;
+  let figure;
+  let desc;
+  let direction = typeof metadata.direction === "string" && (metadata.direction.toUpperCase() === "TB" || metadata.direction.toUpperCase() === "BT") ? "TB" : typeof metadata.direction === "string" ? "LR" : void 0;
+  const legend = [];
+  const tiers = [];
+  const buses = [];
+  const stack2 = [{ type: "root" }];
+  for (const rawLine of lines2) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("%%") || trimmed.startsWith("#")) {
+      continue;
+    }
+    const current = stack2[stack2.length - 1];
+    const headerMatch = trimmed.match(/^platform(?:\s*::\s*|\s+)(.+)$/i);
+    if (headerMatch && !title) {
+      title = stripQuotes2(headerMatch[1].trim());
+      continue;
+    }
+    if (/^platform$/i.test(trimmed)) {
+      continue;
+    }
+    if (/^end\b/i.test(trimmed)) {
+      if (current.type === "legend") {
+        stack2.pop();
+      } else if (current.type === "grid") {
+        stack2.pop();
+        const parent = stack2[stack2.length - 1];
+        if (parent.type === "box") {
+          parent.grid = { columns: current.cols, cards: current.cards };
+        }
+      } else if (current.type === "branch") {
+        stack2.pop();
+        const parent = stack2[stack2.length - 1];
+        if (parent.type === "box") {
+          parent.branch = { cards: current.cards };
+        }
+      } else if (current.type === "box") {
+        stack2.pop();
+        const parent = stack2[stack2.length - 1];
+        if (parent.type === "tier") {
+          const finalBox = {
+            ...current.box,
+            ...current.cards.length > 0 ? { cards: current.cards } : {},
+            ...current.grid ? { grid: current.grid } : {},
+            ...current.branch ? { branch: current.branch } : {}
+          };
+          parent.items.push(finalBox);
+        }
+      } else if (current.type === "tier") {
+        stack2.pop();
+        tiers.push({
+          ...current.tier,
+          items: current.items
+        });
+      }
+      continue;
+    }
+    if (current.type === "root") {
+      const figMatch = trimmed.match(/^figure\s+(.+)$/i);
+      if (figMatch) {
+        figure = stripQuotes2(figMatch[1].trim());
+        continue;
+      }
+      const descMatch = trimmed.match(/^desc(?:ription)?\s+(.+)$/i);
+      if (descMatch) {
+        desc = stripQuotes2(descMatch[1].trim());
+        continue;
+      }
+      if (/^legend\b/i.test(trimmed)) {
+        stack2.push({ type: "legend" });
+        continue;
+      }
+      const dirMatch = trimmed.match(/^direction\s+(LR|TB|RL|BT)\b/i);
+      if (dirMatch) {
+        const d = dirMatch[1].toUpperCase();
+        direction = d === "TB" || d === "BT" ? "TB" : "LR";
+        continue;
+      }
+      const tierMatch = trimmed.match(/^tier\s+([\w-]+)\s+(.+)$/i);
+      if (tierMatch) {
+        const id = tierMatch[1];
+        const tierTitle = stripQuotes2(tierMatch[2].trim());
+        const newTier = { id, title: tierTitle, items: [] };
+        stack2.push({ type: "tier", tier: newTier, items: [] });
+        continue;
+      }
+      let busFromRaw;
+      let busRest;
+      let busLabel;
+      const inlineMatch = trimmed.match(/^bus\s+([\w., -]+?)\s*--\s*([^->]+?)\s*-->\s*(.+)$/i);
+      if (inlineMatch) {
+        busFromRaw = inlineMatch[1].trim();
+        busLabel = stripQuotes2(inlineMatch[2].trim());
+        busRest = inlineMatch[3].trim();
+      } else {
+        const busMatch = trimmed.match(/^bus\s+([\w., -]+?)\s*(-->|==>|->)\s*(.+)$/i);
+        if (busMatch) {
+          busFromRaw = busMatch[1].trim();
+          busRest = busMatch[3].trim();
+          const pipeMatch = busRest.match(/^\|([^|]+)\|\s*(.+)$/);
+          if (pipeMatch) {
+            busLabel = stripQuotes2(pipeMatch[1].trim());
+            busRest = pipeMatch[2].trim();
+          }
+        }
+      }
+      if (busFromRaw && busRest) {
+        const fromList = busFromRaw.split(",").map((s) => s.trim()).filter(Boolean);
+        const from = fromList.length === 1 ? fromList[0] : fromList;
+        let rest = busRest;
+        let animation;
+        const animMatch = rest.match(/@anim:(\w+)/i);
+        if (animMatch) {
+          animation = animMatch[1];
+          rest = rest.replace(/@anim:\w+/i, "").trim();
+        }
+        let tokenShape;
+        const shapeMatch = rest.match(/@shape:(\w+)/i);
+        if (shapeMatch) {
+          tokenShape = shapeMatch[1];
+          rest = rest.replace(/@shape:\w+/i, "").trim();
+        }
+        let tokenColor;
+        const colorMatch = rest.match(/@color:([#\w]+)/i);
+        if (colorMatch) {
+          tokenColor = colorMatch[1];
+          rest = rest.replace(/@color:[#\w]+/i, "").trim();
+        }
+        if (!busLabel) {
+          const quotedEnd = rest.match(/^(.*?)\s*["']([^"']+)["']\s*$/);
+          if (quotedEnd && !quotedEnd[1].includes(",")) {
+            busLabel = quotedEnd[2].trim();
+            rest = quotedEnd[1].trim();
+          }
+        }
+        const toList = rest.split(",").map((s) => s.trim()).filter(Boolean);
+        buses.push({
+          from,
+          to: toList,
+          ...busLabel ? { label: busLabel } : {},
+          ...animation ? { animation } : {},
+          ...tokenShape ? { tokenShape } : {},
+          ...tokenColor ? { tokenColor } : {}
+        });
+        continue;
+      }
+    }
+    if (current.type === "legend") {
+      const legMatch = trimmed.match(/^(square|circle|diamond)\s+([\w-]+)\s+(.+)$/i);
+      if (legMatch) {
+        const shape = legMatch[1].toLowerCase();
+        const key = legMatch[2];
+        const legRest = legMatch[3].trim();
+        const parts = legRest.match(/"([^"]+)"|'([^']+)'|(\S+)/g)?.map((s) => stripQuotes2(s)) ?? [];
+        const label = parts[0] ?? key;
+        const color = parts[1] ?? (shape === "square" ? "#3b82f6" : shape === "circle" ? "#10b981" : "#8b5cf6");
+        legend.push({ key, label, shape, color });
+        continue;
+      }
+    }
+    if (current.type === "tier") {
+      const boxMatch = trimmed.match(/^box\s+([\w-]+)\s+(.+)$/i);
+      if (boxMatch) {
+        const id = boxMatch[1];
+        let rest = boxMatch[2].trim();
+        let dock;
+        const dockMatch = rest.match(/@dock:(top|bottom)/i);
+        if (dockMatch) {
+          dock = dockMatch[1].toLowerCase();
+          rest = rest.replace(/@dock:(top|bottom)/i, "").trim();
+        }
+        const quoted = [...rest.matchAll(/"([^"]*)"|'([^']*)'/g)].map((m) => m[1] ?? m[2] ?? "");
+        let boxTitle = "";
+        let subtitle;
+        if (quoted.length >= 2) {
+          boxTitle = quoted[0];
+          subtitle = quoted[1];
+        } else if (quoted.length === 1) {
+          boxTitle = quoted[0];
+          const bracketMatch = rest.match(/\[([^\]]+)\]/);
+          if (bracketMatch) subtitle = bracketMatch[1].trim();
+        } else {
+          boxTitle = rest;
+        }
+        const newBox = {
+          id,
+          title: stripQuotes2(boxTitle),
+          ...subtitle ? { subtitle: stripQuotes2(subtitle) } : {},
+          ...dock ? { dock } : {}
+        };
+        stack2.push({ type: "box", box: newBox, cards: [] });
+        continue;
+      }
+      const card = parseCardLine(trimmed);
+      if (card) {
+        current.items.push(card);
+        continue;
+      }
+    }
+    if (current.type === "box") {
+      const gridMatch = trimmed.match(/^grid(?:\s+(\d+))?/i);
+      if (gridMatch) {
+        const cols = gridMatch[1] ? parseInt(gridMatch[1], 10) : 3;
+        stack2.push({ type: "grid", cols, cards: [] });
+        continue;
+      }
+      if (/^branch\b/i.test(trimmed)) {
+        stack2.push({ type: "branch", cards: [] });
+        continue;
+      }
+      const card = parseCardLine(trimmed);
+      if (card) {
+        current.cards.push(card);
+        continue;
+      }
+    }
+    if (current.type === "grid") {
+      const card = parseCardLine(trimmed);
+      if (card) {
+        current.cards.push(card);
+        continue;
+      }
+    }
+    if (current.type === "branch") {
+      const card = parseCardLine(trimmed);
+      if (card) {
+        current.cards.push(card);
+        continue;
+      }
+    }
+  }
+  return {
+    version: "1",
+    metadata: { ...metadata, ...title ? { title } : {} },
+    ...figure ? { figure } : {},
+    ...title ? { title } : {},
+    ...desc ? { desc } : {},
+    ...direction ? { direction } : {},
+    ...legend.length > 0 ? { legend } : {},
+    tiers,
+    buses
+  };
+}
+function resolvePlatformColors(theme) {
+  const name = theme.name;
+  const isDark = name === "bw-dark" || name === "dark" || name === "midnight" || isDarkTheme(theme);
+  const isMono = name === "bw-light" || name === "bw-dark" || name === "bw" || name === "minimal";
+  const p = theme.palette;
+  if (name === "bw-dark") {
+    return {
+      isDark: true,
+      isMono: true,
+      canvasBg: "#171717",
+      dotColor: "#3F3F3F",
+      dotOpacity: 0.6,
+      figureText: "#A3A3A3",
+      titleText: "#FAFAFA",
+      descText: "#D4D4D4",
+      tierTitle: "#FAFAFA",
+      primaryText: "#FAFAFA",
+      secondaryText: "#A3A3A3",
+      habitatBg: "#1E1E1E",
+      habitatBorder: "#FAFAFA",
+      habitatTitle: "#FAFAFA",
+      cdcBg: "#262626",
+      cdcBorder: "#FAFAFA",
+      cardBg: "#262626",
+      cardBorder: "#FAFAFA",
+      cardTitle: "#FAFAFA",
+      cardSubtitle: "#A3A3A3",
+      cardIcon: "#FAFAFA",
+      gridCellBg: "#2A2A2A",
+      gridCellBorder: "#737373",
+      routingBg: "#333333",
+      routingBorder: "#FAFAFA",
+      routingTitle: "#FAFAFA",
+      routingSubtitle: "#D4D4D4",
+      busLine: "#FAFAFA",
+      busLineWidth: 1.8,
+      pauseBg: "#262626",
+      pauseBorder: "#FAFAFA",
+      pauseText: "#FAFAFA"
+    };
+  }
+  if (name === "bw-light" || name === "bw") {
+    return {
+      isDark: false,
+      isMono: true,
+      canvasBg: "#FFFFFF",
+      dotColor: "#D4D4D4",
+      dotOpacity: 0.7,
+      figureText: "#737373",
+      titleText: "#171717",
+      descText: "#525252",
+      tierTitle: "#171717",
+      primaryText: "#171717",
+      secondaryText: "#737373",
+      habitatBg: "#FAFAFA",
+      habitatBorder: "#171717",
+      habitatTitle: "#171717",
+      cdcBg: "#FFFFFF",
+      cdcBorder: "#171717",
+      cardBg: "#FFFFFF",
+      cardBorder: "#171717",
+      cardTitle: "#171717",
+      cardSubtitle: "#525252",
+      cardIcon: "#171717",
+      gridCellBg: "#FFFFFF",
+      gridCellBorder: "#525252",
+      routingBg: "#171717",
+      routingBorder: "#000000",
+      routingTitle: "#FFFFFF",
+      routingSubtitle: "#D4D4D4",
+      busLine: "#171717",
+      busLineWidth: 1.8,
+      pauseBg: "#FFFFFF",
+      pauseBorder: "#171717",
+      pauseText: "#171717"
+    };
+  }
+  if (isDark) {
+    return {
+      isDark: true,
+      isMono: false,
+      canvasBg: p.background || "#121212",
+      dotColor: "#383838",
+      dotOpacity: 0.5,
+      figureText: p.textMuted || "#94A3B8",
+      titleText: p.text || "#F8FAFC",
+      descText: p.text || "#E2E8F0",
+      tierTitle: p.text || "#F8FAFC",
+      primaryText: p.text || "#F8FAFC",
+      secondaryText: p.textMuted || "#94A3B8",
+      habitatBg: p.surface || "#1E293B",
+      habitatBorder: p.border || "#475569",
+      habitatTitle: p.text || "#F8FAFC",
+      cdcBg: p.surface || "#1E293B",
+      cdcBorder: p.border || "#475569",
+      cardBg: p.surface || "#1E293B",
+      cardBorder: p.border || "#475569",
+      cardTitle: p.text || "#F8FAFC",
+      cardSubtitle: p.textMuted || "#94A3B8",
+      cardIcon: p.text || "#F8FAFC",
+      gridCellBg: "#0F172A",
+      gridCellBorder: p.border || "#334155",
+      routingBg: "#0F172A",
+      routingBorder: p.border || "#475569",
+      routingTitle: p.text || "#F8FAFC",
+      routingSubtitle: p.textMuted || "#94A3B8",
+      busLine: p.primary || "#94A3B8",
+      busLineWidth: 1.6,
+      pauseBg: p.surface || "#1E293B",
+      pauseBorder: p.border || "#475569",
+      pauseText: p.text || "#F8FAFC"
+    };
+  }
+  return {
+    isDark: false,
+    isMono: false,
+    canvasBg: p.background || "#FFFFFF",
+    dotColor: "#CBD5E1",
+    dotOpacity: 0.8,
+    figureText: p.textMuted || "#64748B",
+    titleText: p.text || "#0F172A",
+    descText: p.textMuted || "#475569",
+    tierTitle: p.text || "#0F172A",
+    primaryText: p.text || "#0F172A",
+    secondaryText: p.textMuted || "#64748B",
+    habitatBg: "#FFFFFF",
+    habitatBorder: p.border || "#0F172A",
+    habitatTitle: p.text || "#0F172A",
+    cdcBg: "#FFFFFF",
+    cdcBorder: p.border || "#0F172A",
+    cardBg: "#FFFFFF",
+    cardBorder: p.border || "#0F172A",
+    cardTitle: p.text || "#0F172A",
+    cardSubtitle: p.textMuted || "#64748B",
+    cardIcon: p.text || "#0F172A",
+    gridCellBg: "#FFFFFF",
+    gridCellBorder: "#334155",
+    routingBg: "#FFFFFF",
+    routingBorder: "#334155",
+    routingTitle: p.text || "#0F172A",
+    routingSubtitle: p.textMuted || "#64748B",
+    busLine: "#334155",
+    busLineWidth: 1.6,
+    pauseBg: "#FFFFFF",
+    pauseBorder: p.border || "#0F172A",
+    pauseText: p.text || "#0F172A"
+  };
+}
+function layoutPlatform(doc, theme = defaultTheme) {
+  const p = pen(theme);
+  const colors = resolvePlatformColors(theme);
+  const elements = [];
+  const defs = [];
+  const anchors = {};
+  defs.push(
+    `<pattern id="platform-dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" fill="${colors.dotColor}" opacity="${colors.dotOpacity}"/></pattern>`
+  );
+  const numTiers = doc.tiers.length;
+  const tierWidths = doc.tiers.map((t) => {
+    const boxes = t.items.filter(
+      (it) => "grid" in it || "branch" in it || "cards" in it
+    );
+    const simpleCards = t.items.filter(
+      (it) => !("grid" in it) && !("branch" in it) && !("cards" in it)
+    );
+    if (boxes.length === 0) {
+      const hasSubtitle = simpleCards.some((c) => !!c.subtitle);
+      return hasSubtitle ? 210 : 195;
+    }
+    let maxBoxW = 0;
+    for (const b of boxes) {
+      if (b.grid) {
+        const cols = b.grid.columns || 3;
+        const cellW = cols === 2 ? 200 : cols >= 3 ? 195 : 180;
+        const bw = cols * cellW + (cols - 1) * 12 + 32;
+        maxBoxW = Math.max(maxBoxW, bw >= 600 ? 660 : bw);
+      }
+      if (b.branch) {
+        const bCards = b.branch.cards;
+        const bW = 136;
+        const bGap = 14;
+        const totalBW = bCards.length * bW + (bCards.length - 1) * bGap + 32;
+        maxBoxW = Math.max(maxBoxW, totalBW >= 600 ? 660 : totalBW);
+      }
+      if (!b.grid && !b.branch) {
+        maxBoxW = Math.max(maxBoxW, 260);
+      }
+    }
+    return Math.max(maxBoxW, 240);
+  });
+  const isHabitatProfile = numTiers === 3 && tierWidths[0] === 195 && tierWidths[1] === 660 && tierWidths[2] === 210;
+  const endpointTierMap = /* @__PURE__ */ new Map();
+  for (let i = 0; i < doc.tiers.length; i++) {
+    const tier = doc.tiers[i];
+    endpointTierMap.set(tier.id, i);
+    for (const item of tier.items) {
+      if ("grid" in item || "branch" in item || "cards" in item) {
+        const box = item;
+        endpointTierMap.set(box.id, i);
+        endpointTierMap.set(`${tier.id}.${box.id}`, i);
+        const subCards = [
+          ...box.cards ?? [],
+          ...box.grid?.cards ?? [],
+          ...box.branch?.cards ?? []
+        ];
+        for (const c of subCards) {
+          endpointTierMap.set(c.id, i);
+          endpointTierMap.set(`${box.id}.${c.id}`, i);
+          endpointTierMap.set(`${tier.id}.${box.id}.${c.id}`, i);
+        }
+      } else {
+        const card = item;
+        endpointTierMap.set(card.id, i);
+        endpointTierMap.set(`${tier.id}.${card.id}`, i);
+      }
+    }
+  }
+  const getTierIndex = (ep) => {
+    if (endpointTierMap.has(ep)) return endpointTierMap.get(ep);
+    for (const [key, idx] of endpointTierMap) {
+      if (key.endsWith(`.${ep}`)) return idx;
+    }
+    return void 0;
+  };
+  const colXs = [];
+  let curColX = 50;
+  for (let i = 0; i < numTiers; i++) {
+    colXs.push(curColX);
+    let gutter = isHabitatProfile ? i === 0 ? 105 : 100 : 110;
+    if (i < numTiers - 1 && !isHabitatProfile) {
+      for (const bus of doc.buses) {
+        if (bus.label) {
+          const fromList = Array.isArray(bus.from) ? bus.from : [bus.from];
+          const toList = Array.isArray(bus.to) ? bus.to : [bus.to];
+          const fromTier = fromList.map(getTierIndex).find((idx) => idx !== void 0);
+          const toTier = toList.map(getTierIndex).find((idx) => idx !== void 0);
+          if (fromTier === i && toTier === i + 1) {
+            const badgeW = Math.max(36, bus.label.length * 6.5 + 16);
+            gutter = Math.max(gutter, badgeW + 80);
+          }
+        }
+      }
+    }
+    curColX += tierWidths[i] + gutter;
+  }
+  const lastTierRight = numTiers > 0 ? (colXs[numTiers - 1] ?? 50) + (tierWidths[numTiers - 1] ?? 200) : 50;
+  let maxContentRight = lastTierRight;
+  if (!isHabitatProfile) {
+    for (const bus of doc.buses) {
+      const fromList = Array.isArray(bus.from) ? bus.from : [bus.from];
+      const toList = Array.isArray(bus.to) ? bus.to : [bus.to];
+      const fromTier = fromList.map(getTierIndex).find((idx) => idx !== void 0);
+      if (fromTier === numTiers - 1 && toList.length > 1) {
+        const badgeW = bus.label ? Math.max(36, bus.label.length * 6.5 + 16) : 0;
+        const railRight = lastTierRight + 20 + (bus.label ? 30 + badgeW / 2 : 10);
+        maxContentRight = Math.max(maxContentRight, railRight);
+      }
+    }
+  }
+  const tiersRequiredW = maxContentRight + 50;
+  let legendRequiredW = 0;
+  if (doc.legend && doc.legend.length > 0) {
+    let legX = 50;
+    for (const item of doc.legend) {
+      const itemWidth = 16 + item.label.length * 6.8;
+      legX += Math.max(120, itemWidth + 24);
+    }
+    legendRequiredW = legX + 30;
+  }
+  const titleRequiredW = doc.title ? 50 + doc.title.length * 13.5 + 160 : 0;
+  const figureRequiredW = doc.figure ? 50 + doc.figure.length * 7.5 + 160 : 0;
+  const descRequiredW = doc.desc ? 50 + doc.desc.length * 7.5 + 50 : 0;
+  const canvasW = isHabitatProfile ? 1380 : Math.max(tiersRequiredW, legendRequiredW, titleRequiredW, figureRequiredW, descRequiredW, 500);
+  let headerContentBottom = 40;
+  if (doc.figure) headerContentBottom += 26;
+  if (doc.title) headerContentBottom += 32;
+  if (doc.desc) headerContentBottom += 28;
+  if (doc.legend && doc.legend.length > 0) headerContentBottom += 26;
+  const tierY = isHabitatProfile ? 175 : Math.max(100, headerContentBottom + 35);
+  let maxTierBottom = 0;
+  for (const t of doc.tiers) {
+    const boxes = t.items.filter(
+      (it) => "grid" in it || "branch" in it || "cards" in it
+    );
+    const simpleCards = t.items.filter(
+      (it) => !("grid" in it) && !("branch" in it) && !("cards" in it)
+    );
+    let curY2 = tierY + 24;
+    if (simpleCards.length > 0) {
+      const cardH = simpleCards.some((c) => !!c.subtitle) ? 54 : 46;
+      curY2 += simpleCards.length * (cardH + 14) + (boxes.length > 0 ? 10 : 0);
+    }
+    for (const b of boxes) {
+      if (b.grid) {
+        const cols = b.grid.columns || 3;
+        const rows = Math.ceil(b.grid.cards.length / cols);
+        const gridH = rows > 0 ? rows * 56 + (rows - 1) * 10 : 0;
+        const routing = (b.cards ?? []).find((c) => c.id === "routing") ?? b.cards?.[0];
+        const boxH = Math.max(160, 36 + gridH + (routing ? 70 : 0) + 16);
+        curY2 += boxH + 20;
+      } else if (b.branch || b.id === "cdc") {
+        curY2 = Math.max(curY2, isHabitatProfile ? tierY + 310 : curY2 + 10) + 150;
+      } else {
+        const boxCards = b.cards ?? [];
+        const cardH = boxCards.some((c) => !!c.subtitle) ? 52 : 46;
+        const cardsH = boxCards.length * cardH + Math.max(0, boxCards.length - 1) * 12;
+        const boxH = Math.max(90, 38 + cardsH + 16);
+        curY2 += boxH + 20;
+      }
+    }
+    maxTierBottom = Math.max(maxTierBottom, curY2);
+  }
+  const canvasH = isHabitatProfile ? 780 : Math.max(260, maxTierBottom + 40);
+  if (theme.palette.background !== "") {
+    elements.push({
+      type: "rect",
+      bounds: { x: 0, y: 0, width: canvasW, height: canvasH },
+      fill: colors.canvasBg,
+      stroke: "none",
+      strokeWidth: 0
+    });
+  }
+  elements.push({
+    type: "rect",
+    bounds: { x: 0, y: 0, width: canvasW, height: canvasH },
+    fill: "url(#platform-dots)",
+    stroke: "none",
+    strokeWidth: 0
+  });
+  let curY = 40;
+  if (doc.figure) {
+    elements.push(
+      p.text(doc.figure.toUpperCase(), 50, curY, 11, colors.figureText, { weight: "bold" })
+    );
+    curY += 26;
+  }
+  if (doc.title) {
+    elements.push(p.text(doc.title, 50, curY + 6, 22, colors.titleText, { weight: "bold" }));
+    curY += 32;
+  }
+  if (doc.desc) {
+    elements.push(p.text(doc.desc, 50, curY + 4, 13, colors.descText));
+    curY += 28;
+  }
+  const btnX = canvasW - 130;
+  const btnY = 36;
+  elements.push(
+    p.rect({ x: btnX, y: btnY, width: 80, height: 28 }, colors.pauseBg, colors.pauseBorder, 1.5, {
+      rx: 6
+    })
+  );
+  elements.push(
+    p.rect(
+      { x: btnX + 16, y: btnY + 9, width: 2.5, height: 10 },
+      colors.pauseText,
+      colors.pauseText,
+      0
+    )
+  );
+  elements.push(
+    p.rect(
+      { x: btnX + 21, y: btnY + 9, width: 2.5, height: 10 },
+      colors.pauseText,
+      colors.pauseText,
+      0
+    )
+  );
+  elements.push(
+    p.text("Pause", btnX + 48, btnY + 18, 12, colors.pauseText, {
+      weight: "bold",
+      anchor: "middle"
+    })
+  );
+  if (doc.legend && doc.legend.length > 0) {
+    let legX = 50;
+    const legY = curY + 8;
+    for (const item of doc.legend) {
+      if (item.shape === "square") {
+        const stroke = colors.isDark ? "#93c5fd" : "#1d4ed8";
+        elements.push(
+          p.rect({ x: legX, y: legY - 8, width: 10, height: 10 }, item.color, stroke, 1.2, {
+            rx: 1.5
+          })
+        );
+      } else if (item.shape === "circle") {
+        const stroke = colors.isDark ? "#a7f3d0" : "#047857";
+        elements.push(p.circle({ x: legX + 5, y: legY - 3 }, 5, item.color, stroke, 1.2));
+      } else if (item.shape === "diamond") {
+        const stroke = colors.isDark ? "#ddd6fe" : "#6d28d9";
+        elements.push(
+          p.path(
+            `M ${legX + 5} ${legY - 9} L ${legX + 10} ${legY - 3} L ${legX + 5} ${legY + 3} L ${legX} ${legY - 3} Z`,
+            stroke,
+            1.2,
+            { fill: item.color }
+          )
+        );
+      }
+      elements.push(
+        p.text(item.label, legX + 16, legY, 11.5, colors.primaryText, { weight: "bold" })
+      );
+      const itemWidth = 16 + item.label.length * 6.8;
+      legX += Math.max(120, itemWidth + 24);
+    }
+  }
+  const nodeMap2 = /* @__PURE__ */ new Map();
+  function registerPlacedNode(id, bounds) {
+    const node = {
+      id,
+      bounds,
+      center: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },
+      left: { x: bounds.x, y: bounds.y + bounds.height / 2 },
+      right: { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
+      top: { x: bounds.x + bounds.width / 2, y: bounds.y },
+      bottom: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height }
+    };
+    nodeMap2.set(id, node);
+    anchors[id] = {
+      bounds,
+      ports: {
+        N: node.top,
+        S: node.bottom,
+        E: node.right,
+        W: node.left
+      }
+    };
+    return node;
+  }
+  const tierCardMap = /* @__PURE__ */ new Map();
+  const tierInfos = doc.tiers.map((t, i) => ({
+    tier: t,
+    colX: colXs[i] ?? 50,
+    colW: tierWidths[i] ?? 200,
+    simpleCards: t.items.filter(
+      (it) => !("grid" in it) && !("branch" in it) && !("cards" in it)
+    ),
+    boxes: t.items.filter(
+      (it) => "grid" in it || "branch" in it || "cards" in it
+    )
+  }));
+  for (const info of tierInfos) {
+    const { tier, colX, colW, simpleCards, boxes } = info;
+    const cardsList = [];
+    tierCardMap.set(tier.id, cardsList);
+    elements.push(
+      p.text(tier.title.toUpperCase(), colX + colW / 2, tierY, 11, colors.tierTitle, {
+        weight: "bold",
+        anchor: "middle"
+      })
+    );
+    let curItemY = tierY + 24;
+    if (simpleCards.length > 0) {
+      const cardH = simpleCards.some((c) => !!c.subtitle) ? 54 : 46;
+      const gap = 14;
+      simpleCards.forEach((card, idx) => {
+        const y = curItemY + idx * (cardH + gap);
+        const b = { x: colX, y, width: colW, height: cardH };
+        const placed = registerPlacedNode(card.id, b);
+        registerPlacedNode(`${tier.id}.${card.id}`, b);
+        cardsList.push(placed);
+        elements.push(p.rect(b, colors.cardBg, colors.cardBorder, 1.5, { rx: 6 }));
+        drawIcon(
+          elements,
+          p,
+          card.icon ?? (card.subtitle ? "database" : "client"),
+          b.x + 12,
+          b.y + (card.subtitle ? 18 : 14),
+          colors.cardIcon
+        );
+        elements.push(
+          p.text(
+            card.title,
+            b.x + 38,
+            b.y + (card.subtitle ? 24 : 27),
+            card.subtitle ? 12 : 13,
+            colors.cardTitle,
+            { weight: "bold" }
+          )
+        );
+        if (card.subtitle) {
+          elements.push(p.text(card.subtitle, b.x + 38, b.y + 40, 10.5, colors.cardSubtitle));
+        }
+      });
+      curItemY += simpleCards.length * (cardH + gap) + (boxes.length > 0 ? 10 : 0);
+    }
+    for (const box of boxes) {
+      if (box.grid) {
+        const gridCols = box.grid.columns || 3;
+        const colGap = 12;
+        const rowGap = 10;
+        const cellW = (colW - 32 - (gridCols - 1) * colGap) / gridCols;
+        const cellH = 56;
+        const gridStartX = colX + 16;
+        const gridStartY = curItemY + 36;
+        const gridRows = Math.ceil(box.grid.cards.length / gridCols);
+        const gridHeight = gridRows > 0 ? gridRows * cellH + (gridRows - 1) * rowGap : 0;
+        const routingCard = (box.cards ?? []).find((c) => c.id === "routing") ?? box.cards?.[0];
+        const rH = routingCard ? 54 : 0;
+        const routingGap = routingCard ? 16 : 0;
+        const boxH = isHabitatProfile && gridRows <= 2 ? 250 : Math.max(160, 36 + gridHeight + (routingCard ? routingGap + rH : 0) + 16);
+        const boxBounds = { x: colX, y: curItemY, width: colW, height: boxH };
+        registerPlacedNode(box.id, boxBounds);
+        registerPlacedNode(`${tier.id}.${box.id}`, boxBounds);
+        elements.push(p.rect(boxBounds, colors.habitatBg, colors.habitatBorder, 1.8, { rx: 8 }));
+        elements.push(
+          p.text(box.title, colX + colW / 2, curItemY + 22, 13, colors.habitatTitle, {
+            weight: "bold",
+            anchor: "middle"
+          })
+        );
+        box.grid.cards.forEach((card, idx) => {
+          const col = idx % gridCols;
+          const row = Math.floor(idx / gridCols);
+          const cx = gridStartX + col * (cellW + colGap);
+          const cy = gridStartY + row * (cellH + rowGap);
+          const cb = { x: cx, y: cy, width: cellW, height: cellH };
+          const placed = registerPlacedNode(card.id, cb);
+          registerPlacedNode(`${box.id}.${card.id}`, cb);
+          registerPlacedNode(`${tier.id}.${box.id}.${card.id}`, cb);
+          cardsList.push(placed);
+          elements.push(p.rect(cb, colors.gridCellBg, colors.gridCellBorder, 1.3, { rx: 6 }));
+          elements.push(
+            p.text(card.title, cx + 12, cy + 22, 11.5, colors.primaryText, { weight: "bold" })
+          );
+          if (card.subtitle) {
+            elements.push(p.text(card.subtitle, cx + 12, cy + 40, 10, colors.secondaryText));
+          }
+        });
+        if (routingCard) {
+          const rW = colW - 32;
+          const rH2 = 54;
+          const rx = colX + 16;
+          const ry = curItemY + boxH - rH2 - 16;
+          const rb = { x: rx, y: ry, width: rW, height: rH2 };
+          const placed = registerPlacedNode(routingCard.id, rb);
+          registerPlacedNode(`${box.id}.${routingCard.id}`, rb);
+          registerPlacedNode(`${tier.id}.${box.id}.${routingCard.id}`, rb);
+          cardsList.push(placed);
+          elements.push(p.rect(rb, colors.routingBg, colors.routingBorder, 1.3, { rx: 6 }));
+          elements.push(
+            p.text(routingCard.title, rx + 16, ry + 22, 12, colors.routingTitle, {
+              weight: "bold"
+            })
+          );
+          if (routingCard.subtitle) {
+            elements.push(
+              p.text(routingCard.subtitle, rx + 16, ry + 40, 10.5, colors.routingSubtitle)
+            );
+          }
+        }
+        curItemY += boxH + 20;
+      } else if (box.branch || box.id === "cdc") {
+        const cdcW = Math.min(230, colW);
+        const cdcH = 50;
+        const cdcX = colX + (colW - cdcW) / 2;
+        const cdcY = isHabitatProfile ? Math.max(curItemY, tierY + 310) : curItemY + 10;
+        const cdcBounds = { x: cdcX, y: cdcY, width: cdcW, height: cdcH };
+        const placedBox = registerPlacedNode(box.id, cdcBounds);
+        registerPlacedNode(`${tier.id}.${box.id}`, cdcBounds);
+        cardsList.push(placedBox);
+        elements.push(p.rect(cdcBounds, colors.cdcBg, colors.cdcBorder, 1.5, { rx: 6 }));
+        drawIcon(elements, p, box.icon ?? "cdc", cdcX + 12, cdcY + 16, colors.cardIcon);
+        elements.push(
+          p.text(box.title, cdcX + 38, cdcY + 22, 12, colors.cardTitle, { weight: "bold" })
+        );
+        if (box.subtitle) {
+          elements.push(p.text(box.subtitle, cdcX + 38, cdcY + 38, 10, colors.cardSubtitle));
+        }
+        if (box.branch) {
+          const bCards = box.branch.cards;
+          const bW = 136;
+          const bH = 46;
+          const bGap = 14;
+          const totalBW = bCards.length * bW + (bCards.length - 1) * bGap;
+          const startBX = colX + (colW - totalBW) / 2;
+          const bY = cdcY + 90;
+          bCards.forEach((card, idx) => {
+            const bx = startBX + idx * (bW + bGap);
+            const bb = { x: bx, y: bY, width: bW, height: bH };
+            const placed = registerPlacedNode(card.id, bb);
+            registerPlacedNode(`${box.id}.${card.id}`, bb);
+            registerPlacedNode(`${tier.id}.${box.id}.${card.id}`, bb);
+            cardsList.push(placed);
+            elements.push(p.rect(bb, colors.cardBg, colors.cardBorder, 1.5, { rx: 6 }));
+            drawIcon(elements, p, card.icon ?? card.id, bx + 12, bY + 14, colors.cardIcon);
+            elements.push(
+              p.text(card.title, bx + 36, bY + 28, 11.5, colors.cardTitle, { weight: "bold" })
+            );
+          });
+          curItemY = bY + bH + 20;
+        } else {
+          curItemY = cdcY + cdcH + 20;
+        }
+      } else {
+        const boxCards = box.cards ?? [];
+        const cardH = boxCards.some((c) => !!c.subtitle) ? 52 : 46;
+        const gap = 12;
+        const cardsH = boxCards.length * cardH + Math.max(0, boxCards.length - 1) * gap;
+        const boxH = Math.max(90, 38 + cardsH + 16);
+        const boxBounds = { x: colX, y: curItemY, width: colW, height: boxH };
+        const placedBox = registerPlacedNode(box.id, boxBounds);
+        registerPlacedNode(`${tier.id}.${box.id}`, boxBounds);
+        cardsList.push(placedBox);
+        elements.push(p.rect(boxBounds, colors.habitatBg, colors.habitatBorder, 1.5, { rx: 8 }));
+        elements.push(
+          p.text(box.title, colX + colW / 2, curItemY + 22, 12.5, colors.habitatTitle, {
+            weight: "bold",
+            anchor: "middle"
+          })
+        );
+        let cardY = curItemY + 38;
+        boxCards.forEach((c) => {
+          const cb = { x: colX + 16, y: cardY, width: colW - 32, height: cardH };
+          const placed = registerPlacedNode(c.id, cb);
+          registerPlacedNode(`${box.id}.${c.id}`, cb);
+          registerPlacedNode(`${tier.id}.${box.id}.${c.id}`, cb);
+          cardsList.push(placed);
+          elements.push(p.rect(cb, colors.cardBg, colors.cardBorder, 1.3, { rx: 6 }));
+          drawIcon(
+            elements,
+            p,
+            c.icon ?? (c.subtitle ? "database" : "server"),
+            cb.x + 12,
+            cb.y + (c.subtitle ? 18 : 14),
+            colors.cardIcon
+          );
+          elements.push(
+            p.text(
+              c.title,
+              cb.x + 38,
+              cb.y + (c.subtitle ? 23 : 26),
+              c.subtitle ? 11.5 : 12.5,
+              colors.cardTitle,
+              { weight: "bold" }
+            )
+          );
+          if (c.subtitle) {
+            elements.push(p.text(c.subtitle, cb.x + 38, cb.y + 39, 10, colors.cardSubtitle));
+          }
+          cardY += cardH + gap;
+        });
+        curItemY += boxH + 20;
+      }
+    }
+  }
+  function resolveEndpointNodes(spec) {
+    const list2 = Array.isArray(spec) ? spec : [spec];
+    const out = [];
+    for (const item of list2) {
+      if (tierCardMap.has(item)) {
+        out.push(...tierCardMap.get(item));
+        continue;
+      }
+      const n = nodeMap2.get(item);
+      if (n) {
+        out.push(n);
+        continue;
+      }
+      for (const [k, v] of nodeMap2) {
+        if (k.endsWith(`.${item}`)) {
+          out.push(v);
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  for (const bus of doc.buses) {
+    const fromNodes = resolveEndpointNodes(bus.from);
+    const toNodes = resolveEndpointNodes(bus.to);
+    if (fromNodes.length === 0 || toNodes.length === 0) {
+      const fromStr = Array.isArray(bus.from) ? bus.from.join(", ") : bus.from;
+      const toStr = Array.isArray(bus.to) ? bus.to.join(", ") : bus.to;
+      console.warn(
+        `[triton/platform] Warning: Unmatched bus endpoint in "${fromStr} --> ${toStr}". One or more endpoints could not be resolved and was skipped.`
+      );
+      continue;
+    }
+    const anim = bus.animation ?? "stream";
+    const isAnim = anim !== "none";
+    const tokenShape = bus.tokenShape ?? doc.legend?.[2]?.shape ?? "diamond";
+    const tokenColor = bus.tokenColor ?? doc.legend?.[2]?.color ?? "#8b5cf6";
+    const isDownstream = fromNodes.length === 1 && toNodes.length > 1 && toNodes.every((t) => t.top.y > fromNodes[0].bottom.y);
+    if (isDownstream) {
+      const src = fromNodes[0];
+      const minBX = Math.min(...toNodes.map((t) => t.top.x));
+      const maxBX = Math.max(...toNodes.map((t) => t.top.x));
+      const isHorizSeparated = maxBX - minBX >= 50;
+      if (isHorizSeparated) {
+        const srcX = src.bottom.x;
+        const bYs = toNodes.map((t) => t.top);
+        const minTgtTopY = Math.min(...toNodes.map((t) => t.top.y));
+        const branchRailY = Math.min(src.bottom.y + 24, minTgtTopY - 10);
+        elements.push(
+          p.path(`M ${srcX} ${src.bottom.y} V ${branchRailY}`, colors.busLine, colors.busLineWidth)
+        );
+        elements.push(
+          p.path(
+            `M ${minBX + 8} ${branchRailY} H ${maxBX - 8}`,
+            colors.busLine,
+            colors.busLineWidth
+          )
+        );
+        for (const pt of bYs) {
+          if (pt.x < srcX) {
+            elements.push(
+              p.path(
+                `M ${pt.x + 8} ${branchRailY} Q ${pt.x} ${branchRailY} ${pt.x} ${branchRailY + 8} V ${pt.y}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else if (pt.x > srcX) {
+            elements.push(
+              p.path(
+                `M ${pt.x - 8} ${branchRailY} Q ${pt.x} ${branchRailY} ${pt.x} ${branchRailY + 8} V ${pt.y}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else {
+            elements.push(
+              p.path(`M ${pt.x} ${branchRailY} V ${pt.y}`, colors.busLine, colors.busLineWidth)
+            );
+          }
+          addTokenBead(elements, p, tokenShape, pt.x, branchRailY + 12, tokenColor, colors.isDark);
+        }
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (minBX + srcX) / 2 - 40,
+          branchRailY,
+          tokenColor,
+          colors.isDark
+        );
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (minBX + srcX) / 2 + 30,
+          branchRailY,
+          tokenColor,
+          colors.isDark
+        );
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (maxBX + srcX) / 2 - 30,
+          branchRailY,
+          tokenColor,
+          colors.isDark
+        );
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (maxBX + srcX) / 2 + 40,
+          branchRailY,
+          tokenColor,
+          colors.isDark
+        );
+        if (bus.label) {
+          addBusLabel(elements, p, bus.label, srcX, branchRailY - 14, colors, nodeMap2);
+        }
+        continue;
+      } else {
+        const railX = src.right.x + 20;
+        const targetYs = toNodes.map((t) => t.right.y);
+        const minY = Math.min(...targetYs);
+        const maxY = Math.max(...targetYs);
+        elements.push(
+          p.path(
+            `M ${src.right.x} ${src.right.y} H ${railX - 8} Q ${railX} ${src.right.y} ${railX} ${src.right.y + 8} V ${maxY - 8}`,
+            colors.busLine,
+            colors.busLineWidth,
+            { ...isAnim ? { animated: anim } : {} }
+          )
+        );
+        for (const ty of targetYs) {
+          elements.push(
+            p.path(
+              `M ${railX} ${ty - 8} Q ${railX} ${ty} ${railX - 8} ${ty} H ${src.right.x}`,
+              colors.busLine,
+              colors.busLineWidth
+            )
+          );
+          addTokenBead(elements, p, tokenShape, railX, ty, tokenColor, colors.isDark);
+        }
+        if (bus.label) {
+          addBusLabel(
+            elements,
+            p,
+            bus.label,
+            railX + 30,
+            (src.right.y + minY) / 2,
+            colors,
+            nodeMap2
+          );
+        }
+        continue;
+      }
+    }
+    const isVerticalPipeline = fromNodes.length === 1 && toNodes.length === 1 && toNodes[0].top.y > fromNodes[0].bottom.y;
+    if (isVerticalPipeline) {
+      const src = fromNodes[0];
+      const tgt = toNodes[0];
+      const connY1 = src.bottom.y;
+      const connY2 = tgt.top.y;
+      const cdcX = tgt.top.x;
+      elements.push(
+        p.path(`M ${cdcX} ${connY1} L ${cdcX} ${connY2}`, colors.busLine, colors.busLineWidth, {
+          ...isAnim ? { animated: anim } : {}
+        })
+      );
+      addTokenBead(elements, p, tokenShape, cdcX, (connY1 + connY2) / 2, tokenColor, colors.isDark);
+      if (bus.label) {
+        addBusLabel(elements, p, bus.label, cdcX, (connY1 + connY2) / 2, colors, nodeMap2);
+      }
+      continue;
+    }
+    const isMultiToMulti = fromNodes.length > 1 && toNodes.length > 1;
+    if (isMultiToMulti) {
+      const maxSrcX = Math.max(...fromNodes.map((s) => s.right.x));
+      const minTgtX = Math.min(...toNodes.map((t) => t.left.x));
+      if (minTgtX > maxSrcX) {
+        const gutterW = minTgtX - maxSrcX;
+        const railGatherX = maxSrcX + gutterW * 0.35;
+        const railDistributeX = minTgtX - gutterW * 0.35;
+        const sourceYs = fromNodes.map((s) => s.right.y);
+        const targetYs = toNodes.map((t) => t.left.y);
+        const minSrcY = Math.min(...sourceYs);
+        const maxSrcY = Math.max(...sourceYs);
+        const minTgtY = Math.min(...targetYs);
+        const maxTgtY = Math.max(...targetYs);
+        const bridgeY = (minSrcY + maxSrcY + minTgtY + maxTgtY) / 4;
+        for (const cy of sourceYs) {
+          if (cy < bridgeY) {
+            elements.push(
+              p.path(
+                `M ${maxSrcX} ${cy} H ${railGatherX - 8} Q ${railGatherX} ${cy} ${railGatherX} ${cy + 8}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else if (cy > bridgeY) {
+            elements.push(
+              p.path(
+                `M ${maxSrcX} ${cy} H ${railGatherX - 8} Q ${railGatherX} ${cy} ${railGatherX} ${cy - 8}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else {
+            elements.push(
+              p.path(`M ${maxSrcX} ${cy} H ${railGatherX}`, colors.busLine, colors.busLineWidth)
+            );
+          }
+        }
+        elements.push(
+          p.path(
+            `M ${railGatherX} ${Math.min(minSrcY, bridgeY) + 8} V ${Math.max(maxSrcY, bridgeY) - 8}`,
+            colors.busLine,
+            colors.busLineWidth
+          )
+        );
+        elements.push(
+          p.path(
+            `M ${railGatherX} ${bridgeY} L ${railDistributeX} ${bridgeY}`,
+            colors.busLine,
+            colors.busLineWidth,
+            { ...isAnim ? { animated: anim } : {} }
+          )
+        );
+        elements.push(
+          p.path(
+            `M ${railDistributeX} ${Math.min(minTgtY, bridgeY) + 8} V ${Math.max(maxTgtY, bridgeY) - 8}`,
+            colors.busLine,
+            colors.busLineWidth
+          )
+        );
+        for (const sy of targetYs) {
+          if (sy < bridgeY) {
+            elements.push(
+              p.path(
+                `M ${railDistributeX} ${sy + 8} Q ${railDistributeX} ${sy} ${railDistributeX + 8} ${sy} H ${minTgtX}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else if (sy > bridgeY) {
+            elements.push(
+              p.path(
+                `M ${railDistributeX} ${sy - 8} Q ${railDistributeX} ${sy} ${railDistributeX + 8} ${sy} H ${minTgtX}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          } else {
+            elements.push(
+              p.path(
+                `M ${railDistributeX} ${sy} H ${minTgtX}`,
+                colors.busLine,
+                colors.busLineWidth
+              )
+            );
+          }
+        }
+        const b1 = doc.legend?.[0] ?? { shape: "square", color: "#3b82f6" };
+        const b2 = doc.legend?.[1] ?? { shape: "circle", color: "#10b981" };
+        sourceYs.forEach((sy, i) => {
+          const item = i % 2 === 0 ? b1 : b2;
+          addTokenBead(elements, p, item.shape, railGatherX - 25, sy, item.color, colors.isDark);
+        });
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (railGatherX + railDistributeX) / 2,
+          bridgeY,
+          tokenColor,
+          colors.isDark
+        );
+        targetYs.forEach((ty, i) => {
+          const item = i % 2 === 0 ? b2 : b1;
+          addTokenBead(
+            elements,
+            p,
+            item.shape,
+            railDistributeX + 25,
+            ty,
+            item.color,
+            colors.isDark
+          );
+        });
+        if (bus.label) {
+          addBusLabel(
+            elements,
+            p,
+            bus.label,
+            (railGatherX + railDistributeX) / 2,
+            bridgeY - 14,
+            colors,
+            nodeMap2
+          );
+        }
+        continue;
+      } else {
+        console.warn(
+          `[triton/platform] Warning: Bus "${Array.isArray(bus.from) ? bus.from.join(", ") : bus.from} --> ${Array.isArray(bus.to) ? bus.to.join(", ") : bus.to}" (${fromNodes.length} -> ${toNodes.length} nodes) has unsupported multi-to-many geometry and was skipped.`
+        );
+        continue;
+      }
+    }
+    const isFanIn = fromNodes.length > 1 && toNodes.length === 1 && toNodes[0].left.x > Math.max(...fromNodes.map((s) => s.right.x));
+    if (isFanIn) {
+      const tgt = toNodes[0];
+      const targetX = tgt.left.x;
+      const targetY = tgt.left.y;
+      const maxSrcX = Math.max(...fromNodes.map((s) => s.right.x));
+      const railX = isHabitatProfile ? 295 : bus.label ? maxSrcX + 35 : maxSrcX + (targetX - maxSrcX) * 0.45;
+      const sourceYs = fromNodes.map((c) => c.right.y);
+      const minY = Math.min(...sourceYs);
+      const maxY = Math.max(...sourceYs);
+      for (const cy of sourceYs) {
+        if (cy < targetY) {
+          elements.push(
+            p.path(
+              `M ${maxSrcX} ${cy} H ${railX - 8} Q ${railX} ${cy} ${railX} ${cy + 8}`,
+              colors.busLine,
+              colors.busLineWidth
+            )
+          );
+        } else if (cy > targetY) {
+          elements.push(
+            p.path(
+              `M ${maxSrcX} ${cy} H ${railX - 8} Q ${railX} ${cy} ${railX} ${cy - 8}`,
+              colors.busLine,
+              colors.busLineWidth
+            )
+          );
+        } else {
+          elements.push(
+            p.path(`M ${maxSrcX} ${cy} H ${railX}`, colors.busLine, colors.busLineWidth)
+          );
+        }
+      }
+      elements.push(
+        p.path(`M ${railX} ${minY + 8} V ${maxY - 8}`, colors.busLine, colors.busLineWidth)
+      );
+      const ingressPath = `M ${railX} ${targetY} L ${targetX} ${targetY}`;
+      elements.push(
+        p.path(ingressPath, colors.busLine, colors.busLineWidth, {
+          ...isAnim ? { animated: anim } : {}
+        })
+      );
+      const b1 = doc.legend?.[0] ?? { shape: "square", color: "#3b82f6" };
+      const b2 = doc.legend?.[1] ?? { shape: "circle", color: "#10b981" };
+      sourceYs.forEach((sy, i) => {
+        const item = i % 2 === 0 ? b1 : b2;
+        addTokenBead(elements, p, item.shape, railX - 35, sy, item.color, colors.isDark);
+      });
+      addTokenBead(elements, p, b1.shape, railX + 22, targetY, b1.color, colors.isDark);
+      addTokenBead(elements, p, b2.shape, railX + 42, targetY, b2.color, colors.isDark);
+      addTokenBead(elements, p, b2.shape, railX + 54, targetY, b2.color, colors.isDark);
+      if (bus.label) {
+        addBusLabel(elements, p, bus.label, (railX + targetX) / 2, targetY - 14, colors, nodeMap2);
+      }
+      continue;
+    }
+    const isFanOut = fromNodes.length === 1 && toNodes.length > 1 && Math.min(...toNodes.map((t) => t.left.x)) > fromNodes[0].right.x;
+    if (isFanOut) {
+      const src = fromNodes[0];
+      const exitX = src.right.x;
+      const startY = src.right.y;
+      const minTgtX = Math.min(...toNodes.map((t) => t.left.x));
+      const railX = isHabitatProfile ? 1060 : bus.label ? minTgtX - 35 : exitX + (minTgtX - exitX) * 0.5;
+      const egressPath = `M ${exitX} ${startY} L ${railX} ${startY}`;
+      elements.push(
+        p.path(egressPath, colors.busLine, colors.busLineWidth, {
+          ...isAnim ? { animated: anim } : {}
+        })
+      );
+      const targetYs = toNodes.map((c) => c.left.y);
+      const minY = Math.min(...targetYs);
+      const maxY = Math.max(...targetYs);
+      elements.push(
+        p.path(`M ${railX} ${minY + 8} V ${maxY - 8}`, colors.busLine, colors.busLineWidth)
+      );
+      for (const sy of targetYs) {
+        if (sy < startY) {
+          elements.push(
+            p.path(
+              `M ${railX} ${sy + 8} Q ${railX} ${sy} ${railX + 8} ${sy} H ${minTgtX}`,
+              colors.busLine,
+              colors.busLineWidth
+            )
+          );
+        } else if (sy > startY) {
+          elements.push(
+            p.path(
+              `M ${railX} ${sy - 8} Q ${railX} ${sy} ${railX + 8} ${sy} H ${minTgtX}`,
+              colors.busLine,
+              colors.busLineWidth
+            )
+          );
+        } else {
+          elements.push(
+            p.path(`M ${railX} ${sy} H ${minTgtX}`, colors.busLine, colors.busLineWidth)
+          );
+        }
+      }
+      const b1 = doc.legend?.[0] ?? { shape: "square", color: "#3b82f6" };
+      const b2 = doc.legend?.[1] ?? { shape: "circle", color: "#10b981" };
+      addTokenBead(elements, p, b2.shape, exitX + 20, startY, b2.color, colors.isDark);
+      addTokenBead(elements, p, b1.shape, exitX + 34, startY, b1.color, colors.isDark);
+      addTokenBead(elements, p, b1.shape, exitX + 48, startY, b1.color, colors.isDark);
+      if (targetYs[1] !== void 0)
+        addTokenBead(elements, p, b2.shape, railX + 18, targetYs[1], b2.color, colors.isDark);
+      if (targetYs[2] !== void 0)
+        addTokenBead(elements, p, b1.shape, railX + 18, targetYs[2], b1.color, colors.isDark);
+      if (bus.label) {
+        addBusLabel(elements, p, bus.label, (exitX + railX) / 2, startY - 14, colors, nodeMap2);
+      }
+      continue;
+    }
+    if (fromNodes.length === 1 && toNodes.length === 1) {
+      const src = fromNodes[0];
+      const tgt = toNodes[0];
+      if (tgt.left.x > src.right.x) {
+        const intervening = Array.from(nodeMap2.values()).filter(
+          (n) => n.id !== src.id && n.id !== tgt.id && n.bounds.x > src.right.x + 10 && n.bounds.x + n.bounds.width < tgt.left.x - 10
+        );
+        const midX = (src.right.x + tgt.left.x) / 2;
+        const straightY = src.right.y;
+        const hasCollision = intervening.some(
+          (n) => straightY >= n.bounds.y - 8 && straightY <= n.bounds.y + n.bounds.height + 8 && n.bounds.x < tgt.left.x && n.bounds.x + n.bounds.width > src.right.x || midX >= n.bounds.x - 8 && midX <= n.bounds.x + n.bounds.width + 8 && Math.max(src.right.y, tgt.left.y) >= n.bounds.y - 8 && Math.min(src.right.y, tgt.left.y) <= n.bounds.y + n.bounds.height + 8
+        );
+        if (hasCollision && intervening.length > 0) {
+          const maxInterveningBottom = Math.max(
+            ...intervening.map((n) => n.bounds.y + n.bounds.height)
+          );
+          const minInterveningTop = Math.min(...intervening.map((n) => n.bounds.y));
+          const useTop = (src.right.y + tgt.left.y) / 2 <= (minInterveningTop + maxInterveningBottom) / 2;
+          const bypassY = useTop ? Math.min(tierY - 14, minInterveningTop - 24) : Math.min(canvasH - 30, maxInterveningBottom + 24);
+          const g1X = src.right.x + 20;
+          const g2X = tgt.left.x - 20;
+          const sign1 = bypassY > src.right.y ? 1 : -1;
+          const sign2 = tgt.left.y > bypassY ? 1 : -1;
+          elements.push(
+            p.path(
+              `M ${src.right.x} ${src.right.y} H ${g1X - 8} Q ${g1X} ${src.right.y} ${g1X} ${src.right.y + sign1 * 8} V ${bypassY - sign1 * 8} Q ${g1X} ${bypassY} ${g1X + 8} ${bypassY} H ${g2X - 8} Q ${g2X} ${bypassY} ${g2X} ${bypassY + sign2 * 8} V ${tgt.left.y - sign2 * 8} Q ${g2X} ${tgt.left.y} ${g2X + 8} ${tgt.left.y} H ${tgt.left.x}`,
+              colors.busLine,
+              colors.busLineWidth,
+              { ...isAnim ? { animated: anim } : {} }
+            )
+          );
+          addTokenBead(
+            elements,
+            p,
+            tokenShape,
+            (g1X + g2X) / 2,
+            bypassY,
+            tokenColor,
+            colors.isDark
+          );
+          if (bus.label) {
+            addBusLabel(elements, p, bus.label, (g1X + g2X) / 2, bypassY - 14, colors, nodeMap2);
+          }
+          continue;
+        }
+        if (Math.abs(tgt.left.y - src.right.y) < 4) {
+          elements.push(
+            p.path(
+              `M ${src.right.x} ${src.right.y} H ${tgt.left.x}`,
+              colors.busLine,
+              colors.busLineWidth,
+              { ...isAnim ? { animated: anim } : {} }
+            )
+          );
+        } else {
+          const dy = tgt.left.y - src.right.y;
+          const sign = dy > 0 ? 1 : -1;
+          elements.push(
+            p.path(
+              `M ${src.right.x} ${src.right.y} H ${midX - 8} Q ${midX} ${src.right.y} ${midX} ${src.right.y + sign * 8} V ${tgt.left.y - sign * 8} Q ${midX} ${tgt.left.y} ${midX + 8} ${tgt.left.y} H ${tgt.left.x}`,
+              colors.busLine,
+              colors.busLineWidth,
+              { ...isAnim ? { animated: anim } : {} }
+            )
+          );
+        }
+        addTokenBead(
+          elements,
+          p,
+          tokenShape,
+          (src.right.x + tgt.left.x) / 2,
+          (src.right.y + tgt.left.y) / 2,
+          tokenColor,
+          colors.isDark
+        );
+        if (bus.label) {
+          addBusLabel(
+            elements,
+            p,
+            bus.label,
+            (src.right.x + tgt.left.x) / 2,
+            (src.right.y + tgt.left.y) / 2 - 14,
+            colors,
+            nodeMap2
+          );
+        }
+      }
+    }
+  }
+  const scene = {
+    viewBox: { x: 0, y: 0, width: canvasW, height: canvasH },
+    background: theme.palette.background === "" ? "" : colors.canvasBg,
+    elements,
+    defs
+  };
+  return { scene, anchors };
+}
+function addBusLabel(elements, p, text, x, y, colors, nodeMap2) {
+  const padH = 8;
+  const charWidth = 6.4;
+  const badgeW = Math.max(36, text.length * charWidth + padH * 2);
+  const badgeH = 18;
+  let safeX = x;
+  let safeY = y;
+  if (nodeMap2) {
+    for (const node of nodeMap2.values()) {
+      if (node.bounds.width > 220 || node.bounds.height > 85) continue;
+      const b = node.bounds;
+      const rx2 = safeX - badgeW / 2;
+      const ry2 = safeY - badgeH / 2;
+      if (rx2 < b.x + b.width + 4 && rx2 + badgeW > b.x - 4 && ry2 < b.y + b.height + 4 && ry2 + badgeH > b.y - 4) {
+        if (safeY <= b.y + b.height / 2) {
+          safeY = b.y - badgeH / 2 - 4;
+        } else {
+          safeY = b.y + b.height + badgeH / 2 + 4;
+        }
+      }
+    }
+  }
+  const rx = safeX - badgeW / 2;
+  const ry = safeY - badgeH / 2;
+  elements.push(
+    p.rect({ x: rx, y: ry, width: badgeW, height: badgeH }, colors.cardBg, colors.cardBorder, 1.2, {
+      rx: 4
+    })
+  );
+  elements.push(
+    p.text(text, safeX, safeY + 3.5, 9.5, colors.cardTitle, {
+      weight: "bold",
+      anchor: "middle"
+    })
+  );
+}
+function addTokenBead(elements, p, shape, cx, cy, color, isDark = false) {
+  if (shape === "square") {
+    const stroke = isDark ? "#93c5fd" : "#1d4ed8";
+    elements.push(
+      p.rect({ x: cx - 4, y: cy - 4, width: 8, height: 8 }, color, stroke, 1.2, { rx: 1.5 })
+    );
+  } else if (shape === "circle") {
+    const stroke = isDark ? "#a7f3d0" : "#047857";
+    elements.push(p.circle({ x: cx, y: cy }, 4, color, stroke, 1.2));
+  } else if (shape === "diamond") {
+    const stroke = isDark ? "#ddd6fe" : "#6d28d9";
+    elements.push(
+      p.path(
+        `M ${cx} ${cy - 5} L ${cx + 5} ${cy} L ${cx} ${cy + 5} L ${cx - 5} ${cy} Z`,
+        stroke,
+        1.2,
+        { fill: color }
+      )
+    );
+  }
+}
+function drawIcon(elements, p, icon, x, y, stroke = "#0f172a") {
+  const name = icon.toLowerCase();
+  if (name.includes("openai") || name.includes("gpt")) {
+    elements.push(p.circle({ x: x + 9, y: y + 9 }, 8, "none", stroke, 1.2));
+    elements.push(p.circle({ x: x + 9, y: y + 9 }, 4, "none", stroke, 1.2));
+  } else if (name.includes("api") || name.includes("fork")) {
+    elements.push(p.circle({ x: x + 5, y: y + 5 }, 2.5, "none", stroke, 1.2));
+    elements.push(p.circle({ x: x + 13, y: y + 4 }, 2.5, "none", stroke, 1.2));
+    elements.push(p.circle({ x: x + 13, y: y + 14 }, 2.5, "none", stroke, 1.2));
+    elements.push(
+      p.path(
+        `M ${x + 5} ${y + 8} V ${y + 14} M ${x + 5} ${y + 8} Q ${x + 9} ${y + 8} ${x + 13} ${y + 6}`,
+        stroke,
+        1.2
+      )
+    );
+  } else if (name.includes("codex") || name.includes("robot")) {
+    elements.push(
+      p.rect({ x: x + 2, y: y + 3, width: 14, height: 12 }, "none", stroke, 1.2, { rx: 3 })
+    );
+    elements.push(p.circle({ x: x + 6, y: y + 8 }, 1.5, stroke, stroke, 1));
+    elements.push(p.circle({ x: x + 12, y: y + 8 }, 1.5, stroke, stroke, 1));
+    elements.push(p.path(`M ${x + 9} ${y + 3} V ${y}`, stroke, 1.2));
+  } else if (name.includes("database") || name.includes("db") || name.includes("cosmos") || name.includes("nanobase")) {
+    elements.push(
+      p.rect({ x: x + 2, y: y + 2, width: 14, height: 14 }, "none", stroke, 1.2, { rx: 3 })
+    );
+    elements.push(
+      p.path(`M ${x + 2} ${y + 7} Q ${x + 9} ${y + 9} ${x + 16} ${y + 7}`, stroke, 1.2)
+    );
+    elements.push(
+      p.path(`M ${x + 2} ${y + 11} Q ${x + 9} ${y + 13} ${x + 16} ${y + 11}`, stroke, 1.2)
+    );
+  } else if (name.includes("lightning") || name.includes("valkey") || name.includes("cache")) {
+    elements.push(
+      p.path(
+        `M ${x + 10} ${y} L ${x + 4} ${y + 9} H ${x + 9} L ${x + 7} ${y + 18} L ${x + 15} ${y + 8} H ${x + 10} Z`,
+        stroke,
+        1.2,
+        { fill: "none" }
+      )
+    );
+  } else if (name.includes("cube") || name.includes("blob") || name.includes("storage")) {
+    elements.push(
+      p.path(
+        `M ${x + 9} ${y + 1} L ${x + 16} ${y + 5} L ${x + 9} ${y + 9} L ${x + 2} ${y + 5} Z`,
+        stroke,
+        1.2,
+        { fill: "none" }
+      )
+    );
+    elements.push(
+      p.path(
+        `M ${x + 2} ${y + 5} V ${y + 13} L ${x + 9} ${y + 17} V ${y + 9} M ${x + 16} ${y + 5} V ${y + 13} L ${x + 9} ${y + 17}`,
+        stroke,
+        1.2
+      )
+    );
+  } else if (name.includes("cdc")) {
+    elements.push(p.circle({ x: x + 4, y: y + 4 }, 2, "none", stroke, 1.2));
+    elements.push(p.circle({ x: x + 14, y: y + 4 }, 2, "none", stroke, 1.2));
+    elements.push(p.circle({ x: x + 9, y: y + 14 }, 2, "none", stroke, 1.2));
+    elements.push(
+      p.path(
+        `M ${x + 4} ${y + 6} L ${x + 8} ${y + 12} M ${x + 14} ${y + 6} L ${x + 10} ${y + 12}`,
+        stroke,
+        1.2
+      )
+    );
+  } else if (name.includes("cloud")) {
+    elements.push(
+      p.path(
+        `M ${x + 4} ${y + 13} H ${x + 14} A 2.5 2.5 0 0 0 ${x + 14} ${y + 8} A 3.5 3.5 0 0 0 ${x + 7} ${y + 8} A 2.5 2.5 0 0 0 ${x + 4} ${y + 13} Z`,
+        stroke,
+        1.2,
+        { fill: "none" }
+      )
+    );
+  } else if (name.includes("shield") || name.includes("lock") || name.includes("auth") || name.includes("security")) {
+    elements.push(
+      p.path(
+        `M ${x + 9} ${y + 2} L ${x + 15} ${y + 5} V ${y + 9} Q ${x + 15} ${y + 15} ${x + 9} ${y + 17} Q ${x + 3} ${y + 15} ${x + 3} ${y + 9} V ${y + 5} Z`,
+        stroke,
+        1.2,
+        { fill: "none" }
+      )
+    );
+  } else if (name.includes("queue") || name.includes("kafka") || name.includes("stream")) {
+    elements.push(p.circle({ x: x + 5, y: y + 9 }, 2, stroke, stroke, 1));
+    elements.push(p.circle({ x: x + 9, y: y + 9 }, 2, stroke, stroke, 1));
+    elements.push(p.circle({ x: x + 13, y: y + 9 }, 2, stroke, stroke, 1));
+    elements.push(
+      p.path(`M ${x + 2} ${y + 4} H ${x + 16} M ${x + 2} ${y + 14} H ${x + 16}`, stroke, 1.2)
+    );
+  } else if (name.includes("globe") || name.includes("web") || name.includes("browser") || name.includes("client")) {
+    elements.push(p.circle({ x: x + 9, y: y + 9 }, 7, "none", stroke, 1.2));
+    elements.push(
+      p.path(
+        `M ${x + 2} ${y + 9} H ${x + 16} M ${x + 9} ${y + 2} Q ${x + 5} ${y + 9} ${x + 9} ${y + 16} M ${x + 9} ${y + 2} Q ${x + 13} ${y + 9} ${x + 9} ${y + 16}`,
+        stroke,
+        1.1
+      )
+    );
+  } else {
+    elements.push(
+      p.rect({ x: x + 2, y: y + 2, width: 14, height: 14 }, "none", stroke, 1.2, { rx: 2 })
+    );
+    elements.push(
+      p.path(`M ${x + 2} ${y + 6} H ${x + 16} M ${x + 2} ${y + 11} H ${x + 16}`, stroke, 1.2)
+    );
+  }
+}
+var platform = {
+  parseMermaid: parsePlatform,
+  parseYaml(input) {
+    return JSON.parse(input);
+  },
+  layout: layoutPlatform
+};
 var sourceSans3FontCss = `/* Google Inc.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -61826,6 +63929,7 @@ registerDiagram("quadtree", quadtree);
 registerDiagram("treap", treap);
 registerDiagram("234tree", tree234);
 registerDiagram("2-3-4tree", tree234);
+registerDiagram("platform", platform);
 registerRenderer(svgRenderer);
 registerRouter("straight", straightRouter);
 registerRouter("orthogonal", orthogonalRouter);
@@ -62008,7 +64112,7 @@ function renderWithAppearance(input, options = {}) {
 // vendor-triton-entry.mjs
 import { createHash } from "node:crypto";
 var { compileSync: compileSync2, renderSync: renderSync2, compileAndRenderSync: compileAndRenderSync2, embedRevealManifest: embedRevealManifest2 } = dist_exports;
-var runtimeRevision = "41686d37ffa22a001172306ebf39e8d6b971b20b2cf5afb948942cc22c505f13";
+var runtimeRevision = "15196465f47842e06e7b30bddf2458105297bc3e45dfb3b6adfc1af54d6e73ff";
 var appearanceManifestHash = defaultAppearanceManifest ? createHash("sha256").update(JSON.stringify(defaultAppearanceManifest)).digest("hex") : void 0;
 var THEME_ALIASES = {
   dark: "midnight",
